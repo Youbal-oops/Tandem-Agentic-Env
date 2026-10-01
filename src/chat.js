@@ -16,7 +16,7 @@ const TOOL_LABEL = { Bash: 'Shell', PowerShell: 'Shell', Shell: 'Shell', Read: '
 export const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 export class ChatPanel {
-  constructor(root, { id, name, otherName, modes, models = [], handlers }) {
+  constructor(root, { id, name, otherName, modes, models = [], provider = id, number = 1, handlers }) {
     this.root = root;
     this.id = id;
     this.name = name;
@@ -27,13 +27,14 @@ export class ChatPanel {
     this.running = new Set();
     this.meta = { busy: false, mode: modes[0].id, available: true, awaiting: 0 };
     this.offline = false;
+    this.workspaceBusy = false;
     this.pending = new Set();
 
     root.classList.add('agent');
     root.dataset.agent = id;
     root.innerHTML = `
       <header class="a-row" role="button" tabindex="0" title="Focus this agent">
-        <span class="num">${id === 'claude' ? '01' : '02'}</span>
+        <span class="num">${String(number).padStart(2, '0')}</span>
         <span class="name">${esc(name)}</span>
         <span class="tag"></span>
         <canvas class="spark" width="240" height="56"></canvas>
@@ -44,14 +45,19 @@ export class ChatPanel {
           <div class="modes" role="group" aria-label="Permission mode">${modes
             .map((m) => `<button data-mode="${m.id}" title="${esc(m.hint)}">${esc(m.label)}</button>`)
             .join('')}</div>
-          <select class="model" title="Model for the next messages" aria-label="Model">
-            <option value="">default model</option>
+          <div class="model-controls"><label>Model<select class="model" title="Model for the next messages" aria-label="Model">
+            <option value="" ${provider === 'api' ? 'disabled' : ''}>${provider === 'api' ? 'Choose model' : 'Default model'}</option>
             ${models.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
             <option value="__custom">custom name…</option>
-          </select>
-          <span class="a-info"></span>
+          </select></label>
+          <label>Reasoning<select class="effort" aria-label="Reasoning effort" title="Reasoning effort for the next turn; support depends on model">
+            <option value="">Default effort</option><option value="low">Light</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option>${provider === 'claude' ? '<option value="max">Max</option>' : ''}
+          </select></label></div>
+          <div class="chat-meta"><span class="a-info"></span>
           <button class="c-new" title="Start a fresh conversation">new chat</button>
+          </div>
         </div>
+        <div class="feed-controls"><input class="chat-search" type="search" placeholder="Search this chat" aria-label="Search chat" /><select class="chat-filter" aria-label="Chat filter"><option value="all">Everything</option><option value="messages">Messages</option><option value="tools">Tools</option><option value="thinking">Thinking</option></select></div>
         <div class="c-feed" tabindex="-1">
           <div class="c-empty">
             <p class="big">Ask ${esc(name)}</p>
@@ -88,6 +94,10 @@ export class ChatPanel {
       }
     });
     this.modelSel = this.$('.model');
+    this.effortSel = this.$('.effort');
+    this.effortSel.addEventListener('change', () => this.h.effort(this.effortSel.value));
+    this.$('.chat-filter').addEventListener('change', () => this.filterFeed());
+    this.$('.chat-search').addEventListener('input', () => this.filterFeed());
     this.modelSel.addEventListener('change', () => {
       let v = this.modelSel.value;
       if (v === '__custom') {
@@ -111,7 +121,8 @@ export class ChatPanel {
         this.submit();
       }
     });
-    this.ta.addEventListener('input', () => this.autosize());
+    this.ta.addEventListener('input', () => { this.autosize(); sessionStorage.setItem(`tandem:draft:${id}`, this.ta.value); });
+    this.ta.value = sessionStorage.getItem(`tandem:draft:${id}`) || '';
     this.empty.querySelectorAll('.chips button').forEach((b) => b.addEventListener('click', () => ((this.ta.value = b.textContent), this.submit())));
     this.feed.addEventListener('click', (e) => this.onFeedClick(e));
     this.refresh();
@@ -124,9 +135,10 @@ export class ChatPanel {
   }
   submit() {
     const text = this.ta.value.trim();
-    if (!text || this.meta.busy || this.offline || !this.meta.available) return;
+    if (!text || this.meta.busy || this.workspaceBusy || this.offline || !this.meta.available) return;
     this.h.send(text);
     this.ta.value = '';
+    sessionStorage.removeItem(`tandem:draft:${this.id}`);
     this.autosize();
   }
   setDraft(text) {
@@ -145,6 +157,18 @@ export class ChatPanel {
   }
   setOffline(v) {
     this.offline = v;
+    this.refresh();
+  }
+  setWorkspaceBusy(v) {
+    this.workspaceBusy = v;
+    this.refresh();
+  }
+  setModels(models) {
+    for (const model of models) {
+      if ([...this.modelSel.options].some((o) => o.value === model)) continue;
+      const option = document.createElement('option'); option.value = model; option.textContent = model;
+      this.modelSel.insertBefore(option, this.modelSel.lastElementChild);
+    }
     this.refresh();
   }
   get state() {
@@ -179,6 +203,8 @@ export class ChatPanel {
     }
     this.modelSel.value = pref;
     this.modelSel.disabled = !!m.busy || this.offline;
+    this.effortSel.value = m.effort || '';
+    this.effortSel.disabled = !!m.busy || this.offline;
     this.root.querySelectorAll('[data-mode]').forEach((b) => {
       b.classList.toggle('on', b.dataset.mode === m.mode);
       b.disabled = !!m.busy;
@@ -187,8 +213,22 @@ export class ChatPanel {
     this.working.hidden = !m.busy || m.awaiting > 0;
     this.working.querySelector('span').textContent = this.running.size ? `running ${this.running.size} step${this.running.size > 1 ? 's' : ''}` : 'thinking';
     this.ta.disabled = this.offline || !m.available;
-    this.ta.placeholder = this.offline ? 'Server offline. Run npm run dev' : !m.available ? 'CLI not found on this machine' : m.busy ? 'Working… you can type the next message' : `Message ${this.name}…`;
+    this.ta.placeholder = this.offline ? 'Server offline. Run npm run dev' : !m.available ? 'Connection unavailable: check CLI or API key' : m.busy ? 'Working… you can type the next message' : `Message ${this.name}…`;
     this.feed.appendChild(this.working);
+    this.$('.send').disabled = this.offline || !m.available || !!m.busy || this.workspaceBusy;
+    if (this.workspaceBusy) this.ta.placeholder = 'Cloning repository… your draft is kept until it opens';
+    this.$('.c-new').disabled = !!m.busy;
+    this.filterFeed();
+  }
+  filterFeed() {
+    const query = this.$('.chat-search').value.toLowerCase();
+    const filter = this.$('.chat-filter').value;
+    for (const [id, en] of this.entries) {
+      const el = en.el;
+      const type = el.classList.contains('tool') ? 'tools' : el.classList.contains('think') ? 'thinking' : el.classList.contains('user') || el.classList.contains('bot') ? 'messages' : 'other';
+      const needsApproval = en.data?.status === 'awaiting';
+      el.classList.toggle('filtered', !needsApproval && ((filter !== 'all' && type !== filter) || (!!query && !(el.textContent || '').toLowerCase().includes(query))));
+    }
   }
 
   // ------------------------------------------------------------ events
@@ -265,7 +305,7 @@ export class ChatPanel {
     if (!en) {
       const el = document.createElement('div');
       el.className = 'm bot';
-      el.innerHTML = `<span class="pr">●</span><div class="body"></div><div class="acts"><button data-act="copy">copy</button><button data-act="fwd">→ ${esc(this.otherName)}</button></div>`;
+      el.innerHTML = `<span class="pr">●</span><div class="body"></div><div class="acts"><button data-act="copy">copy</button><button data-act="fwd">Send for review →</button></div>`;
       en = { el, text: '', body: el.querySelector('.body') };
       this.entries.set(ev.id, en);
       this.add(el);

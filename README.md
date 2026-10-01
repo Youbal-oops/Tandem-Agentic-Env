@@ -4,9 +4,38 @@ A planned local environment for two coding agents to collaborate on one codebase
 
 ## Status
 
-As of **2026-10-01**, Tandem has a first working **local cockpit** (see "Running Tandem" below): a chat interface for Claude Code and Codex CLI, shown as two planets orbiting a star that stands for the codebase. Delegation between the agents, a git worktree per job and session export to the site are still **planned, not built**. The repository folder is `Tandem-Agentic-Env`.
+As of **2026-10-01**, Tandem has a first working **local cockpit** (see "Running Tandem" below): a chat interface for Claude Code and Codex CLI, shown as planets orbiting a star that stands for the selected codebase. Repo switching, additional CLI/API planets, reasoning controls, chat filters, local persistence, export and an Eco mode are implemented. Delegation between the agents, a git worktree per job and session export to the site are still **planned, not built**. The repository folder is `Tandem-Agentic-Env`.
 
 ## Running Tandem
+
+### Taking it to a Windows laptop
+
+Copy the updated project (or commit and push these changes before cloning), install Node.js 22.12+ and the Claude Code / Codex CLIs, and log into each CLI on that laptop. Double-click `start-tandem.cmd`; it installs dependencies if needed, builds the UI and runs the local server. Open http://127.0.0.1:4317. In PowerShell you can also use `npm.cmd ci` then `npm.cmd start`.
+
+Click the **sun** or **Workspace**, then **Browse…** to navigate local folders. The picker includes Home, drives, parent navigation, folder filtering and Git repository badges. Choose **Use this folder**, then **Open workspace**; you can also enter a path directly. Stop agents before switching. Old chats are archived under `.tandem/archives`; conversations start fresh in the new repo, with model, effort and permission settings retained.
+
+Workspace settings have separate **Local folder**, **Clone repository** and **Agents** tabs. Chat controls use labeled Model and Reasoning selectors. The top toolbar's **More** menu contains export, Stop all, Eco mode, sky effects and panel visibility.
+
+**Clone a repository** in the same dialog supports a public HTTPS repository link (or GitHub `owner/repo` shorthand), or **My GitHub account**. The account picker uses the GitHub CLI login on the machine running Tandem, and includes accessible personal, collaborator and organization repositories with public/private labels, filtering and pagination. Install Git and GitHub CLI; sign in using `gh auth login` if needed. A GitHub connection in the chat application does not automatically sign in the laptop's GitHub CLI.
+
+Choose a full path to a **new** local clone folder; its parent must exist. Existing destinations are never overwritten. Clone progress appears in the dialog. Successful clones become the working repo; failed clones leave the current repo selected and preserve any partial destination for inspection. Sending agent tasks and starting another repo switch are blocked during cloning. Account cloning uses [GitHub CLI's repository clone command](https://cli.github.com/manual/gh_repo_clone); public links use Git directly. No dependencies or repository scripts are run automatically.
+
+**System** / **Esc** returns to a top-down view of all planets. Select a planet or an agent row to open its chat. Add up to eight independent planets through **Repo / Agents**: additional Claude Code or Codex CLI sessions, or a Chat Completions-compatible API. Each has its own thread, model and effort controls. Light means low reasoning effort; the available effort levels depend on the chosen model. Codex offers its configured default, models from its local model cache when available, and a custom model name; Claude offers opus, sonnet and haiku aliases plus a custom name.
+
+API planets are **chat assistants without local file or shell tools**. Give the full endpoint (for example `https://api.openai.com/v1/chat/completions`, or a localhost model server), model name and the **name** of a server environment variable containing the API key. Set that variable in the terminal before launching Tandem. Never enter the key itself in the UI. Hosted API requests use the provider's API billing. Claude CLI and Codex CLI continue using their CLI logins. APIs must implement the Chat Completions response shape; API replies currently appear when the response completes. The endpoint contract follows the [Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create); Codex effort maps to `model_reasoning_effort` in the [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+
+Chats, CLI thread IDs, planet definitions and preferences save locally to the ignored `.tandem/workspace.json` and reload on restart. CLI continuation also needs the CLI's own history on that machine; copying `.tandem` alone does not migrate CLI sessions. **Export** downloads a Markdown conversation record, including tool summaries. Search and filter each chat by messages, tools or thinking. **Eco** reduces rendering resolution and disables bloom and sky events, and remembers the setting.
+
+All coding planets share the selected repo. Isolated worktrees, automatic delegation and merging remain planned. Use separate file scopes when running agents concurrently. API chats receive pasted text and the repository path, with no automatic upload of repository files.
+
+### Local work tools
+
+- **Files / Diff** browses the selected repository and previews UTF-8 text files up to 256 KB. Switch to Git diff to inspect staged, unstaged, or combined changes since the last commit. Previews are read-only; **Add to chat draft** puts the selected file or diff into an agent's composer for you to edit and send. Untracked files appear in Files. Generated directories and Git metadata are omitted from browsing; links pointing outside the repo cannot be read.
+- **Notes** saves goals, decisions and next steps separately for each repository inside `.tandem/workspace.json`. Use **Save notes** or Ctrl+S in the notes editor. Unsaved notes drafts survive a page refresh in the same browser tab. Notes are never automatically sent to an agent or synced to the site.
+- **Recent repositories** in the sun's workspace dialog keeps the last twelve folders for quick switching. Switching still requires idle agents and archives the current conversation.
+- **Stop all** stops every CLI session and in-flight API reply, keeping the chat history. It does not cancel a repository clone.
+
+These tools and their stored data stay on your computer. Model requests and GitHub/clone operations still use their configured providers and network connections.
 
 ```powershell
 npm install
@@ -15,7 +44,7 @@ npm run dev      # API on 127.0.0.1:4317, UI on http://localhost:5173
 
 `npm start` builds the UI and serves it from the API alone at http://127.0.0.1:4317. Opening `index.html` directly will not work; the server runs the agents.
 
-**Layout.** Left: the two agents as rows (number, name, activity graph, state) with a terminal-style chat under each. Middle: the system. Right: instruments and project info (context, usage limits, session stats, tool mix, sub-agents, plan, MCP servers, files edited, git branch, changed files, commits, and a live log). Bottom: a flap-style work board. Click a planet, press **Alt+1 / Alt+2**, or click an agent row, and the camera follows that planet along its orbit (the planet spins and the camera drifts around it) while its chat takes over the left column. **Esc** returns to the overview with both chats visible.
+**Layout.** Left: the two agents as rows (number, name, activity graph, state) with a terminal-style chat under each. Middle: the system. Right: instruments and project info (context, usage limits, session stats, tool mix, sub-agents, plan, MCP servers, files edited, git branch, changed files, commits, and a live log). Bottom: a flap-style work board. Click a planet, press **Alt+1 / Alt+2**, or click an agent row, and the camera follows that planet along its orbit (the planet spins and the camera drifts around it) while its chat takes over the left column. **Esc** returns to the top-down system overview with the agent roster visible.
 
 **The planets are instruments.** The star is the repo (name, branch, changed files).
 
@@ -121,7 +150,7 @@ Recorded on 2026-10-01:
 ## Open questions
 
 - What is the first project for the pair?
-- Which interface, stack, and language should Tandem use: web, desktop, or terminal?
+- Implemented interface: a local Vite web UI with a Node server; desktop packaging remains optional.
 - Should Codex ever be primary, and should roles be chosen per session or per task?
 - Should session export to the site be automatic or manual?
 - How does the Codex sandbox behave on native Windows, and is WSL needed?

@@ -301,7 +301,8 @@ export function createScene(host) {
     waves.push({ sp, t: 0, dur, r: p.look.radius, maxMul, opacity });
   }
 
-  for (const [id, look] of Object.entries(AGENT_LOOK)) {
+  function addPlanet(id, look) {
+    if (planets[id]) return;
     const r = look.radius;
     const u = {
       uTime: { value: 0 },
@@ -496,6 +497,7 @@ export function createScene(host) {
     };
   }
 
+  for (const [id, look] of Object.entries(AGENT_LOOK)) addPlanet(id, look);
   // ---------------------------------------------------------------- packets (edit -> star, hand-off comets)
   const packets = [];
   const tmpV = new THREE.Vector3();
@@ -519,6 +521,7 @@ export function createScene(host) {
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
   let bloomOn = true;
+  let ecoMode = false;
   let quality = 'high';
 
   // ---------------------------------------------------------------- layout + camera
@@ -533,12 +536,12 @@ export function createScene(host) {
   function resize() {
     W = Math.max(1, host.clientWidth);
     H = Math.max(1, host.clientHeight);
-    renderer.setPixelRatio(pixelRatio);
+    renderer.setPixelRatio(ecoMode ? 1 : pixelRatio);
     renderer.setSize(W, H);
-    composer.setPixelRatio?.(pixelRatio);
+    composer.setPixelRatio?.(ecoMode ? 1 : pixelRatio);
     composer.setSize(W, H);
     bloom.setSize(W, H);
-    pmat.uniforms.uPx.value = pixelRatio;
+    pmat.uniforms.uPx.value = ecoMode ? 1 : pixelRatio;
     applyView();
   }
   new ResizeObserver(resize).observe(host);
@@ -549,7 +552,7 @@ export function createScene(host) {
   controls.dampingFactor = 0.075;
   controls.enablePan = false;
   controls.minDistance = 36;
-  controls.maxDistance = 1100;
+  controls.maxDistance = 6500;
   controls.rotateSpeed = 0.55;
   controls.zoomSpeed = 0.7;
   controls.autoRotate = true;
@@ -561,9 +564,16 @@ export function createScene(host) {
   controls.target.set(0, 0, 0);
 
   let selected = null;
+  let topDown = true;
+  function overviewDistance() {
+    const radius = Math.max(245, ...Object.values(planets).map((p) => p.look.orbit.a + 80));
+    const usable = Math.max(240, W - insets.left - insets.right);
+    return Math.max(610, radius * 3.1 * Math.max(1, H / usable));
+  }
   let tween = null;
   function setSelected(id) {
     selected = id;
+    controls.autoRotate = !!id || !topDown;
     const now = performance.now();
     if (id) {
       const p = planets[id];
@@ -573,7 +583,7 @@ export function createScene(host) {
       // far enough to show the gauge rings, belt and moons around the planet
       tween = { until: now + 1900, dist: p.look.radius * 9.5, dir };
     } else {
-      tween = { until: now + 1900, dist: OVERVIEW_DIST, dir: OVERVIEW_DIR.clone() };
+      tween = { until: now + 1900, dist: overviewDistance(), dir: topDown ? new THREE.Vector3(0, 1, 0.001) : OVERVIEW_DIR.clone() };
     }
   }
   controls.addEventListener('start', () => {
@@ -590,7 +600,8 @@ export function createScene(host) {
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    const hits = ray.intersectObjects(Object.values(planets).map((p) => p.hit), false);
+    const hits = ray.intersectObjects([sun, ...Object.values(planets).map((p) => p.hit)], false);
+    if (hits[0]?.object === sun) return 'sun';
     return hits.length ? hits[0].object.userData.agent : null;
   }
   const el = renderer.domElement;
@@ -1076,11 +1087,25 @@ export function createScene(host) {
   }
 
   return {
+    addPlanet,
+    removePlanet(id) {
+      const p = planets[id];
+      if (!p) return;
+      for (const obj of [p.group, p.hit, p.trail, p.orbitLine]) {
+        obj.parent?.remove(obj);
+        obj.traverse((o) => { o.geometry?.dispose(); if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose(); });
+      }
+      delete planets[id];
+      if (selected === id) setSelected(null);
+    },
+    setTopDown(on) { topDown = on; if (!selected) setSelected(null); },
+    setEco(on) { ecoMode = on; bloom.enabled = !on && bloomOn; eventsOn = !on; resize(); },
     setSelected,
     setInsets(l, r) {
       insets.left = l;
       insets.right = r;
       applyView();
+      if (!selected) setSelected(null);
     },
     /**
      * Everything an agent is doing, as numbers:

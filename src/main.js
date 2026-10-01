@@ -1,14 +1,18 @@
+import { createFolderPicker } from './folders.js';
 import '@fontsource/playfair-display/400-italic.css';
 import '@fontsource/inter/400.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './style.css';
+import './workspace.css';
 
 import { createScene, AGENT_LOOK } from './scene.js';
 import { ChatPanel, EDIT_TOOLS } from './chat.js';
 import { InfoPanel } from './info.js';
 import { createNet } from './net.js';
 import { createDemo } from './demo.js';
+import { createLocalTools } from './local.js';
+import { createChildChats } from './children.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const AGENTS = ['claude', 'codex'];
@@ -27,7 +31,16 @@ const MODES = {
   ],
 };
 // Claude accepts these aliases; Codex model names change often, so it offers its default plus a custom name.
-const MODEL_PRESETS = { claude: ['opus', 'sonnet', 'haiku', 'fable'], codex: [] };
+const MODEL_PRESETS = { claude: ['opus', 'sonnet', 'haiku'], codex: [] };
+const configs = {};
+let repoPath = '';
+let cloneParent = '';
+let cloneBusy = false;
+let githubRepos = [];
+let githubPage = 0;
+let githubLoading = false;
+const act = {};
+const warned = {};
 const other = (id) => AGENTS.find((a) => a !== id);
 const clamp = (lo, v, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -38,19 +51,29 @@ const bootAt = Date.now();
 const scene = createScene($('#stage'));
 let net = null;
 let demo = null;
+let localTools = null;
+let folderPicker = null;
+let childChats = null;
 
 // ---------------------------------------------------------------- panels
 const info = new InfoPanel($('#right'), { onSelect: (id) => select(id) });
 
 const panels = {};
-for (const id of AGENTS) {
+function createPanel(id, provider = id) {
+  awaiting[id] = new Set();
+  act[id] = { chars: 0, rate: 0, spark: new Array(56).fill(0), tps: 0 };
+  warned[id] = {};
+  if (!$(`#chat-${id}`)) { const el = document.createElement('section'); el.id = `chat-${id}`; $('#left').append(el); }
   panels[id] = new ChatPanel($(`#chat-${id}`), {
     id,
     name: NAMES[id],
     otherName: NAMES[other(id)],
-    modes: MODES[id],
-    models: MODEL_PRESETS[id],
+    modes: MODES[provider] || [{ id: 'read', label: 'Chat only', hint: 'No local file or shell tools' }],
+    provider,
+    number: AGENTS.indexOf(id) + 1,
+    models: MODEL_PRESETS[provider] || [],
     handlers: {
+      effort: (effort) => (ui.demo ? onMeta(id, { effort }) : net.send({ t: 'effort', agent: id, effort })),
       model: (model) => (ui.demo ? onMeta(id, { modelPref: model || null, model: model || (id === 'claude' ? 'claude-opus-5-5' : null) }) : net.send({ t: 'model', agent: id, model })),
       send: (text) => (ui.demo ? demo.respond(id, text) : net.send({ t: 'send', agent: id, text })),
       stop: () => net.send({ t: 'stop', agent: id }),
@@ -63,8 +86,56 @@ for (const id of AGENTS) {
   });
 }
 
+for (const id of AGENTS) createPanel(id);
+childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, onChange: childActivity });
+
+function reconcile(next) {
+  for (const id of [...AGENTS]) if (!next.some((a) => a.id === id)) {
+    panels[id].root.remove(); delete panels[id]; labelEls[id]?.remove(); delete labelEls[id]; scene.removePlanet(id);
+    AGENTS.splice(AGENTS.indexOf(id), 1); delete configs[id];
+  }
+  next.forEach((c, i) => {
+    configs[c.id] = c; NAMES[c.id] = c.name; CODES[c.id] = c.name.slice(0, 3).toUpperCase();
+    if (!AGENTS.includes(c.id)) {
+      AGENTS.push(c.id);
+      const colors = ['#ffb25a', '#74e6ff', '#bda1ff', '#7ee0a3', '#ff8faf', '#ffe181', '#83a8ff', '#efadff'];
+      const hex = colors[i % colors.length];
+      AGENT_LOOK[c.id] = { ...AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'], name: c.name, hex, rim: hex, palette: ['#142335', '#416080', hex, '#fff2df'], orbit: { a: 150 + i * 76, b: 138 + i * 70, tilt: 0.03, speed: 0.07 / (1 + i * 0.3), phase: i * 2.4 }, radius: 18 };
+      scene.addPlanet(c.id, AGENT_LOOK[c.id]);
+      createPanel(c.id, c.provider);
+      const el = document.createElement('div'); el.className = 'pl'; el.dataset.agent = c.id; el.innerHTML = '<b></b><small>idle</small>'; $('b', el).textContent = c.name; $('#plabels').append(el); labelEls[c.id] = el;
+    }
+    panels[c.id].root.style.setProperty('--c', AGENT_LOOK[c.id].hex);
+    onMeta(c.id, { available: c.available ?? true });
+  });
+  info.setAgents(next, AGENT_LOOK);
+  if (ui.sel && !AGENTS.includes(ui.sel)) select(null);
+  select(ui.sel);
+  renderAgentList();
+  childChats?.mountParents();
+}
+
+// Subagent chats count toward their parent's planet: moons, heat, the sparkline, the label and the log.
+const kidBusy = new Map();
+function childActivity(id, chars = 0) {
+  if (!panels[id]) return;
+  const kids = childChats?.activity(id) || [];
+  if (chars) act[id].chars += chars;
+  for (const k of kids) {
+    if (kidBusy.get(k.id) === k.busy) continue;
+    if (kidBusy.has(k.id) || k.busy) info.log({ agent: id, kind: k.busy ? 'info' : k.status === 'failed' ? 'err' : 'ok', text: `${NAMES[k.provider] || k.provider} subagent ${k.busy ? 'started' : k.status === 'failed' ? 'failed' : 'finished'} › ${k.title.slice(0, 60)}` });
+    kidBusy.set(k.id, k.busy);
+  }
+  info.setChildren(id, kids);
+  syncScene(id);
+  updateLabels();
+}
+
 function forward(from, text) {
-  const to = other(from);
+  const choices = AGENTS.filter((a) => a !== from);
+  if (!choices.length) return;
+  const to = choices.length === 1 ? choices[0] : prompt(`Send review to agent ID: ${choices.join(', ')}`, choices[0]);
+  if (!choices.includes(to)) return;
   const quoted = text.split('\n').map((l) => '> ' + l).join('\n');
   panels[to].setDraft(`${NAMES[from]} just said this. Review it critically: what is wrong, missing or risky?\n\n${quoted}`);
   scene.handoff(from, to);
@@ -74,7 +145,7 @@ function forward(from, text) {
 }
 
 // ---------------------------------------------------------------- activity: sparklines + tokens/sec
-const act = Object.fromEntries(AGENTS.map((a) => [a, { chars: 0, rate: 0, spark: new Array(56).fill(0), tps: 0 }]));
+
 function drawSpark(id) {
   const ctx = panels[id].spark;
   const { width: w, height: h } = ctx.canvas;
@@ -106,7 +177,9 @@ function drawSpark(id) {
 function status(id) {
   const m = panels[id].meta;
   const s = m.stats || {};
-  const subs = (s.subagents || []).slice(-4).map((x) => (x.status === 'running' || x.status === 'awaiting' ? 'running' : 'done'));
+  const kids = childChats?.activity(id) || [];
+  const subs = [...(s.subagents || []).map((x) => (x.status === 'running' || x.status === 'awaiting' ? 'running' : 'done')), ...kids.map((k) => (k.busy ? 'running' : 'done'))].slice(-4);
+  const kidsWorking = kids.some((k) => k.busy);
   let plan = (s.plan || []).map((p) => (p.done ? 'done' : p.active ? 'active' : 'todo'));
   if (m.busy && plan.length && !plan.includes('active')) {
     const i = plan.indexOf('todo');
@@ -114,8 +187,8 @@ function status(id) {
   }
   return {
     busy: m.busy,
-    thinking: !!s.thinking || (m.busy && !(s.tools?.running || []).length && !m.awaiting),
-    awaiting: Math.max(awaiting[id].size, m.awaiting || 0),
+    thinking: !!s.thinking || kidsWorking || (m.busy && !(s.tools?.running || []).length && !m.awaiting),
+    awaiting: Math.max(awaiting[id].size, m.awaiting || 0, kids.filter((k) => k.awaiting).length),
     mode: m.mode,
     ctx: s.ctx?.window ? s.ctx.used / s.ctx.window : 0,
     limit: s.limits?.five?.u || 0,
@@ -132,7 +205,7 @@ function syncScene(id) {
   scene.setStatus(id, status(id));
 }
 
-const warned = { claude: {}, codex: {} };
+
 function watchLimits(id) {
   const s = panels[id].meta.stats;
   if (!s) return;
@@ -270,21 +343,23 @@ function onMeta(id, meta) {
 
 // ---------------------------------------------------------------- selection + layout
 function select(id) {
+  if (id && !panels[id]) return;
+  childChats?.parentSelected(id);
   ui.sel = id || null;
   document.body.dataset.sel = ui.sel || '';
   for (const a of AGENTS) {
     panels[a].root.classList.toggle('on', a === ui.sel);
-    panels[a].root.classList.toggle('collapsed', !!ui.sel && a !== ui.sel);
+    panels[a].root.classList.toggle('collapsed', a !== ui.sel);
   }
   scene.setSelected(ui.sel);
   info.setSelected(ui.sel);
-  if (ui.sel) setTimeout(() => panels[ui.sel].focusInput(), 500);
+  if (ui.sel) setTimeout(() => { panels[ui.sel]?.focusInput(); panels[ui.sel]?.root.scrollIntoView({ block: 'nearest' }); }, 500);
   else document.activeElement?.blur?.();
 }
 
 function layout() {
   const vw = window.innerWidth;
-  const lw = clamp(500, vw * 0.33, 700);
+  const lw = vw < 700 ? vw : clamp(340, vw * 0.30, 470);
   const rw = vw > 1280 ? clamp(360, vw * 0.22, 460) : 0;
   const root = document.documentElement.style;
   root.setProperty('--lw', lw + 'px');
@@ -301,7 +376,7 @@ function setHidden(on) {
   layout();
 }
 
-scene.onPick((id) => select(id && id !== ui.sel ? id : null));
+scene.onPick((id) => id === 'sun' ? openWorkspace() : select(id && id !== ui.sel ? id : null));
 let hovered = null;
 scene.onHover((id) => (hovered = id));
 
@@ -314,7 +389,10 @@ function measure() {
 }
 function updateLabels() {
   for (const a of AGENTS) {
-    const [cls, text] = panels[a].state;
+    let [cls, text] = panels[a].state;
+    const kids = (childChats?.activity(a) || []).filter((k) => k.busy);
+    if (kids.length && (cls === 'ready' || cls === 'idle')) { cls = 'work'; text = `${kids.length} subagent${kids.length > 1 ? 's' : ''} working`; }
+    else if (kids.length && cls === 'work') text += ` · ${kids.length} subagent${kids.length > 1 ? 's' : ''}`;
     labelEls[a].dataset.state = cls;
     const f = panels[a].meta.stats?.ctx;
     $('small', labelEls[a]).textContent = cls === 'ready' && f?.window ? `ctx ${Math.round((f.used / f.window) * 100)}%` : text;
@@ -347,9 +425,16 @@ setInterval(updateLabels, 500);
 
 function setGit(git) {
   if (!git) return;
+  if (repoPath && git.cwd && repoPath !== git.cwd) {
+    localTools?.repoChanged();
+    for (const id of AGENTS) { panels[id].ta.value = ''; panels[id].autosize(); sessionStorage.removeItem(`tandem:draft:${id}`); }
+  }
   $('#sl-repo').textContent = git.repo || 'codebase';
   $('#sl-git').textContent = git.branch ? `${git.branch} · ${git.changed ? git.changed + ' changed' : 'clean'}` : 'the codebase';
   $('#cwd').textContent = git.repo ? `…\\${git.repo}` : '';
+  repoPath = git.cwd || repoPath;
+  $('#cwd').title = repoPath;
+  $('#repo-path').value = repoPath;
   info.setGit(git);
   measure();
 }
@@ -369,25 +454,47 @@ net = createNet({
   onStatus(kind, data) {
     if (kind === 'session') {
       setGit(data.git);
-      for (const a of data.agents) onMeta(a.id, { available: a.available });
+      if (data.local) localTools?.receive({ t: 'localstate', ...data.local });
+      cloneParent = data.cloneParent || '';
+      if (data.clone) setCloneStatus(data.clone);
+      reconcile(data.agents);
+      for (const [provider, models] of Object.entries(data.models || {})) {
+        MODEL_PRESETS[provider] = models;
+        for (const id of AGENTS) if (configs[id]?.provider === provider) panels[id].setModels(models);
+      }
     } else if (kind === 'open') {
       ui.connected = true;
       setConn('ok', 'live · localhost');
       setOffline(false);
+      childChats?.setOffline(false);
       info.log({ agent: 'claude', kind: 'info', text: 'connected to the Tandem server' });
     } else if (kind === 'closed') {
+      githubLoading = false;
+      $('#load-github-repos').disabled = $('#more-github-repos').disabled = false;
       ui.connected = false;
       setConn('bad', ui.demo ? 'demo' : 'offline');
       setOffline(true);
+      childChats?.setOffline(true);
     }
   },
   onMessage(msg) {
     if (ui.demo) return;
+    if (childChats?.receive(msg)) return;
+    if (folderPicker?.receive(msg)) return;
+    if (localTools?.receive(msg)) return;
+    if (msg.t === 'notice') { showNotice(msg.text); return; }
+    if (msg.t === 'githubrepos') { receiveGithubRepos(msg); return; }
+    if (msg.t === 'clone') { setCloneStatus(msg); return; }
     if (msg.t === 'snapshot') {
+      if (msg.configs) reconcile(msg.configs);
+      childChats?.replace(msg.children || []);
+      if (!(msg.clone?.busy ?? cloneBusy)) $('#workspace-dialog').close();
+      if (msg.clone) setCloneStatus(msg.clone);
       info.clearLog();
       toolSeen.clear();
       for (const a of AGENTS) {
         const snap = msg.agents[a];
+        if (!snap) continue;
         awaiting[a].clear();
         for (const ev of snap.events) if (ev.k === 'tool' && ev.status === 'awaiting') awaiting[a].add(ev.id);
         panels[a].reset(snap.events);
@@ -411,7 +518,14 @@ net = createNet({
 // ---------------------------------------------------------------- demo
 function setDemo(on) {
   if (on === ui.demo) return;
+  if (on && (AGENTS.length !== 2 || AGENTS.some((a) => !['claude', 'codex'].includes(a)))) { showNotice('Demo is available with the original Claude and Codex planets.'); return; }
   ui.demo = on;
+  childChats.close();
+  childChats.replace(on ? [{ id: 'demo-child', parentId: 'codex', provider: 'claude', title: 'Review the settings change', updatedAt: Date.now(),
+    source: 'tandem', meta: { available: true, busy: false, status: 'completed', mode: 'plan', resumable: true, model: 'sonnet' },
+    events: [{ k: 'user', id: 'demo-child-task', text: 'Review the settings change and check that saved preferences survive a reload.' },
+      { k: 'tool', id: 'demo-child-tool', name: 'Read', summary: 'src/settings.js', status: 'done', output: 'Reviewed the settings hook and local storage fallback.' },
+      { k: 'msg', id: 'demo-child-reply', text: 'The theme preference is saved correctly. One case needs attention: when local storage is unavailable, the settings hook should fall back to the default theme.\n\nI sent the finding back to the main task.', done: true }] }] : []);
   $('#btn-demo').classList.toggle('on', on);
   if (on) {
     info.clearLog();
@@ -447,14 +561,153 @@ function setDemo(on) {
 }
 
 // ---------------------------------------------------------------- controls
+let noticeTimer;
+function showNotice(text) {
+  $('#notice').textContent = text; $('#notice').hidden = false;
+  clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').hidden = true, 9000);
+}
+function openWorkspace() {
+  if (ui.demo) { showNotice('Leave demo mode to change the workspace.'); return; }
+  $('#repo-path').value = repoPath;
+  renderAgentList();
+  localTools.openWorkspace();
+  $('#workspace-dialog').showModal();
+}
+function setCloneStatus(state) {
+  cloneBusy = !!state.busy;
+  $('#clone-status').textContent = state.text || '';
+  $('#clone-status').classList.toggle('clone-error', state.ok === false);
+  document.querySelectorAll('#clone-submit, #repo-form button, #clone-source, #clone-url, #clone-destination').forEach(el => { el.disabled = cloneBusy; });
+  $('#clone-submit').textContent = cloneBusy ? 'Cloning…' : 'Clone and open';
+  for (const id of AGENTS) panels[id].setWorkspaceBusy(cloneBusy);
+  $('#agent-form button[type="submit"]').disabled = cloneBusy;
+  renderGithubRepos();
+  if (state.ok) showNotice(state.text);
+  if (state.ok === false && !$('#workspace-dialog').open) showNotice(state.text);
+}
+function suggestCloneDestination() {
+  const input = $('#clone-destination');
+  if (input.value && input.value !== input.dataset.suggested) return;
+  const raw = $('#clone-url').value.trim().replace(/\/$/, '').split('/').at(-1)?.replace(/\.git$/, '');
+  if (!raw || !/^[A-Za-z0-9_.-]+$/.test(raw) || !cloneParent) return;
+  const separator = cloneParent.includes('\\') ? '\\' : '/';
+  input.value = cloneParent.replace(/[\\/]+$/, '') + separator + raw;
+  input.dataset.suggested = input.value;
+}
+function loadGithubRepos(page = 1) {
+  if (!net.open) return showNotice('Connect to the Tandem server first.');
+  if (githubLoading) return;
+  githubLoading = true;
+  $('#github-account').textContent = 'Loading…';
+  $('#load-github-repos').disabled = $('#more-github-repos').disabled = true;
+  net.send({ t: 'githubrepos', page });
+}
+function receiveGithubRepos(msg) {
+  githubLoading = false;
+  $('#load-github-repos').disabled = $('#more-github-repos').disabled = false;
+  if (msg.error) { $('#github-account').textContent = msg.error; return; }
+  githubPage = msg.page;
+  githubRepos = msg.page === 1 ? msg.repos : [...githubRepos, ...msg.repos];
+  $('#github-account').textContent = `Signed in as ${msg.login}`;
+  $('#more-github-repos').hidden = !msg.hasMore;
+  renderGithubRepos();
+}
+function renderGithubRepos() {
+  const query = $('#github-search').value.trim().toLowerCase();
+  const list = $('#github-repos'); list.replaceChildren();
+  const rows = githubRepos.filter((r) => `${r.name} ${r.description}`.toLowerCase().includes(query));
+  for (const repo of rows) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'github-repo';
+    const title = document.createElement('b'); title.textContent = repo.name;
+    const visibility = document.createElement('span'); visibility.textContent = `${repo.private ? 'Private' : 'Public'}${repo.archived ? ' · archived' : ''}`;
+    const description = document.createElement('small'); description.textContent = repo.description;
+    button.append(title, visibility, description);
+    button.classList.toggle('selected', $('#clone-url').value === repo.url);
+    button.disabled = cloneBusy;
+    button.addEventListener('click', () => { $('#clone-url').value = repo.url; suggestCloneDestination(); renderGithubRepos(); });
+    list.append(button);
+  }
+  if (!rows.length) { const empty = document.createElement('p'); empty.textContent = githubRepos.length ? 'No matching repositories.' : 'No repositories loaded yet.'; list.append(empty); }
+}
+$('#clone-source').addEventListener('change', () => {
+  $('#github-browser').hidden = $('#clone-source').value !== 'account';
+  if ($('#clone-source').value === 'account' && !githubRepos.length) loadGithubRepos();
+});
+$('#load-github-repos').addEventListener('click', () => loadGithubRepos());
+$('#more-github-repos').addEventListener('click', () => loadGithubRepos(githubPage + 1));
+$('#github-search').addEventListener('input', renderGithubRepos);
+$('#clone-url').addEventListener('input', suggestCloneDestination);
+$('#clone-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!net.open) return showNotice('Connect to the server first.');
+  if (cloneBusy) return;
+  if (AGENTS.some((id) => panels[id].meta.busy)) { $('#clone-status').textContent = 'Stop running agents before cloning and opening a repository.'; return; }
+  net.send({ t: 'clone', source: $('#clone-source').value, url: $('#clone-url').value.trim(), destination: $('#clone-destination').value.trim() });
+});
+function renderAgentList() {
+  const list = $('#agent-list'); list.replaceChildren();
+  for (const id of AGENTS) {
+    const row = document.createElement('div'); row.className = 'settings-agent';
+    const label = document.createElement('span');
+    label.textContent = `${NAMES[id]} · ${configs[id]?.provider || id} · ${panels[id].state[1]}`;
+    label.style.color = AGENT_LOOK[id].hex;
+    const remove = document.createElement('button'); remove.textContent = 'Remove';
+    remove.disabled = AGENTS.length < 2 || !!panels[id].meta.busy;
+    remove.addEventListener('click', () => { if (confirm(`Remove ${NAMES[id]} and its conversation? Export first if you need a copy.`)) net.send({ t: 'removeagent', agent: id }); });
+    row.append(label, remove); list.append(row);
+  }
+}
+$('#btn-workspace').addEventListener('click', openWorkspace);
+$('#close-workspace').addEventListener('click', () => $('#workspace-dialog').close());
+$('.sl').style.pointerEvents = 'auto';
+$('.sl').style.cursor = 'pointer';
+$('.sl').title = 'Change working repository or manage agents';
+$('.sl').addEventListener('click', openWorkspace);
+$('#repo-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!net.open) return showNotice('Connect to the server first.');
+  net.send({ t: 'repo', cwd: $('#repo-path').value.trim() });
+});
+$('#agent-provider').addEventListener('change', () => {
+  const api = $('#agent-provider').value === 'api';
+  $('#api-fields').hidden = !api;
+  $('#agent-form [name="model"]').required = api;
+  $('#agent-form [name="endpoint"]').required = api;
+});
+$('#agent-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!net.open) return showNotice('Connect to the server first.');
+  const config = Object.fromEntries(new FormData(e.target));
+  net.send({ t: 'addagent', config });
+});
+$('#btn-export').addEventListener('click', () => {
+  const lines = [`# Tandem session`, ``, `Repository: ${repoPath}`, `Exported: ${new Date().toISOString()}`, ``];
+  for (const id of AGENTS) {
+    lines.push(`## ${NAMES[id]}`, `Model: ${panels[id].meta.modelPref || panels[id].meta.model || 'CLI default'} · Effort: ${panels[id].meta.effort || 'default'}`, ``);
+    for (const en of panels[id].entries.values()) {
+      if (en.el.classList.contains('user')) lines.push(`### You`, en.el.querySelector('.bub').textContent, ``);
+      else if (en.el.classList.contains('bot')) lines.push(`### ${NAMES[id]}`, en.text || '', ``);
+      else if (en.data) lines.push(`- ${en.data.name}: ${en.data.summary || ''} (${en.data.status})`);
+      else if (en.el.classList.contains('err')) lines.push(`Error: ${en.el.textContent}`, ``);
+    }
+  }
+  const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/markdown' }));
+  const a = document.createElement('a'); a.href = url; a.download = `tandem-${new Date().toISOString().slice(0, 10)}.md`; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+});
+let eco = localStorage.getItem('tandem:eco') === 'true';
+function setEco(on) { eco = on; scene.setEco(on); $('#btn-eco').classList.toggle('on', on); localStorage.setItem('tandem:eco', on); }
+$('#btn-eco').addEventListener('click', () => setEco(!eco));
+setEco(eco);
 const SKY = ['ship', 'meteor', 'comet', 'asteroid'];
 let skyN = 0;
-$('#btn-overview').addEventListener('click', () => select(null));
+$('#btn-overview').addEventListener('click', () => { scene.setTopDown(true); select(null); });
 $('#btn-ui').addEventListener('click', () => setHidden(!ui.hidden));
 $('#btn-demo').addEventListener('click', () => setDemo(!ui.demo));
 $('#btn-sky').addEventListener('click', () => scene.sky(SKY[skyN++ % SKY.length]));
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    if (document.querySelector('dialog[open]')) return;
     select(null);
     return;
   }
@@ -478,7 +731,26 @@ tickClock();
 setInterval(tickClock, 1000);
 
 // ---------------------------------------------------------------- go
+folderPicker = createFolderPicker({ send: msg => net.send(msg), connected: () => net.open && !ui.demo, getRepo: () => repoPath, notify: showNotice });
+document.querySelectorAll('[data-workspace-tab]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-workspace-tab]').forEach(b => { b.classList.toggle('on', b === button); b.setAttribute('aria-pressed', String(b === button)); });
+  document.querySelectorAll('[data-workspace-page]').forEach(page => { page.hidden = page.dataset.workspacePage !== button.dataset.workspaceTab; });
+}));
+document.querySelectorAll('.toolbar-menu button').forEach(button => button.addEventListener('click', () => { button.closest('details').open = false; }));
+document.addEventListener('click', e => { const menu = document.querySelector('.toolbar-more'); if (!menu.contains(e.target)) menu.open = false; });
+localTools = createLocalTools({
+  send: (msg) => net.send(msg), connected: () => net.open && !ui.demo, getRepo: () => repoPath,
+  getAgents: () => AGENTS.map((id) => ({ id, name: NAMES[id] })), notify: showNotice,
+  setDraft(id, text) {
+    if (!panels[id]) return false;
+    const draft = [panels[id].ta.value, text].filter(Boolean).join('\n\n');
+    if (draft.length > 40000) { showNotice('The combined draft exceeds 40,000 characters. Shorten it first.'); return false; }
+    panels[id].setDraft(draft); select(id); return true;
+  },
+});
 layout();
+scene.setTopDown(true);
+select(null);
 updateLabels();
 requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('boot')));
 document.fonts?.ready.then(updateLabels);

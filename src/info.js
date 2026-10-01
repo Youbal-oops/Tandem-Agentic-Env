@@ -27,11 +27,12 @@ export class InfoPanel {
     this.m = { claude: null, codex: null };
     this.hist = { claude: [], codex: [] };
     this.git = null;
+    this.kids = {};
     this.logCount = 0;
     this.queued = false;
 
     root.innerHTML = `
-      <div class="kicker">Horizon <span class="dot">·</span> <span id="r-focus">centred on the pair</span></div>
+      <div class="kicker">Horizon <span class="dot">·</span> <span id="r-focus">system overview</span></div>
       <h2 id="r-title">The <em>codebase</em></h2>
       <p class="blurb" id="r-blurb"></p>
       <div id="r-body"></div>
@@ -65,6 +66,7 @@ export class InfoPanel {
     this.render();
   }
   setMeta(id, meta) {
+    this.hist[id] ||= [];
     const prev = this.m[id]?.stats?.ctx;
     this.m[id] = meta;
     const c = meta.stats?.ctx;
@@ -74,8 +76,18 @@ export class InfoPanel {
     }
     this.queue();
   }
+  setChildren(id, kids) {
+    this.kids[id] = kids;
+    this.queue();
+  }
   setGit(git) {
     this.git = git;
+    this.queue();
+  }
+  setAgents(configs, looks) {
+    this.ids = configs.map((a) => a.id);
+    for (const a of configs) { NAME[a.id] = a.name; HEX[a.id] = looks[a.id].hex; this.hist[a.id] ||= []; }
+    for (const id of Object.keys(this.m)) if (!this.ids.includes(id)) delete this.m[id];
     this.queue();
   }
   queue() {
@@ -95,7 +107,7 @@ export class InfoPanel {
     el.className = `ln ${kind}`;
     el.dataset.agent = agent;
     el.style.setProperty('--c', HEX[agent]);
-    el.innerHTML = `<time>${ts}</time><i></i><b>${NAME[agent]}</b><span>${esc(text)}</span>`;
+    el.innerHTML = `<time>${ts}</time><i></i><b>${esc(NAME[agent])}</b><span>${esc(text)}</span>`;
     const stick = this.logBox.scrollHeight - this.logBox.scrollTop - this.logBox.clientHeight < 40;
     this.logBox.appendChild(el);
     while (this.logBox.children.length > 240) this.logBox.firstChild.remove();
@@ -121,14 +133,14 @@ export class InfoPanel {
   }
 
   gauges() {
-    const rows = ['claude', 'codex']
+    const rows = (this.ids || ['claude', 'codex'])
       .map((id) => {
         const m = this.m[id];
         const c = m?.stats?.ctx;
         const f = c && c.window ? c.used / c.window : 0;
         const cache = m?.stats?.cache;
         return `<div class="grow ${this.sel === id ? 'sel' : ''}" data-pick="${id}" style="--c:${HEX[id]}">
-          <div class="gh"><i></i><b>${NAME[id]}</b><span>${c ? `${fmtK(c.used)} / ${fmtK(c.window)}` : '—'}</span><em class="${level(f)}">${c ? Math.round(f * 100) + '%' : ''}</em></div>
+          <div class="gh"><i></i><b>${esc(NAME[id])}</b><span>${c ? `${fmtK(c.used)} / ${fmtK(c.window)}` : '—'}</span><em class="${level(f)}">${c ? Math.round(f * 100) + '%' : ''}</em></div>
           ${this.bar(f)}
           <div class="gf"><span>${cache ? 'cache hit ' + Math.round(cache * 100) + '%' : ''}</span>${this.spark(id)}</div>
         </div>`;
@@ -138,12 +150,12 @@ export class InfoPanel {
   }
 
   limits() {
-    const rows = ['claude', 'codex']
+    const rows = (this.ids || ['claude', 'codex'])
       .map((id) => {
         const l = this.m[id]?.stats?.limits || {};
         const one = (label, x) =>
           `<div class="lrow"><span class="ll">${label}</span>${x ? this.bar(x.u) : '<div class="bar"><s></s></div>'}<span class="lv ${x ? level(x.u) : ''}">${x ? Math.round(x.u * 100) + '%' : '—'}</span><span class="lr">${x ? until(x.reset) : ''}</span></div>`;
-        return `<div class="lgroup ${this.sel === id ? 'sel' : ''}" data-pick="${id}" style="--c:${HEX[id]}"><div class="lt"><i></i>${NAME[id]}</div>${one('5h', l.five)}${one('7d', l.seven)}</div>`;
+        return `<div class="lgroup ${this.sel === id ? 'sel' : ''}" data-pick="${id}" style="--c:${HEX[id]}"><div class="lt"><i></i>${esc(NAME[id])}</div>${one('5h', l.five)}${one('7d', l.seven)}</div>`;
       })
       .join('');
     return `<div class="kicker">Usage limits <span class="hint">subscription windows</span></div>${rows}`;
@@ -173,7 +185,7 @@ export class InfoPanel {
     const s = m?.stats;
     const t = s?.tokens || {};
     const out = [];
-    out.push(`<div class="kicker" style="--c:${HEX[id]}"><span class="kc"><i></i>${NAME[id]}</span><span class="hint">${m?.model ? esc(String(m.model).replace(/^claude-/, '')) : 'session'}</span></div>`);
+    out.push(`<div class="kicker" style="--c:${HEX[id]}"><span class="kc"><i></i>${esc(NAME[id])}</span><span class="hint">${m?.model ? esc(String(m.model).replace(/^claude-/, '')) : 'session'}</span></div>`);
     out.push(`<div class="stats">
       <div><b>${m?.cost ? '$' + m.cost.toFixed(m.cost < 1 ? 3 : 2) : '—'}</b><span>cost</span></div>
       <div><b>${m?.turns || 0}</b><span>turns</span></div>
@@ -183,7 +195,7 @@ export class InfoPanel {
       <div><b>${s?.tools?.total || 0}</b><span>tool calls</span></div>
     </div>`);
     out.push(this.tools(id));
-    const subs = s?.subagents || [];
+    const subs = [...(s?.subagents || []), ...(this.kids[id] || []).map((k) => ({ name: `${NAME[k.provider] || k.provider} · ${k.title}`, status: k.busy ? 'running' : k.status === 'failed' ? 'failed' : 'done' }))];
     if (subs.length) out.push(`<div class="sub-k">Sub-agents</div>` + subs.map((a) => `<div class="li ${a.status}"><i></i><span>${esc(a.name)}</span><em>${esc(a.status || '')}</em></div>`).join(''));
     const plan = s?.plan || [];
     if (plan.length) out.push(`<div class="sub-k">Plan <em>${plan.filter((x) => x.done).length}/${plan.length}</em></div>` + plan.map((p) => `<div class="li plan ${p.done ? 'done' : p.active ? 'active' : ''}"><i></i><span>${esc(p.text)}</span></div>`).join(''));
@@ -222,13 +234,13 @@ export class InfoPanel {
 
   render() {
     const sel = this.sel;
-    this.root.querySelector('#r-focus').textContent = sel ? `following ${NAME[sel]}` : 'centred on the pair';
-    this.root.querySelector('#r-title').innerHTML = sel ? `<em style="color:${HEX[sel]}">${NAME[sel]}</em>,<br />up close` : `The <em>codebase</em>`;
-    const busy = ['claude', 'codex'].filter((a) => this.m[a]?.busy).map((a) => NAME[a]);
+    this.root.querySelector('#r-focus').textContent = sel ? `following ${esc(NAME[sel])}` : 'system overview';
+    this.root.querySelector('#r-title').innerHTML = sel ? `<em style="color:${HEX[sel]}">${esc(NAME[sel])}</em>,<br />up close` : `The <em>codebase</em>`;
+    const busy = (this.ids || ['claude', 'codex']).filter((a) => this.m[a]?.busy || (this.kids[a] || []).some((k) => k.busy)).map((a) => NAME[a]);
     this.root.querySelector('#r-blurb').textContent = busy.length
       ? `${busy.join(' and ')} ${busy.length > 1 ? 'are' : 'is'} working right now.`
       : 'Each planet shows its agent’s context, limits, tools and plan. Edits land in the star.';
-    const detail = sel ? this.agentDetail(sel) : ['claude', 'codex'].map((a) => this.agentDetail(a)).join('');
+    const detail = sel ? this.agentDetail(sel) : (this.ids || ['claude', 'codex']).map((a) => this.agentDetail(a)).join('');
     this.body.innerHTML = this.gauges() + this.limits() + detail + `<section class="project">${this.project()}</section>`;
   }
 }

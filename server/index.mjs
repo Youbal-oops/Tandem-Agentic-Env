@@ -3,24 +3,29 @@
 // Runs Claude Code and Codex CLI as chat sessions and streams them to the browser UI.
 // Security model: bound to 127.0.0.1 only; Host and Origin are checked on every request;
 // the WebSocket needs a per-launch random token; only the two known CLI binaries can be
-// started (never a shell); the working directory is fixed at launch; API keys are never
-// passed on to the agents, so they stay on your subscriptions.
+// started (never a shell). Repo changes require idle agents. CLI subprocesses do not
+// inherit API keys; optional API chats read a named server environment variable.
 
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { execSync, execFile } from 'node:child_process';
+import { execSync, execFile, execFileSync } from 'node:child_process';
+import os from 'node:os';
 import { WebSocketServer } from 'ws';
-import { createAgents, MODES } from './agents.mjs';
+import { MODES } from './agents.mjs';
+import { createWorkspace } from './workspace.mjs';
+import { createRepoService } from './repos.mjs';
+import { listRepoFiles, readRepoFile, readRepoDiff } from './inspect.mjs';
+import { listFolders } from './folders.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.TANDEM_PORT || 4317);
 const UI_DEV_PORT = 5173;
-const CWD = path.resolve(process.env.TANDEM_CWD || ROOT);
+let CWD = path.resolve(process.env.TANDEM_CWD || ROOT);
 const TOKEN = crypto.randomBytes(24).toString('hex');
 const MAX_TEXT = 40000;
 
@@ -49,12 +54,30 @@ function firstExisting(roots, rel) {
   return null;
 }
 const roots = npmRoots();
-const claudeExe = firstExisting(roots, ['@anthropic-ai', 'claude-code', 'bin', 'claude.exe']);
+function nativeBinary(name) {
+  if (process.platform === 'win32') {
+    const candidate = path.join(os.homedir(), '.local', 'bin', `${name}.exe`);
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+  try { return execFileSync('which', [name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
+}
+const nativeClaude = nativeBinary('claude');
+const claudeExe = nativeClaude && fs.existsSync(nativeClaude) ? nativeClaude : firstExisting(roots, ['@anthropic-ai', 'claude-code', 'bin', 'claude.exe']);
 const codexJs = firstExisting(roots, ['@openai', 'codex', 'bin', 'codex.js']);
+const nativeCodex = nativeBinary('codex');
 const specs = {
   claude: claudeExe ? { file: claudeExe, args: [] } : null,
-  codex: codexJs ? { file: process.execPath, args: [codexJs] } : null,
+  codex: codexJs ? { file: process.execPath, args: [codexJs] } : nativeCodex ? { file: nativeCodex, args: [] } : null,
 };
+
+function modelChoices() {
+  let codex = [];
+  try {
+    const cache = JSON.parse(fs.readFileSync(path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'models_cache.json'), 'utf8'));
+    codex = (cache.models || []).map((m) => m.slug).filter((m) => typeof m === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$/.test(m));
+  } catch {}
+  return { claude: ['opus', 'sonnet', 'haiku'], codex: [...new Set(codex)] };
+}
 
 // ---------------------------------------------------------------- websocket plumbing
 
@@ -63,24 +86,40 @@ function broadcast(msg) {
   const data = JSON.stringify(msg);
   for (const ws of clients) if (ws.readyState === 1) ws.send(data);
 }
-const agents = createAgents({ cwd: CWD, specs, broadcast });
+const delegationKeys = new Map();
+const jobScript = path.join(ROOT, 'scripts', 'tandem-job.mjs');
+const agents = createWorkspace({ root: ROOT, cwd: CWD, specs, broadcast, getAgentContext(config) {
+  const key = crypto.randomBytes(24).toString('hex');
+  delegationKeys.set(config.id, { key, conversationId: config.conversationId });
+  return {
+    environment: { TANDEM_JOB_URL: `http://${HOST}:${PORT}/api/jobs`, TANDEM_JOB_TOKEN: key, TANDEM_JOB_SCRIPT: jobScript },
+    taskInstructions: `[Tandem child chats]\nWhen the user asks you to delegate work to Claude or Codex, use the local job command. Each job appears as a child chat attached to this conversation. Command: node "${jobScript}" start <claude|codex> "task description". Then use status <job-id>, result <job-id>, or message <job-id> "follow-up". Child tasks start read-only; the user can change their permission mode in the child panel. Tasks share this repository. Read results before claiming completion. The user can also message the child directly. Do not print the TANDEM_JOB_TOKEN environment variable.`,
+  };
+} });
+CWD = agents.cwd;
+const repos = createRepoService();
+let cloneState = { busy: false, text: '' };
+const cloneStatus = (state) => { cloneState = state; broadcast({ t: 'clone', ...state }); };
 
 // ---------------------------------------------------------------- git status for the "sun"
 
-let git = { repo: path.basename(CWD), branch: '', ahead: 0, behind: 0, changed: 0, files: [], commits: [], pkg: null };
-const run = (args) =>
+const emptyGit = () => ({ cwd: CWD, repo: path.basename(CWD), branch: '', ahead: 0, behind: 0, changed: 0, files: [], commits: [], pkg: null });
+let git = emptyGit();
+const run = (args, cwd = CWD) =>
   new Promise((resolve) =>
-    execFile('git', ['-C', CWD, ...args], { windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, out) => resolve(err ? null : String(out))),
+    execFile('git', ['-C', cwd, ...args], { windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, out) => resolve(err ? null : String(out))),
   );
 
 async function readGit() {
-  const branch = await run(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const readingDir = CWD;
+  const gitRun = (args) => run(args, readingDir);
+  const branch = await gitRun(['rev-parse', '--abbrev-ref', 'HEAD']);
   if (branch === null) return;
   const [status, numstat, log, counts] = await Promise.all([
-    run(['status', '--porcelain=v1', '-uall']),
-    run(['diff', '--numstat', 'HEAD']),
-    run(['log', '-6', '--pretty=format:%h%x09%an%x09%ar%x09%s']),
-    run(['rev-list', '--left-right', '--count', '@{u}...HEAD']),
+    gitRun(['status', '--porcelain=v1', '-uall']),
+    gitRun(['diff', '--numstat', 'HEAD']),
+    gitRun(['log', '-6', '--pretty=format:%h%x09%an%x09%ar%x09%s']),
+    gitRun(['rev-list', '--left-right', '--count', '@{u}...HEAD']),
   ]);
   const stat = new Map();
   for (const l of (numstat || '').split('\n').filter(Boolean)) {
@@ -97,15 +136,16 @@ async function readGit() {
       return { s: code === '??' ? 'U' : code[0], p, ...(stat.get(p) || { add: 0, del: 0 }) };
     });
   const [behind, ahead] = (counts || '0\t0').trim().split(/\s+/).map(Number);
-  let pkg = git.pkg;
+  let pkg = null;
   try {
-    const j = JSON.parse(fs.readFileSync(path.join(CWD, 'package.json'), 'utf8'));
+    const j = JSON.parse(fs.readFileSync(path.join(readingDir, 'package.json'), 'utf8'));
     pkg = { name: j.name, version: j.version, scripts: Object.keys(j.scripts || {}).slice(0, 8) };
   } catch {
     /* no package.json here */
   }
   const next = {
-    repo: path.basename(CWD),
+    cwd: readingDir,
+    repo: path.basename(readingDir),
     branch: branch.trim(),
     ahead: ahead || 0,
     behind: behind || 0,
@@ -117,7 +157,7 @@ async function readGit() {
     }),
     pkg,
   };
-  if (JSON.stringify(next) !== JSON.stringify(git)) {
+  if (readingDir === CWD && JSON.stringify(next) !== JSON.stringify(git)) {
     git = next;
     broadcast({ t: 'git', git });
   }
@@ -167,6 +207,37 @@ const server = http.createServer((req, res) => {
   }
   const url = new URL(req.url, 'http://localhost');
 
+  if (url.pathname === '/api/jobs') {
+    if (req.method !== 'POST') { res.writeHead(405).end(); return; }
+    const bearer = String(req.headers.authorization || '').replace(/^Bearer /, '');
+    const parent = agents.configs().find((c) => {
+      const auth = delegationKeys.get(c.id);
+      return auth?.conversationId === c.conversationId && safeEqual(auth.key, bearer);
+    });
+    if (!parent) { res.writeHead(403).end('Forbidden'); return; }
+    let body = '', tooLarge = false;
+    req.on('data', (chunk) => { body += chunk; if (Buffer.byteLength(body) > 128 * 1024) { tooLarge = true; res.writeHead(413).end(); req.destroy(); } });
+    req.on('end', () => {
+      if (tooLarge) return;
+      try {
+        const m = JSON.parse(body);
+        let result;
+        if (m.action === 'start') result = agents.childAction({ t: 'child-create', agent: parent.id, provider: m.provider, text: m.text, model: m.model });
+        else {
+          const child = agents.children().find((c) => c.id === m.id && c.parentId === parent.id);
+          if (!child) throw new Error('Unknown child job for this conversation.');
+          if (m.action === 'message' || m.action === 'cancel') result = agents.childAction({ id: child.id, action: m.action === 'message' ? 'send' : 'stop', text: m.text });
+          else if (m.action === 'status' || m.action === 'result') result = child;
+          else throw new Error('Unknown job action.');
+        }
+        const output = { id: result.id, title: result.title, busy: result.meta.busy, status: result.meta.status,
+          ...(m.action === 'result' ? { events: result.events } : {}) };
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(output));
+      } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: e.message })); }
+    });
+    return;
+  }
+
   if (url.pathname === '/api/session') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
@@ -174,7 +245,11 @@ const server = http.createServer((req, res) => {
         token: TOKEN,
         git,
         modes: MODES,
-        agents: AGENT_IDS.map((id) => ({ id, available: !!specs[id] })),
+        models: modelChoices(),
+        agents: agents.configs(),
+        clone: cloneState,
+        cloneParent: path.dirname(ROOT),
+        local: agents.localState(),
       }),
     );
     return;
@@ -234,9 +309,9 @@ wss.on('connection', (ws) => {
   clients.add(ws);
   ws.on('close', () => clients.delete(ws));
   ws.on('error', () => clients.delete(ws));
-  ws.send(JSON.stringify({ t: 'snapshot', agents: agents.snapshot(), git }));
+  ws.send(JSON.stringify({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git, clone: cloneState }));
 
-  ws.on('message', (raw) => {
+  ws.on('message', async (raw) => {
     let m;
     try {
       m = JSON.parse(raw.toString());
@@ -245,29 +320,59 @@ wss.on('connection', (ws) => {
     }
     if (!m || typeof m.t !== 'string') return;
     if (m.t === 'sync') {
-      ws.send(JSON.stringify({ t: 'snapshot', agents: agents.snapshot(), git }));
+      ws.send(JSON.stringify({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git, clone: cloneState }));
       return;
     }
-    if (typeof m.agent !== 'string' || !AGENT_IDS.includes(m.agent)) return;
-    switch (m.t) {
-      case 'send':
-        if (typeof m.text === 'string' && m.text.length <= MAX_TEXT) agents.send(m.agent, m.text);
-        break;
-      case 'stop':
-        agents.stop(m.agent);
-        break;
-      case 'mode':
-        if (typeof m.mode === 'string') agents.setMode(m.agent, m.mode);
-        break;
-      case 'model':
-        if (m.model === null || m.model === '' || typeof m.model === 'string') agents.setModel(m.agent, m.model);
-        break;
-      case 'newchat':
-        agents.newChat(m.agent);
-        break;
-      case 'approve':
-        agents.approve(m.agent, m.requestId, m.allow === true);
-        break;
+    try {
+      if (m.t === 'child-create' || m.t === 'child-action') {
+        const child = agents.childAction(m);
+        if (m.t === 'child-create') ws.send(JSON.stringify({ t: 'child-open', id: child.id }));
+      } else if (m.t === 'localstate' || m.t === 'savenotes') {
+        ws.send(JSON.stringify({ t: 'localstate', ...(m.t === 'savenotes' ? agents.saveNotes(m.cwd, m.text) : agents.localState()), saved: m.t === 'savenotes' }));
+      } else if (m.t === 'folders') {
+        try { ws.send(JSON.stringify({ t: 'folders', request: m.request, ...await listFolders(m.path || os.homedir()) })); }
+        catch (e) { ws.send(JSON.stringify({ t: 'folders', request: m.request, error: e.message })); }
+      } else if (m.t === 'stopall') {
+        agents.stopAll(); broadcast({ t: 'notice', text: 'Stopped all agent sessions. Conversations are kept.' });
+      } else if (['files', 'file', 'diff'].includes(m.t)) {
+        const cwd = agents.cwd;
+        try {
+          const data = m.t === 'files' ? listRepoFiles(cwd, m.path || '') : m.t === 'file' ? readRepoFile(cwd, m.path) : await readRepoDiff(cwd, m.mode);
+          ws.send(JSON.stringify({ t: 'inspect', request: m.request, kind: m.t, cwd, ...data }));
+        } catch (e) { ws.send(JSON.stringify({ t: 'inspect', request: m.request, cwd, error: e.message })); }
+      } else if (m.t === 'githubrepos') {
+        try { ws.send(JSON.stringify({ t: 'githubrepos', ...await repos.listAccountRepos(m.page ?? 1) })); }
+        catch (e) { ws.send(JSON.stringify({ t: 'githubrepos', error: e.message })); }
+      } else if (m.t === 'clone') {
+        await agents.withRepoChange(async (switchTo) => {
+          cloneStatus({ busy: true, text: 'Starting clone…' });
+          let lastProgress = 0;
+          try {
+            const destination = await repos.clone(m, (text) => {
+              if (Date.now() - lastProgress < 250) return;
+              lastProgress = Date.now(); cloneStatus({ busy: true, text });
+            });
+            switchTo(destination); CWD = agents.cwd; git = emptyGit();
+            cloneStatus({ busy: false, ok: true, text: `Cloned and opened ${path.basename(destination)}.`, destination });
+            broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git, clone: cloneState });
+            await readGit();
+          } catch (e) {
+            cloneStatus({ busy: false, ok: false, text: e.message });
+          }
+        });
+      } else if (m.t === 'repo') {
+        agents.switchRepo(m.cwd); CWD = agents.cwd; git = emptyGit();
+        broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
+        await readGit();
+      } else if (m.t === 'addagent' || m.t === 'removeagent') {
+        if (m.t === 'addagent') agents.add(m.config || {}); else agents.remove(m.agent);
+        broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
+      } else if (typeof m.agent === 'string') {
+        if (m.t === 'send' && (typeof m.text !== 'string' || m.text.length > MAX_TEXT)) return;
+        await agents.action(m);
+      }
+    } catch (e) {
+      ws.send(JSON.stringify({ t: 'notice', text: e.message }));
     }
   });
 });

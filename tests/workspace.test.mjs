@@ -1,0 +1,125 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { createWorkspace } from '../server/workspace.mjs';
+
+function setup(t, fetchImpl) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-test-'));
+  const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
+  const messages = [];
+  const w = createWorkspace({ root, cwd: repo, specs: { claude: null, codex: null }, broadcast: (m) => messages.push(m), fetchImpl });
+  t.after(() => { w.closeAll(); fs.rmSync(root, { recursive: true, force: true }); });
+  return { w, root, repo, messages };
+}
+test('notes are isolated by repo, survive restart and reject stale saves', (t) => {
+  const { w, root, repo } = setup(t);
+  w.saveNotes(repo, 'First repo decisions');
+  const next = path.join(root, 'another'); fs.mkdirSync(next); w.switchRepo(next);
+  assert.equal(w.localState().notes, '');
+  assert.throws(() => w.saveNotes(repo, 'stale'), /Repository changed/);
+  w.saveNotes(w.cwd, 'Second repo next steps');
+  w.switchRepo(repo); assert.equal(w.localState().notes, 'First repo decisions');
+  assert.deepEqual(w.localState().recent.slice(0, 2), [w.cwd, fs.realpathSync(next)]);
+  w.closeAll();
+  const restored = createWorkspace({ root, cwd: repo, specs: {}, broadcast() {} });
+  t.after(() => restored.closeAll()); assert.equal(restored.localState().notes, 'First repo decisions');
+});
+test('stop all aborts API requests and preserves their conversations', async (t) => {
+  let finish;
+  const { w } = setup(t, () => new Promise((r) => finish = r));
+  const c = w.add({ provider: 'api', model: 'local', endpoint: 'http://localhost:1234' });
+  const pending = w.action({ t: 'send', agent: c.id, text: 'Keep this message' });
+  w.stopAll(); assert.equal(w.snapshot()[c.id].meta.busy, false);
+  assert.equal(w.snapshot()[c.id].events[0].text, 'Keep this message');
+  finish({ ok: true, json: async () => ({ choices: [{ message: { content: 'Late reply' } }] }) });
+  await pending; assert.equal(w.snapshot()[c.id].events.some((e) => e.k === 'msg'), false);
+});
+test('clone reservation blocks tasks and releases on failure', async (t) => {
+  const { w, root } = setup(t);
+  let release;
+  const pending = w.withRepoChange(async () => { await new Promise((r) => release = r); throw new Error('Clone failed'); });
+  assert.throws(() => w.action({ t: 'send', agent: 'codex', text: 'Edit a file' }), /clone to finish/);
+  assert.throws(() => w.switchRepo(root), /clone to finish/);
+  await assert.rejects(w.withRepoChange(async () => {}), /already running/);
+  release(); await assert.rejects(pending, /Clone failed/);
+  const next = path.join(root, 'next'); fs.mkdirSync(next);
+  await w.withRepoChange(async (switchTo) => switchTo(next));
+  assert.equal(w.cwd, fs.realpathSync(next));
+  w.switchRepo(root); assert.equal(w.cwd, fs.realpathSync(root));
+});
+test('CLI planets keep independent settings and restore after restart', (t) => {
+  const { w, root, repo } = setup(t);
+  const c = w.add({ name: 'Reviewer', provider: 'codex' });
+  w.action({ t: 'model', agent: c.id, model: 'test-model' });
+  w.action({ t: 'effort', agent: c.id, effort: 'medium' });
+  w.action({ t: 'mode', agent: c.id, mode: 'edit' });
+  assert.equal(w.snapshot().codex.meta.modelPref, null);
+  assert.equal(w.snapshot()[c.id].meta.effort, 'medium');
+  w.closeAll();
+  const restored = createWorkspace({ root, cwd: repo, specs: {}, broadcast() {} });
+  t.after(() => restored.closeAll());
+  assert.equal(restored.snapshot()[c.id].meta.modelPref, 'test-model');
+  assert.equal(restored.snapshot()[c.id].meta.mode, 'edit');
+  assert.equal(restored.snapshot()[c.id].meta.effort, 'medium');
+});
+test('API requests carry history and effort; repository switches reset chats and archive', async (t) => {
+  const requests = [];
+  const { w, root, repo } = setup(t, async (url, options) => {
+    requests.push({ url, ...options, body: JSON.parse(options.body) });
+    return { ok: true, json: async () => ({ choices: [{ message: { content: 'Review complete' } }], usage: { prompt_tokens: 12, completion_tokens: 3 } }) };
+  });
+  const c = w.add({ name: 'Local reviewer', provider: 'api', endpoint: 'http://127.0.0.1:1234/v1/chat/completions', model: 'local-model' });
+  w.action({ t: 'effort', agent: c.id, effort: 'low' });
+  await w.action({ t: 'send', agent: c.id, text: 'Review this code' });
+  await w.action({ t: 'send', agent: c.id, text: 'And this part?' });
+  assert.equal(requests[1].body.messages.length, 4);
+  assert.equal(requests[0].body.reasoning_effort, 'low');
+  assert.match(requests[0].body.messages[0].content, /no file or shell tools/);
+  assert.equal(w.snapshot()[c.id].meta.turns, 2);
+  const next = path.join(root, 'next'); fs.mkdirSync(next);
+  w.action({ t: 'model', agent: 'codex', model: 'test-model' });
+  w.switchRepo(next);
+  assert.equal(w.cwd, fs.realpathSync(next));
+  assert.equal(w.snapshot()[c.id].events.length, 0);
+  assert.equal(w.snapshot()[c.id].meta.effort, 'low');
+  assert.equal(w.snapshot().codex.meta.modelPref, 'test-model');
+  const archives = fs.readdirSync(path.join(root, '.tandem', 'archives'));
+  const archive = JSON.parse(fs.readFileSync(path.join(root, '.tandem', 'archives', archives[0])));
+  assert.equal(archive.cwd, repo);
+  assert.equal(archive.agents[c.id].events.filter((e) => e.k === 'user').length, 2);
+});
+test('busy API blocks repo switching; stop discards late responses', async (t) => {
+  let complete;
+  const { w, root } = setup(t, () => new Promise((resolve) => { complete = resolve; }));
+  const c = w.add({ provider: 'api', model: 'local', endpoint: 'http://localhost:1234/v1/chat/completions' });
+  const pending = w.action({ t: 'send', agent: c.id, text: 'Hello' });
+  assert.throws(() => w.switchRepo(root), /Stop all/);
+  assert.throws(() => w.remove(c.id), /Stop this/);
+  w.action({ t: 'stop', agent: c.id });
+  complete({ ok: true, json: async () => ({ choices: [{ message: { content: 'Late answer' } }] }) });
+  await pending;
+  assert.equal(w.snapshot()[c.id].meta.busy, false);
+  assert.equal(w.snapshot()[c.id].events.some((e) => e.k === 'msg'), false);
+});
+test('validation rejects credentials in URLs and raw keys; missing key never calls provider', async (t) => {
+  let called = false;
+  const { w } = setup(t, async () => { called = true; });
+  assert.throws(() => w.add({ provider: 'api', model: 'x', endpoint: 'https://secret@example.com/v1/chat/completions' }), /HTTPS/);
+  assert.throws(() => w.add({ provider: 'api', model: 'x', endpoint: 'https://example.com', keyEnv: 'sk-secret-key' }), /variable name/);
+  assert.throws(() => w.switchRepo('relative'), /full local/);
+  const c = w.add({ provider: 'api', model: 'x', endpoint: 'https://example.com', keyEnv: 'TANDEM_TEST_MISSING_KEY' });
+  await assert.rejects(w.action({ t: 'send', agent: c.id, text: 'Hello' }), /server environment/);
+  assert.equal(called, false);
+});
+test('API failures finish turns and removed agents are archived', async (t) => {
+  const { w, root } = setup(t, async () => ({ ok: false, status: 401 }));
+  const c = w.add({ provider: 'api', model: 'x', endpoint: 'http://localhost:1234' });
+  await w.action({ t: 'send', agent: c.id, text: 'Hello' });
+  assert.equal(w.snapshot()[c.id].meta.busy, false);
+  assert.match(w.snapshot()[c.id].events.find((e) => e.k === 'error').text, /401/);
+  w.remove(c.id);
+  assert.equal(w.snapshot()[c.id], undefined);
+  assert.equal(fs.readdirSync(path.join(root, '.tandem', 'archives')).length, 1);
+});

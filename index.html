@@ -19,22 +19,31 @@
     <header id="top">
       <div class="brand">
         <h1>T&thinsp;A&thinsp;N&thinsp;D&thinsp;E&thinsp;M</h1>
-        <p>two agents, one codebase</p>
+        <p>Your local agent workspace</p>
       </div>
       <div class="topright">
         <div class="clock"><span class="k">Local</span><span id="clock">--:--:--</span><span class="k">Session</span><span id="uptime">00:00</span></div>
         <div class="topbtns">
           <span id="conn" class="conn"><i></i><em>connecting</em></span>
-          <button id="btn-overview" title="See the whole system (Esc)">Overview <kbd>Esc</kbd></button>
+          <button id="btn-overview" title="Top-down view of the whole system (Esc)">System <kbd>Esc</kbd></button>
+          <button id="btn-workspace">Workspace</button>
+          <button id="btn-inspect">Files / Diff</button>
+          <button id="btn-notes">Notes</button>
+          <details class="toolbar-more"><summary>More <span>⌄</span></summary><div class="toolbar-menu">
+          <button id="btn-export">Export conversations</button>
+          <button id="btn-stop-all" title="Stop all running agent sessions">Stop all</button>
+          <button id="btn-eco" title="Reduce effects for laptop battery">Eco</button>
           <button id="btn-demo" title="Replay a scripted session without using any quota (Alt+D)">Demo <kbd>Alt+D</kbd></button>
           <button id="btn-sky" title="Trigger a ship, meteor or comet (Alt+K)">Sky <kbd>Alt+K</kbd></button>
           <button id="btn-ui" title="Hide the panels (Alt+H)">Hide panels <kbd>Alt+H</kbd></button>
+          </div></details>
         </div>
       </div>
     </header>
 
     <aside id="left">
       <div class="kicker"><span>Agents</span><span id="cwd" title="Folder the agents work in"></span></div>
+      <p class="roster-help">Select a planet or a row to open its chat.<br />Click the sun to change repositories.</p>
       <section id="chat-claude"></section>
       <section id="chat-codex"></section>
     </aside>
@@ -46,6 +55,75 @@
       <div id="ticker-items"><span class="idle">Quiet. Click a planet, or pick an agent, to start.</span></div>
       <span class="keys"><b>Alt+1</b> Claude <b>Alt+2</b> Codex <b>Esc</b> overview</span>
     </footer>
+    <div id="notice" role="status" hidden></div>
+    <dialog id="workspace-dialog">
+      <header><div><span class="eyebrow">SYSTEM SETTINGS</span><h2>Your workspace</h2></div><button id="close-workspace" aria-label="Close settings">Close ×</button></header>
+      <nav class="workspace-tabs" aria-label="Workspace sections"><button type="button" class="on" data-workspace-tab="local">Local folder</button><button type="button" data-workspace-tab="clone">Clone repository</button><button type="button" data-workspace-tab="agents">Agents</button></nav>
+      <section data-workspace-page="local">
+      <form id="repo-form">
+        <label for="repo-path">Working repository</label>
+        <div class="form-row"><input id="repo-path" required placeholder="Full local folder path" /><button id="browse-repo" type="button">Browse…</button></div><div class="repo-submit"><button type="submit" class="primary">Open workspace</button></div>
+        <p>Stop running agents first. Switching archives current chats locally and starts fresh conversations in the new folder.</p>
+      </form>
+      <div class="recent-heading"><h3>Recent repositories</h3></div>
+      <div id="recent-repos"></div>
+      </section><section data-workspace-page="clone" hidden>
+      <form id="clone-form">
+        <h3>Clone a repository</h3>
+        <label>Source<select id="clone-source"><option value="public">Public repository link</option><option value="account">My GitHub account</option></select></label>
+        <div id="github-browser" hidden>
+          <div class="form-row"><button id="load-github-repos" type="button">Load my repositories</button><span id="github-account" role="status"></span></div>
+          <p>Uses your GitHub login on this computer. If needed, run <code>gh auth login</code> in a terminal, then reload.</p>
+          <input id="github-search" type="search" placeholder="Filter loaded repositories" aria-label="Filter repositories" />
+          <div id="github-repos"></div>
+          <button id="more-github-repos" type="button" hidden>Load more</button>
+        </div>
+        <label for="clone-url">Repository URL<input id="clone-url" required placeholder="https://github.com/owner/repo or owner/repo" /></label>
+        <label for="clone-destination">New local folder<input id="clone-destination" required placeholder="Full path to a new folder" /></label>
+        <p>The parent folder must exist. Existing destinations are kept untouched. After cloning, Tandem opens the repo with fresh agent conversations.</p>
+        <button id="clone-submit" type="submit">Clone and open</button>
+        <p id="clone-status" role="status" aria-live="polite"></p>
+      </form>
+      </section><section data-workspace-page="agents" hidden>
+      <div class="settings-heading"><h3>Planets</h3><span>Up to eight independent agents</span></div>
+      <div id="agent-list"></div>
+      <form id="agent-form">
+        <h3>Add a planet</h3>
+        <div class="form-row"><label>Name<input name="name" required maxlength="32" placeholder="Reviewer" /></label><label>Connection<select name="provider" id="agent-provider"><option value="codex">Codex CLI</option><option value="claude">Claude Code CLI</option><option value="api">Compatible API chat</option></select></label></div>
+        <label>Model<input name="model" placeholder="Default for CLI; required for API" /></label>
+        <div id="api-fields" hidden>
+          <label>Chat Completions endpoint<input name="endpoint" placeholder="https://api.openai.com/v1/chat/completions" /></label>
+          <label>API key environment variable<input name="keyEnv" placeholder="OPENAI_API_KEY (leave blank for local models)" /></label>
+          <p>API chat can review pasted code and replies. It has no local file tools. Hosted APIs use separate billing. Keys stay in the server environment.</p>
+        </div>
+        <button type="submit">Add planet</button>
+      </form>
+      </section>
+    </dialog>
+    <dialog id="folder-dialog">
+      <header><div><span class="eyebrow">ON THIS COMPUTER</span><h2>Choose a folder</h2></div><button id="close-folders" aria-label="Close folder browser">Close ×</button></header>
+      <form id="folder-path-form" class="form-row"><button id="folder-up" type="button" aria-label="Parent folder">↑ Up</button><input id="folder-path" aria-label="Folder path" placeholder="Enter a full folder path" /><button type="submit">Go</button></form>
+      <div class="folder-shortcuts"><button id="folder-home">Home</button><button id="folder-current">Current workspace</button><span id="folder-roots"></span></div>
+      <input id="folder-search" type="search" placeholder="Filter folders here…" aria-label="Filter folders" />
+      <p id="folder-status" role="status" aria-live="polite"></p>
+      <nav id="folder-list" aria-label="Folders"></nav>
+      <footer class="folder-footer"><span id="folder-selection"></span><button id="choose-folder" class="primary" disabled>Use this folder</button></footer>
+    </dialog>
+    <dialog id="inspect-dialog" class="wide-dialog">
+      <header><div><span class="eyebrow">LOCAL REPOSITORY</span><h2>Files & changes</h2></div><button id="close-inspect">Close ×</button></header>
+      <div class="inspector-toolbar"><button id="inspect-files" class="on">Files</button><button id="inspect-diff">Git diff</button><select id="diff-mode" aria-label="Diff mode"><option value="combined">Since last commit</option><option value="unstaged">Unstaged</option><option value="staged">Staged</option></select><button id="inspect-refresh">Refresh</button></div>
+      <p id="inspect-location"></p>
+      <div class="inspector-layout"><nav id="file-list" aria-label="Repository files"></nav><div class="file-preview"><p id="inspect-status" role="status"></p><pre id="inspect-content"></pre></div></div>
+      <div class="inspector-toolbar"><select id="context-agent" aria-label="Agent for file context"></select><button id="attach-context" disabled>Add to chat draft</button></div>
+      <p>Preview is read-only. Add a file or diff to a draft to discuss it with an agent; send it when ready.</p>
+    </dialog>
+    <dialog id="notes-dialog">
+      <header><div><span class="eyebrow">SAVED ON THIS COMPUTER</span><h2>Repository notes</h2></div><button id="close-notes">Close ×</button></header>
+      <p id="notes-repo"></p>
+      <label for="repo-notes">Goals, decisions, next steps<textarea id="repo-notes" maxlength="30000" rows="14" placeholder="Keep a handoff for tomorrow…"></textarea></label>
+      <div class="form-row"><button id="save-notes">Save notes</button><span id="notes-status" role="status"></span></div>
+      <p>Saved per repository inside Tandem's local .tandem folder. Notes are not sent to agents automatically.</p>
+    </dialog>
 
     <script type="module" src="/src/main.js"></script>
   </body>

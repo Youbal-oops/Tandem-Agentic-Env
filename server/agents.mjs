@@ -64,7 +64,10 @@ function stringifyContent(c) {
 
 function killTree(proc) {
   if (!proc || proc.exitCode !== null || !proc.pid) return;
-  if (process.platform === 'win32') execFile('taskkill', ['/PID', String(proc.pid), '/T', '/F'], () => {});
+  if (process.platform === 'win32') {
+    proc.stdin?.end();
+    execFile('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { windowsHide: true }, (err) => { if (err && proc.exitCode === null) proc.kill(); });
+  }
   else proc.kill('SIGTERM');
 }
 
@@ -147,7 +150,7 @@ function lastTokenCount(file) {
   return null;
 }
 
-export function createAgents({ cwd, specs, broadcast }) {
+export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex'], environment = {}, taskInstructions = '' }) {
   const rel = (p) => {
     p = String(p ?? '');
     const base = cwd.replace(/[\\/]+$/, '');
@@ -203,13 +206,14 @@ export function createAgents({ cwd, specs, broadcast }) {
   });
 
   const agents = {};
-  for (const id of ['claude', 'codex']) {
+  for (const id of providers) {
     agents[id] = {
       id,
       mode: id === 'claude' ? 'ask' : 'read',
       busy: false,
       sessionId: null,
       model: null,
+      effort: null,
       proc: null,
       events: [],
       index: new Map(),
@@ -259,6 +263,7 @@ export function createAgents({ cwd, specs, broadcast }) {
       mode: a.mode,
       model: a.model,
       modelPref: a.modelPref,
+      effort: a.effort,
       session: !!a.sessionId,
       running: !!a.proc,
       cost: a.cost,
@@ -394,14 +399,16 @@ export function createAgents({ cwd, specs, broadcast }) {
       '--permission-mode', CLAUDE_MODE_FLAG[a.mode],
     ];
     if (a.modelPref) args.push('--model', a.modelPref);
+    if (a.effort) args.push('--effort', a.effort);
     if (a.sessionId) args.push('--resume', a.sessionId);
-    const proc = spawn(specs.claude.file, args, { cwd, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const proc = spawn(specs.claude.file, args, { cwd, env: { ...cleanEnv(), ...environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     a.proc = proc;
     a.lastTotal = 0;
     a.stderr = '';
     let buf = '';
     proc.stdout.setEncoding('utf8');
     proc.stdout.on('data', (d) => {
+      if (proc.__quiet || a.proc !== proc) return;
       buf += d;
       let i;
       while ((i = buf.indexOf('\n')) >= 0) {
@@ -413,6 +420,7 @@ export function createAgents({ cwd, specs, broadcast }) {
     proc.stderr.setEncoding('utf8');
     proc.stderr.on('data', (d) => (a.stderr = (a.stderr + d).slice(-2000)));
     proc.on('error', (e) => {
+      if (proc.__quiet || a.proc !== proc) return;
       fail(a, `Could not start Claude Code: ${e.message}`);
       a.proc = null;
       a.busy = false;
@@ -677,15 +685,17 @@ export function createAgents({ cwd, specs, broadcast }) {
     setTimeout(() => pollCodex(a), 600);
   }
   // Limits are account-wide, so show them even before the first message.
-  setTimeout(() => pollCodex(agents.codex), 800);
-  setInterval(() => !agents.codex.busy && pollCodex(agents.codex), 30000).unref();
+  const initialPoll = setTimeout(() => agents.codex && pollCodex(agents.codex), 800);
+  const idlePoll = setInterval(() => agents.codex && !agents.codex.busy && pollCodex(agents.codex), 30000);
+  idlePoll.unref();
 
   function sendCodex(a, text) {
     const args = [...specs.codex.args, 'exec', '--json', '--skip-git-repo-check', '-C', cwd, '-s', CODEX_SANDBOX[a.mode]];
     if (a.modelPref) args.push('-m', a.modelPref);
+    if (a.effort) args.push('-c', `model_reasoning_effort="${a.effort}"`);
     if (a.sessionId) args.push('resume', a.sessionId, '-');
     else args.push('-');
-    const proc = spawn(specs.codex.file, args, { cwd, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const proc = spawn(specs.codex.file, args, { cwd, env: { ...cleanEnv(), ...environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     a.proc = proc;
     a.stderr = '';
     startCodexPolling(a);
@@ -693,6 +703,7 @@ export function createAgents({ cwd, specs, broadcast }) {
     let sawTurnEnd = false;
     proc.stdout.setEncoding('utf8');
     proc.stdout.on('data', (d) => {
+      if (proc.__quiet || a.proc !== proc) return;
       buf += d;
       let i;
       while ((i = buf.indexOf('\n')) >= 0) {
@@ -704,6 +715,7 @@ export function createAgents({ cwd, specs, broadcast }) {
     proc.stderr.setEncoding('utf8');
     proc.stderr.on('data', (d) => (a.stderr = (a.stderr + d).slice(-2000)));
     proc.on('error', (e) => {
+      if (proc.__quiet || a.proc !== proc) return;
       fail(a, `Could not start Codex: ${e.message}`);
       a.proc = null;
       a.busy = false;
@@ -831,6 +843,7 @@ export function createAgents({ cwd, specs, broadcast }) {
     text = String(text || '').trim();
     if (!text) return;
     put(a, { k: 'user', id: `${a.id}:u${++a.seq}`, text, at: Date.now() });
+    if (taskInstructions) text += '\n\n' + taskInstructions;
     a.turnNo += 1;
     a.busy = true;
     pushMeta(a);
@@ -915,10 +928,39 @@ export function createAgents({ cwd, specs, broadcast }) {
     stop,
     setMode,
     setModel,
+    setEffort(id, effort) {
+      const a = agents[id];
+      if (!a || a.busy || ![null, '', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) return;
+      if (id === 'codex' && effort === 'max') return fail(a, 'Use Extra high for Codex.');
+      a.effort = effort || null;
+      if (a.proc) { a.proc.__quiet = true; killTree(a.proc); a.proc = null; }
+      pushMeta(a);
+    },
+    save: () => Object.fromEntries(Object.values(agents).map((a) => [a.id, {
+      events: a.events, sessionId: a.sessionId, mode: a.mode, modelPref: a.modelPref,
+      effort: a.effort, turns: a.turns, cost: a.cost, seq: a.seq, turnNo: a.turnNo,
+    }])),
+    restore(saved) {
+      for (const a of Object.values(agents)) {
+        const s = saved?.[a.id];
+        if (!s) continue;
+        a.events = Array.isArray(s.events) ? s.events : [];
+        for (const e of a.events) if (e.k === 'tool' && ['running', 'awaiting'].includes(e.status)) e.status = 'error';
+        a.sessionId = typeof s.sessionId === 'string' ? s.sessionId : null;
+        if (MODES[a.id].some((m) => m.id === s.mode)) a.mode = s.mode;
+        a.modelPref = validModel(s.modelPref) ? s.modelPref : null;
+        a.effort = ['low', 'medium', 'high', 'xhigh', 'max'].includes(s.effort) ? s.effort : null;
+        a.turns = Number(s.turns) || 0; a.cost = Number(s.cost) || 0; a.seq = Number(s.seq) || 0; a.turnNo = Number(s.turnNo) || a.turns;
+        reindex(a);
+      }
+    },
     newChat,
     approve: (id, requestId, allow) => agents[id] && decide(agents[id], String(requestId), !!allow),
     snapshot: () => Object.fromEntries(Object.values(agents).map((a) => [a.id, { meta: meta(a), events: a.events }])),
     closeAll() {
+      clearTimeout(initialPoll);
+      clearInterval(idlePoll);
+      clearInterval(codexPoll);
       for (const a of Object.values(agents)) if (a.proc) ((a.proc.__quiet = true), killTree(a.proc));
     },
   };
