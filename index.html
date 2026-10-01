@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tandem</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='5' fill='%23ffd27a'/%3E%3Ccircle cx='7' cy='10' r='3.5' fill='%23ffb25a'/%3E%3Ccircle cx='25' cy='23' r='3.5' fill='%2374e6ff'/%3E%3C/svg%3E" />
+  </head>
+  <body data-sel="" class="boot">
+    <div id="stage"></div>
+    <div id="vignette"></div>
+
+    <div id="plabels">
+      <div class="pl" data-agent="claude"><b>Claude</b><small>idle</small></div>
+      <div class="pl" data-agent="codex"><b>Codex</b><small>idle</small></div>
+      <div class="sl"><b id="sl-repo">repo</b><small id="sl-git">the codebase</small></div>
+    </div>
+
+    <header id="top">
+      <div class="brand">
+        <h1>T&thinsp;A&thinsp;N&thinsp;D&thinsp;E&thinsp;M</h1>
+        <p>two agents, one codebase</p>
+      </div>
+      <div class="topright">
+        <div class="clock"><span class="k">Local</span><span id="clock">--:--:--</span><span class="k">Session</span><span id="uptime">00:00</span></div>
+        <div class="topbtns">
+          <span id="conn" class="conn"><i></i><em>connecting</em></span>
+          <button id="btn-overview" title="See the whole system (Esc)">Overview <kbd>Esc</kbd></button>
+          <button id="btn-demo" title="Replay a scripted session without using any quota (Alt+D)">Demo <kbd>Alt+D</kbd></button>
+          <button id="btn-sky" title="Trigger a ship, meteor or comet (Alt+K)">Sky <kbd>Alt+K</kbd></button>
+          <button id="btn-ui" title="Hide the panels (Alt+H)">Hide panels <kbd>Alt+H</kbd></button>
+        </div>
+      </div>
+    </header>
+
+    <aside id="left">
+      <div class="kicker"><span>Agents</span><span id="cwd" title="Folder the agents work in"></span></div>
+      <section id="chat-claude"></section>
+      <section id="chat-codex"></section>
+    </aside>
+
+    <aside id="right"></aside>
+
+    <footer id="ticker">
+      <span class="lbl">Work board</span>
+      <div id="ticker-items"><span class="idle">Quiet. Click a planet, or pick an agent, to start.</span></div>
+      <span class="keys"><b>Alt+1</b> Claude <b>Alt+2</b> Codex <b>Esc</b> overview</span>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

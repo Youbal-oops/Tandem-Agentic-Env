@@ -4,9 +4,52 @@ A planned local environment for two coding agents to collaborate on one codebase
 
 ## Status
 
-As of **2026-10-01**, Tandem is at the **planning stage**. The development machine is set up, but **no Tandem code has been written yet**. The repository folder is `Tandem-Agentic-Env`.
+As of **2026-10-01**, Tandem has a first working **local cockpit** (see "Running Tandem" below): a chat interface for Claude Code and Codex CLI, shown as two planets orbiting a star that stands for the codebase. Delegation between the agents, a git worktree per job and session export to the site are still **planned, not built**. The repository folder is `Tandem-Agentic-Env`.
 
-Phase 1 uses Claude as primary and Codex as sub through the official Codex plugin in Claude Code, with no custom code. Role swapping and a local hub are later phases, only if needed.
+## Running Tandem
+
+```powershell
+npm install
+npm run dev      # API on 127.0.0.1:4317, UI on http://localhost:5173
+```
+
+`npm start` builds the UI and serves it from the API alone at http://127.0.0.1:4317. Opening `index.html` directly will not work; the server runs the agents.
+
+**Layout.** Left: the two agents as rows (number, name, activity graph, state) with a terminal-style chat under each. Middle: the system. Right: instruments and project info (context, usage limits, session stats, tool mix, sub-agents, plan, MCP servers, files edited, git branch, changed files, commits, and a live log). Bottom: a flap-style work board. Click a planet, press **Alt+1 / Alt+2**, or click an agent row, and the camera follows that planet along its orbit (the planet spins and the camera drifts around it) while its chat takes over the left column. **Esc** returns to the overview with both chats visible.
+
+**The planets are instruments.** The star is the repo (name, branch, changed files).
+
+| On the planet | Means |
+| --- | --- |
+| Inner HUD ring | Context window used. Turns amber past 60% and red past 85% |
+| Outer thin ring | 5-hour usage limit used (7-day shown in the right column) |
+| Lattice shield | Permission mode: cyan read-only or plan, amber ask, green edit, violet auto |
+| Small moons | One per running tool, coloured by kind: read, search, shell, edit, web, MCP |
+| Large bright moons | Sub-agents |
+| Debris belt | Every tool call this session, coloured by kind |
+| Beads on a ring | The agent's plan: done, active, to do |
+| Far satellites | MCP servers (green connected, amber pending, red needs sign-in) |
+| Expanding pulses | The agent is thinking |
+| Beacon | Waiting for your approval |
+| Red flare, white shockwave | An error, or the context was compacted |
+| Atmosphere thickness | Prompt-cache hit rate |
+
+When an agent edits a file, a packet of light flies from its planet into the star. **→ Codex / → Claude** under a reply drafts a review request in the other agent's box and sends a comet between the planets. Ships, meteors, comets and asteroids pass through the sky now and then (**Alt+K** triggers one). If the GPU struggles, the renderer lowers its resolution and then turns off bloom by itself.
+
+**Where the numbers come from.** Claude reports its own token counts, context window, cache hits, usage windows and MCP servers in its event stream. Codex's context size and usage limits come from the `token_count` records in its local session files under `~/.codex/sessions`; only those lines are read, never the conversation.
+
+**The chat.** Replies stream as markdown, tool calls are lines you can open, and the prompt line sends with Enter. Each agent has a permission mode:
+
+| Agent | Modes |
+| --- | --- |
+| Claude | **Ask** (approve each change with buttons), **Plan** (read-only), **Edit** (files freely, asks for other actions), **Auto** (Claude's own risk classifier) |
+| Codex | **Read-only**, **Edit** (workspace-write sandbox). Codex cannot ask mid-task in this mode, so choose before sending |
+
+**Under the hood.** Claude runs as one live `claude -p --input-format stream-json` process, so context carries across turns and approvals are answered over its control channel. Codex runs `codex exec --json` once per message and continues the conversation with `codex exec resume`. Neither uses a terminal emulator.
+
+**Settings.** `TANDEM_CWD` sets the folder the agents work in (default: this repo). `TANDEM_CLAUDE_MODEL` pins Claude's model, for example `haiku` to spend less. Add `?demo` to the URL, or press **Alt+D**, to replay a scripted session that touches neither CLI.
+
+**Security.** Bound to `127.0.0.1`; Host and Origin are checked; the WebSocket needs a per-launch token; only the two known CLIs can be started, never a shell; `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and similar variables are removed from the agents' environment so they stay on your subscriptions. Do not expose the port to a network.
 
 ## Goal
 
