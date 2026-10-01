@@ -329,6 +329,8 @@ wss.on('connection', (ws) => {
         if (m.t === 'child-create') ws.send(JSON.stringify({ t: 'child-open', id: child.id }));
       } else if (m.t === 'localstate' || m.t === 'savenotes') {
         ws.send(JSON.stringify({ t: 'localstate', ...(m.t === 'savenotes' ? agents.saveNotes(m.cwd, m.text) : agents.localState()), saved: m.t === 'savenotes' }));
+      } else if (m.t === 'saveprompt') {
+        ws.send(JSON.stringify({ t: 'prompt', ...agents.savePrompt(m.text, m.on) }));
       } else if (m.t === 'folders') {
         try { ws.send(JSON.stringify({ t: 'folders', request: m.request, ...await listFolders(m.path || os.homedir()) })); }
         catch (e) { ws.send(JSON.stringify({ t: 'folders', request: m.request, error: e.message })); }

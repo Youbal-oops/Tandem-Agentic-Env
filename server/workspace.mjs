@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import { createAgents, validModel } from './agents.mjs';
 import { createChildren } from './children.mjs';
 
+const MAX_PROMPT = 8000;
+
 // One CLI adapter per planet, so two Codex/Claude planets never share a thread.
 export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch, getAgentContext = () => ({}), pluginRoots, childPollMs }) {
   const dir = path.join(root, '.tandem');
@@ -17,13 +19,17 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   let loading = true;
   let closed = false;
   let repoChanging = false;
+  let globalPrompt = { text: typeof saved.globalPrompt?.text === 'string' ? saved.globalPrompt.text.slice(0, MAX_PROMPT) : '', on: saved.globalPrompt?.on !== false };
+  // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
+  const renderPrompt = (name) => (!globalPrompt.on ? '' : globalPrompt.text.trim()
+    .replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name));
   const notes = saved.notes && typeof saved.notes === 'object' ? saved.notes : {};
   let recent = Array.isArray(saved.recent) ? saved.recent.filter((p) => typeof p === 'string').slice(0, 12) : [];
   const remember = () => { recent = [workingDir, ...recent.filter((p) => p !== workingDir)].slice(0, 12); };
   remember();
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: workingDir, notes, recent, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
+    const data = { cwd: workingDir, notes, recent, globalPrompt, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
   }
@@ -60,7 +66,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     const a = { config, events: state?.events || [], effort: state?.effort || null, controller: null };
     entries.set(config.id, a);
     if (provider !== 'api') {
-      a.cli = createAgents({ cwd: workingDir, specs, providers: [provider], ...getAgentContext(config), broadcast: (msg) => {
+      a.cli = createAgents({ cwd: workingDir, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name), broadcast: (msg) => {
         if (entries.get(config.id) !== a) return;
         emit({ ...msg, agent: config.id });
       } });
@@ -88,7 +94,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     put(a, { k: 'user', id: `${id}:u`, text, at: Date.now() });
     emit({ t: 'meta', agent: a.config.id, meta: apiMeta(a) });
     try {
-      const messages = [{ role: 'system', content: `You are a chat assistant in Tandem. Working repository: ${workingDir}. You have no file or shell tools. Ask the user to provide code when needed. Never claim to have read or changed local files.` }, ...a.events.filter((e) => e.k === 'user' || (e.k === 'msg' && e.done)).map((e) => ({ role: e.k === 'user' ? 'user' : 'assistant', content: e.text }))];
+      const messages = [{ role: 'system', content: `You are a chat assistant in Tandem. Working repository: ${workingDir}. You have no file or shell tools. Ask the user to provide code when needed. Never claim to have read or changed local files.${renderPrompt(a.config.name) ? `\n\nStanding instructions from the user:\n${renderPrompt(a.config.name)}` : ''}` }, ...a.events.filter((e) => e.k === 'user' || (e.k === 'msg' && e.done)).map((e) => ({ role: e.k === 'user' ? 'user' : 'assistant', content: e.text }))];
       const res = await fetchImpl(a.config.endpoint, { method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { 'Content-Type': 'application/json', ...(a.config.keyEnv ? { Authorization: `Bearer ${process.env[a.config.keyEnv]}` } : {}) },
         body: JSON.stringify({ model: a.config.model, messages, ...(a.effort ? { reasoning_effort: a.effort } : {}) }) });
@@ -108,7 +114,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (a.controller === controller) { a.controller = null; emit({ t: 'meta', agent: a.config.id, meta: apiMeta(a) }); }
     }
   }
-  children = createChildren({ root, specs, getCwd: () => workingDir, broadcast: emit, pluginRoots, pollMs: childPollMs,
+  children = createChildren({ root, specs, getCwd: () => workingDir, broadcast: emit, pluginRoots, pollMs: childPollMs, getInstructions: (provider) => renderPrompt(provider === 'claude' ? 'Claude' : 'Codex'),
     getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, provider: a.config.provider,
       sessionId: a.cli?.save()[a.config.provider]?.sessionId })) });
   const busy = () => Object.values(snapshot()).some((s) => s.meta.busy) || children.busy();
@@ -152,7 +158,12 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (repoChanging) throw new Error('Wait for the repository clone to finish.');
       return m.t === 'child-create' ? children.create(m.agent, m) : children.action(m);
     },
-    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent }),
+    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt }),
+    savePrompt(text, on) {
+      if (typeof text !== 'string' || text.length > MAX_PROMPT) throw new Error(`The prompt can contain up to ${MAX_PROMPT.toLocaleString()} characters.`);
+      globalPrompt = { text, on: on !== false }; save();
+      return { prompt: globalPrompt };
+    },
     saveNotes(cwd, text) {
       if (cwd !== workingDir) throw new Error('Repository changed. Reopen Notes before saving.');
       if (typeof text !== 'string' || text.length > 30000) throw new Error('Notes can contain up to 30,000 characters.');
@@ -188,7 +199,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         // Refresh the delegation token and instructions for the new conversation.
         if (a.cli) {
           const saved = a.cli.save(); a.cli.closeAll();
-          a.cli = createAgents({ cwd: workingDir, specs, providers: [a.config.provider], ...getAgentContext(a.config), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
+          a.cli = createAgents({ cwd: workingDir, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
           a.cli.restore(saved);
         }
         emit({ t: 'children', children: children.snapshot() });

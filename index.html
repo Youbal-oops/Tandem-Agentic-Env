@@ -29,6 +29,7 @@
           <button id="btn-workspace">Workspace</button>
           <button id="btn-inspect">Files / Diff</button>
           <button id="btn-notes">Notes</button>
+          <button id="btn-prompt" title="Instructions every agent receives at the start of each session">Prompt</button>
           <details class="toolbar-more"><summary>More <span>⌄</span></summary><div class="toolbar-menu">
           <button id="btn-export">Export conversations</button>
           <button id="btn-stop-all" title="Stop all running agent sessions">Stop all</button>
@@ -116,6 +117,13 @@
       <div class="inspector-layout"><nav id="file-list" aria-label="Repository files"></nav><div class="file-preview"><p id="inspect-status" role="status"></p><pre id="inspect-content"></pre></div></div>
       <div class="inspector-toolbar"><select id="context-agent" aria-label="Agent for file context"></select><button id="attach-context" disabled>Add to chat draft</button></div>
       <p>Preview is read-only. Add a file or diff to a draft to discuss it with an agent; send it when ready.</p>
+    </dialog>
+    <dialog id="prompt-dialog">
+      <header><div><span class="eyebrow">SAVED ON THIS COMPUTER · ALL AGENTS</span><h2>Global prompt</h2></div><button id="close-prompt">Close ×</button></header>
+      <label for="global-prompt">Standing instructions<textarea id="global-prompt" maxlength="8000" rows="10" placeholder="At the start of every session, search my site for context about {{repo}} and read what is relevant before you begin."></textarea></label>
+      <label class="check"><input type="checkbox" id="prompt-on" checked /> Send to every agent</label>
+      <div class="form-row"><button id="save-prompt">Save prompt</button><span id="prompt-status" role="status"></span></div>
+      <p>Sent with the first message of each session, and again after a repository switch, a new chat or an edit. Applies to Claude, Codex, API planets and subagent chats. Placeholders: {{repo}} folder name, {{path}} full path, {{agent}} the agent's name. Stored in Tandem's local .tandem folder, so set it again on another computer.</p>
     </dialog>
     <dialog id="notes-dialog">
       <header><div><span class="eyebrow">SAVED ON THIS COMPUTER</span><h2>Repository notes</h2></div><button id="close-notes">Close ×</button></header>

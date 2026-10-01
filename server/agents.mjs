@@ -150,7 +150,7 @@ function lastTokenCount(file) {
   return null;
 }
 
-export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex'], environment = {}, taskInstructions = '' }) {
+export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex'], environment = {}, taskInstructions = '', getInstructions = () => '' }) {
   const rel = (p) => {
     p = String(p ?? '');
     const base = cwd.replace(/[\\/]+$/, '');
@@ -843,6 +843,9 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
     text = String(text || '').trim();
     if (!text) return;
     put(a, { k: 'user', id: `${a.id}:u${++a.seq}`, text, at: Date.now() });
+    // The global prompt goes first, once per session and again whenever its rendered text changes.
+    const global = String(getInstructions(id) || '').trim();
+    if (global && global !== a.promptSent) { text = `[Standing instructions from the user, apply for this whole session]\n${global}\n\n[Task]\n${text}`; a.promptSent = global; }
     if (taskInstructions) text += '\n\n' + taskInstructions;
     a.turnNo += 1;
     a.busy = true;
@@ -918,7 +921,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
       a.proc = null;
     }
     const keep = { limits: a.stats.limits, ctxWindow: a.stats.ctxWindow, mcp: a.stats.mcp };
-    Object.assign(a, { busy: false, sessionId: null, rollout: null, events: [], index: new Map(), starts: new Map(), approvals: new Map(), blocks: new Map(), streamed: new Set(), cost: 0, lastTotal: 0, turns: 0, taskItems: [], planSeen: new Set() });
+    Object.assign(a, { busy: false, sessionId: null, rollout: null, events: [], index: new Map(), starts: new Map(), approvals: new Map(), blocks: new Map(), streamed: new Set(), cost: 0, lastTotal: 0, turns: 0, taskItems: [], planSeen: new Set(), promptSent: null });
     a.stats = { ...freshStats(), ...keep };
     broadcast({ t: 'reset', agent: id, events: [], meta: meta(a) });
   }

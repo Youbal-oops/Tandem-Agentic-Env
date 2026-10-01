@@ -52,12 +52,28 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
     if (ask({ t: 'savenotes', ...notesPending })) $('#notes-status').textContent = 'Saving…';
   }
   $('#save-notes').addEventListener('click', saveNotes);
+  let promptSaved = { text: '', on: true };
+  const promptDirty = () => $('#global-prompt').value !== promptSaved.text || $('#prompt-on').checked !== promptSaved.on;
+  const promptStatus = () => { $('#prompt-status').textContent = promptDirty() ? 'Unsaved changes' : promptSaved.text.trim() ? (promptSaved.on ? 'Active for all agents' : 'Saved, switched off') : 'No prompt set'; };
+  $('#btn-prompt').addEventListener('click', () => { if (!connected()) return notify('Connect to the local server first.'); $('#prompt-dialog').showModal(); ask({ t: 'localstate' }); });
+  $('#close-prompt').addEventListener('click', () => $('#prompt-dialog').close());
+  $('#global-prompt').addEventListener('input', promptStatus);
+  $('#prompt-on').addEventListener('change', promptStatus);
+  $('#save-prompt').addEventListener('click', () => { if (ask({ t: 'saveprompt', text: $('#global-prompt').value, on: $('#prompt-on').checked })) $('#prompt-status').textContent = 'Saving…'; });
+  $('#global-prompt').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('#save-prompt').click(); } });
+  function showPrompt(p, force) {
+    if (!p) return;
+    if (force || !promptDirty()) { $('#global-prompt').value = p.text; $('#prompt-on').checked = p.on; }
+    promptSaved = { text: p.text, on: p.on }; promptStatus();
+  }
   $('#repo-notes').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveNotes(); } });
   return {
     openWorkspace() { ask({ t: 'localstate' }); },
     repoChanged() { folder = ''; preview = null; request++; $('#inspect-dialog').close(); },
     receive(msg) {
+      if (msg.t === 'prompt') { showPrompt(msg.prompt, true); return true; }
       if (msg.t === 'localstate') {
+        showPrompt(msg.prompt, false);
         const list = $('#recent-repos'); list.replaceChildren();
         for (const cwd of msg.recent || []) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'recent-repo';

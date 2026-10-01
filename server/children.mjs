@@ -45,7 +45,7 @@ export function readPluginJobs(cwd, roots) {
   return jobs;
 }
 
-export function createChildren({ root, specs, getCwd, getParents, broadcast, pluginRoots, pollMs = 1500 }) {
+export function createChildren({ root, specs, getCwd, getParents, broadcast, pluginRoots, pollMs = 1500, getInstructions = () => '' }) {
   const file = path.join(root, '.tandem', 'children.json');
   const children = new Map();
   let timer, saveTimer, closed = false;
@@ -75,7 +75,7 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
   function publish(c) { c.updatedAt = Date.now(); if (visible(c)) broadcast({ t: 'child', child: snapshot(c) }); schedule(); }
   function attach(c) {
     if (c.cli) return;
-    c.cli = createAgents({ cwd: c.cwd, specs, providers: [c.provider], broadcast(msg) {
+    c.cli = createAgents({ cwd: c.cwd, specs, providers: [c.provider], getInstructions: () => getInstructions(c.provider), broadcast(msg) {
       if (closed) return;
       c.updatedAt = Date.now();
       if (msg.t === 'ev' && msg.ev.k === 'turn') c.status = msg.ev.ok === false ? 'failed' : 'completed';

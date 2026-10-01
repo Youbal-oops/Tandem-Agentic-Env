@@ -110,3 +110,8 @@ dialog .folder-entry:hover { background: #ece6d808; color: var(--warn); }
 @media (max-width:900px) { .conn em { display: none; } .topbtns { gap: 5px; } .topbtns button { padding: 7px; } }
 @media (max-width:699px) { :root { --top: 118px; } #top { flex-wrap: wrap; gap: 12px; padding: 16px; } .topright { width: 100%; } .topbtns { width: 100%; justify-content: space-between; } #left { width: 100%; } .form-row { flex-wrap: wrap; } dialog { padding: 20px; } .inspector-layout { grid-template-columns: 120px minmax(0,1fr); gap: 8px; } .workspace-tabs { gap: 14px; } }
 
+
+#global-prompt { width: 100%; resize: vertical; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--faint); font: 12.5px/1.7 var(--mono); padding: 8px 0; outline: none; }
+#global-prompt:focus { border-color: var(--warn); }
+label.check { flex-direction: row; align-items: center; gap: 10px; flex: none; }
+label.check input { accent-color: var(--warn); }
