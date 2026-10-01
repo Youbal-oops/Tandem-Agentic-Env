@@ -41,6 +41,9 @@ const CLASS_BY_NAME = {
 };
 const toolClass = (name = '') => CLASS_BY_NAME[name] || (/^mcp__|\./.test(name) ? 'mcp' : 'other');
 
+/** Model names are passed to the CLIs as arguments, so only plain identifiers are accepted. */
+export const validModel = (s) => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$/.test(s);
+
 const trunc = (s, n) => {
   s = String(s ?? '');
   return s.length > n ? s.slice(0, n) + `\n… (${s.length - n} more characters)` : s;
@@ -222,6 +225,7 @@ export function createAgents({ cwd, specs, broadcast }) {
       turns: 0,
       stderr: '',
       rollout: null,
+      modelPref: id === 'claude' && validModel(process.env.TANDEM_CLAUDE_MODEL) ? process.env.TANDEM_CLAUDE_MODEL : null,
       taskItems: [],
       planSeen: new Set(),
       stats: freshStats(),
@@ -254,6 +258,7 @@ export function createAgents({ cwd, specs, broadcast }) {
       busy: a.busy,
       mode: a.mode,
       model: a.model,
+      modelPref: a.modelPref,
       session: !!a.sessionId,
       running: !!a.proc,
       cost: a.cost,
@@ -388,7 +393,7 @@ export function createAgents({ cwd, specs, broadcast }) {
       '--permission-prompt-tool', 'stdio',
       '--permission-mode', CLAUDE_MODE_FLAG[a.mode],
     ];
-    if (process.env.TANDEM_CLAUDE_MODEL) args.push('--model', process.env.TANDEM_CLAUDE_MODEL);
+    if (a.modelPref) args.push('--model', a.modelPref);
     if (a.sessionId) args.push('--resume', a.sessionId);
     const proc = spawn(specs.claude.file, args, { cwd, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     a.proc = proc;
@@ -677,6 +682,7 @@ export function createAgents({ cwd, specs, broadcast }) {
 
   function sendCodex(a, text) {
     const args = [...specs.codex.args, 'exec', '--json', '--skip-git-repo-check', '-C', cwd, '-s', CODEX_SANDBOX[a.mode]];
+    if (a.modelPref) args.push('-m', a.modelPref);
     if (a.sessionId) args.push('resume', a.sessionId, '-');
     else args.push('-');
     const proc = spawn(specs.codex.file, args, { cwd, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
@@ -871,6 +877,25 @@ export function createAgents({ cwd, specs, broadcast }) {
     pushMeta(a);
   }
 
+  /** Pick the model for the next messages. An empty value means "use the CLI's own default". */
+  function setModel(id, model) {
+    const a = agents[id];
+    if (!a) return;
+    const next = model ? String(model) : null;
+    if (next && !validModel(next)) return fail(a, 'That does not look like a model name.');
+    if (next === a.modelPref) return;
+    if (a.busy) return fail(a, 'Stop the current task before changing the model.');
+    a.modelPref = next;
+    // Claude takes the model as a launch flag: restart quietly and resume the same conversation.
+    if (a.proc) {
+      a.proc.__quiet = true;
+      killTree(a.proc);
+      a.proc = null;
+    }
+    note(a, next ? `Model set to ${next}.` : 'Model set back to the default.');
+    pushMeta(a);
+  }
+
   function newChat(id) {
     const a = agents[id];
     if (!a) return;
@@ -889,6 +914,7 @@ export function createAgents({ cwd, specs, broadcast }) {
     send,
     stop,
     setMode,
+    setModel,
     newChat,
     approve: (id, requestId, allow) => agents[id] && decide(agents[id], String(requestId), !!allow),
     snapshot: () => Object.fromEntries(Object.values(agents).map((a) => [a.id, { meta: meta(a), events: a.events }])),

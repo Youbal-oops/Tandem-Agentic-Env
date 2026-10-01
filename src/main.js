@@ -26,6 +26,8 @@ const MODES = {
     { id: 'edit', label: 'Edit', hint: 'Can edit files in this folder, sandboxed' },
   ],
 };
+// Claude accepts these aliases; Codex model names change often, so it offers its default plus a custom name.
+const MODEL_PRESETS = { claude: ['opus', 'sonnet', 'haiku', 'fable'], codex: [] };
 const other = (id) => AGENTS.find((a) => a !== id);
 const clamp = (lo, v, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -47,7 +49,9 @@ for (const id of AGENTS) {
     name: NAMES[id],
     otherName: NAMES[other(id)],
     modes: MODES[id],
+    models: MODEL_PRESETS[id],
     handlers: {
+      model: (model) => (ui.demo ? onMeta(id, { modelPref: model || null, model: model || (id === 'claude' ? 'claude-opus-5-5' : null) }) : net.send({ t: 'model', agent: id, model })),
       send: (text) => (ui.demo ? demo.respond(id, text) : net.send({ t: 'send', agent: id, text })),
       stop: () => net.send({ t: 'stop', agent: id }),
       mode: (mode) => (ui.demo ? onMeta(id, { mode }) : net.send({ t: 'mode', agent: id, mode })),

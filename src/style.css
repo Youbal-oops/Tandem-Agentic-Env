@@ -430,6 +430,31 @@ button:disabled {
 .modes button:disabled:not(.on) {
   opacity: 0.4;
 }
+.model {
+  max-width: 150px;
+  padding: 2px 4px;
+  font: 500 10px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--soft);
+  background: rgba(8, 10, 18, 0.85);
+  border: 1px solid var(--faint);
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+}
+.model:hover:not(:disabled),
+.model:focus {
+  border-color: var(--c);
+  color: var(--c);
+}
+.model:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.model option {
+  background: #0b0d14;
+  color: var(--ink);
+}
 .a-info {
   flex: 1;
   text-align: right;

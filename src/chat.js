@@ -16,7 +16,7 @@ const TOOL_LABEL = { Bash: 'Shell', PowerShell: 'Shell', Shell: 'Shell', Read: '
 export const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 export class ChatPanel {
-  constructor(root, { id, name, otherName, modes, handlers }) {
+  constructor(root, { id, name, otherName, modes, models = [], handlers }) {
     this.root = root;
     this.id = id;
     this.name = name;
@@ -44,6 +44,11 @@ export class ChatPanel {
           <div class="modes" role="group" aria-label="Permission mode">${modes
             .map((m) => `<button data-mode="${m.id}" title="${esc(m.hint)}">${esc(m.label)}</button>`)
             .join('')}</div>
+          <select class="model" title="Model for the next messages" aria-label="Model">
+            <option value="">default model</option>
+            ${models.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+            <option value="__custom">custom name…</option>
+          </select>
           <span class="a-info"></span>
           <button class="c-new" title="Start a fresh conversation">new chat</button>
         </div>
@@ -81,6 +86,18 @@ export class ChatPanel {
         e.preventDefault();
         this.h.focus();
       }
+    });
+    this.modelSel = this.$('.model');
+    this.modelSel.addEventListener('change', () => {
+      let v = this.modelSel.value;
+      if (v === '__custom') {
+        v = (prompt(`Model name for ${name}`, this.meta.modelPref || '') || '').trim();
+        if (!v) {
+          this.refresh();
+          return;
+        }
+      }
+      this.h.model(v);
     });
     this.$('.send').addEventListener('click', () => this.submit());
     this.$('.stop').addEventListener('click', () => this.h.stop());
@@ -152,6 +169,16 @@ export class ChatPanel {
     if (m.cost) bits.push('$' + m.cost.toFixed(m.cost < 1 ? 3 : 2));
     if (m.turns) bits.push(`${m.turns} turn${m.turns > 1 ? 's' : ''}`);
     this.$('.a-info').textContent = bits.join(' · ');
+    // keep the dropdown in step with the server, adding a row for a custom name
+    const pref = m.modelPref || '';
+    if (pref && ![...this.modelSel.options].some((o) => o.value === pref)) {
+      const o = document.createElement('option');
+      o.value = pref;
+      o.textContent = pref;
+      this.modelSel.insertBefore(o, this.modelSel.lastElementChild);
+    }
+    this.modelSel.value = pref;
+    this.modelSel.disabled = !!m.busy || this.offline;
     this.root.querySelectorAll('[data-mode]').forEach((b) => {
       b.classList.toggle('on', b.dataset.mode === m.mode);
       b.disabled = !!m.busy;

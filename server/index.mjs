@@ -259,6 +259,9 @@ wss.on('connection', (ws) => {
       case 'mode':
         if (typeof m.mode === 'string') agents.setMode(m.agent, m.mode);
         break;
+      case 'model':
+        if (m.model === null || m.model === '' || typeof m.model === 'string') agents.setModel(m.agent, m.model);
+        break;
       case 'newchat':
         agents.newChat(m.agent);
         break;
