@@ -6,7 +6,7 @@ import '@fontsource/jetbrains-mono/500.css';
 import './style.css';
 import './workspace.css';
 
-import { createScene, AGENT_LOOK } from './scene.js';
+import { AGENT_LOOK } from './looks.js';
 import { ChatPanel, EDIT_TOOLS } from './chat.js';
 import { InfoPanel } from './info.js';
 import { createNet } from './net.js';
@@ -48,6 +48,12 @@ const ui = { sel: null, hidden: false, demo: false, connected: false };
 const awaiting = { claude: new Set(), codex: new Set() };
 const bootAt = Date.now();
 
+// Lite mode: text only, no 3D scene (see scene-lite.js). ?lite=0 / ?lite=1 override the saved choice.
+const liteParam = new URLSearchParams(location.search).get('lite');
+if (liteParam !== null) localStorage.setItem('tandem:lite', liteParam !== '0');
+const lite = localStorage.getItem('tandem:lite') === 'true';
+document.body.classList.toggle('lite', lite);
+const { createScene } = await (lite ? import('./scene-lite.js') : import('./scene.js'));
 const scene = createScene($('#stage'));
 let net = null;
 let demo = null;
@@ -698,6 +704,8 @@ $('#btn-export').addEventListener('click', () => {
 let eco = localStorage.getItem('tandem:eco') === 'true';
 function setEco(on) { eco = on; scene.setEco(on); $('#btn-eco').classList.toggle('on', on); localStorage.setItem('tandem:eco', on); }
 $('#btn-eco').addEventListener('click', () => setEco(!eco));
+$('#btn-lite').classList.toggle('on', lite);
+$('#btn-lite').addEventListener('click', () => { localStorage.setItem('tandem:lite', !lite); location.reload(); });
 setEco(eco);
 const SKY = ['ship', 'meteor', 'comet', 'asteroid'];
 let skyN = 0;

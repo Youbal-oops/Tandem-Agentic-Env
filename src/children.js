@@ -18,7 +18,7 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, o
     <div class="child-switch" role="group" aria-label="Conversation"><button data-view="main">My chat</button><button data-view="child" aria-pressed="true">Subagent chat</button></div>
     <div class="child-picker-row"><select class="child-picker" aria-label="Choose a child task"></select><button class="child-new">+ Task</button></div>
     <p class="child-context"></p><div class="child-views"></div>
-    <form class="child-form" hidden><h3>Give it a task</h3><p>The child gets its own conversation, attached to your main chat.</p><label>Agent<select name="provider"><option value="claude">Claude</option><option value="codex">Codex</option></select></label><label>Task<textarea name="task" required maxlength="40000" rows="6" placeholder="What should this agent work on?"></textarea></label><p>Starts read-only in the current repository. You can enable edits in the child chat.</p><button type="submit">Start child task →</button></form>`;
+    <form class="child-form" hidden><h3>Give it a task</h3><p>The child gets its own conversation, attached to your main chat.</p><label>Agent<select name="provider"><option value="claude">Claude</option><option value="codex">Codex</option></select></label><label>Task<textarea name="task" required maxlength="40000" rows="6" placeholder="What should this agent work on?"></textarea></label><p>Starts in Edit mode in the current repository. You can change the mode in the child chat.</p><button type="submit">Start child task →</button></form>`;
   document.body.append(drawer);
   const $ = (s) => drawer.querySelector(s);
   function childrenFor(id) { return [...records.values()].filter((c) => c.parentId === id); }

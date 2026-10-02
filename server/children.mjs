@@ -108,7 +108,7 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
     const id = `child-${crypto.randomBytes(8).toString('hex')}`;
     const c = { id, parentId, parentKey: parent.key, cwd: getCwd(), provider, source: 'tandem',
       title: String(title || text).replace(/\s+/g, ' ').slice(0, 100), status: 'running', updatedAt: Date.now(),
-      state: { events: [], mode: provider === 'claude' ? 'plan' : 'read', modelPref: model } };
+      state: { events: [], mode: 'edit', modelPref: model } };
     children.set(id, c); attach(c); publish(c);
     c.cli.send(provider, text); return snapshot(c);
   }

@@ -23,13 +23,16 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
   const renderPrompt = (name) => (!globalPrompt.on ? '' : globalPrompt.text.trim()
     .replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name));
+  // Chats of every repository other than the open one, keyed by its real path, so switching back (or
+  // restarting tomorrow) finds them where they were. The open repo's chats live in `entries`.
+  const repoChats = saved.repoChats && typeof saved.repoChats === 'object' && !Array.isArray(saved.repoChats) ? saved.repoChats : {};
   const notes = saved.notes && typeof saved.notes === 'object' ? saved.notes : {};
   let recent = Array.isArray(saved.recent) ? saved.recent.filter((p) => typeof p === 'string').slice(0, 12) : [];
   const remember = () => { recent = [workingDir, ...recent.filter((p) => p !== workingDir)].slice(0, 12); };
   remember();
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: workingDir, notes, recent, globalPrompt, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
+    const data = { cwd: workingDir, notes, recent, globalPrompt, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
   }
@@ -138,10 +141,19 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     fs.mkdirSync(path.join(dir, 'archives'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'archives', `${Date.now()}.json`), JSON.stringify({ cwd: workingDir, agents: snapshot() }));
     const configs = [...entries.values()].map((a) => ({ config: a.config, settings: a.cli ? a.cli.save() : { effort: a.effort } }));
+    // Keep this repo's chats (full state, same session ids) for when it is opened again.
+    repoChats[workingDir] = [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } }));
     for (const a of entries.values()) a.cli?.closeAll();
     entries.clear(); workingDir = next;
     remember();
-    for (const { config, settings } of configs) {
+    const returning = repoChats[next];
+    delete repoChats[next];
+    if (Array.isArray(returning) && returning.length) {
+      for (const row of returning) {
+        try { add(row.config, row.state); } catch (e) { console.error('Could not restore agent:', e.message); }
+      }
+    }
+    if (!entries.size) for (const { config, settings } of configs) {
       config.conversationId = crypto.randomUUID();
       if (config.provider === 'api') add(config, { events: [], effort: settings.effort });
       else add(config, { [config.provider]: { ...settings[config.provider], events: [], sessionId: null, turns: 0, cost: 0, seq: 0 } });

@@ -123,3 +123,20 @@ test('API failures finish turns and removed agents are archived', async (t) => {
   assert.equal(w.snapshot()[c.id], undefined);
   assert.equal(fs.readdirSync(path.join(root, '.tandem', 'archives')).length, 1);
 });
+test('each repository keeps its own chats when switching away, back and across a restart', async (t) => {
+  const { w, root, repo } = setup(t, async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'Done' } }] }) }));
+  const c = w.add({ name: 'Local reviewer', provider: 'api', endpoint: 'http://127.0.0.1:1234/v1/chat/completions', model: 'local-model' });
+  await w.action({ t: 'send', agent: c.id, text: 'Remember this' });
+  const next = path.join(root, 'other'); fs.mkdirSync(next);
+  w.switchRepo(next);
+  assert.equal(w.snapshot()[c.id].events.length, 0);
+  w.switchRepo(repo);
+  assert.equal(w.snapshot()[c.id].events.filter((e) => e.k === 'user').length, 1);
+  w.switchRepo(next);
+  w.closeAll();
+  const restored = createWorkspace({ root, cwd: repo, specs: {}, broadcast() {}, fetchImpl: async () => ({}) });
+  t.after(() => restored.closeAll());
+  assert.equal(restored.cwd, fs.realpathSync(next));
+  restored.switchRepo(repo);
+  assert.equal(restored.snapshot()[c.id].events.filter((e) => e.k === 'user').length, 1);
+});

@@ -1,6 +1,6 @@
 // The right-hand column: what the agents are using up, what they are doing, and the state of the project.
 
-import { CLASS_COLORS } from './scene.js';
+import { CLASS_COLORS } from './looks.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const HEX = { claude: '#ffb25a', codex: '#74e6ff' };

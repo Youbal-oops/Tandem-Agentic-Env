@@ -28,7 +28,7 @@ test('child tasks stream independently, resume, and preserve their parent after 
   assert.equal(w.snapshot().codex.events.length, 0);
   assert.equal(w.children()[0].parentId, 'codex');
   assert.ok(events.some((m) => m.t === 'child-event' && m.ev.k === 'msg'));
-  assert.equal(w.children()[0].meta.mode, 'plan');
+  assert.equal(w.children()[0].meta.mode, 'edit');
   w.childAction({ id: c.id, action: 'send', text: 'Check the fallback too' });
   await waitFor(() => w.children()[0].meta.turns === 2);
   assert.equal(w.children()[0].events.filter((e) => e.k === 'user').length, 2);

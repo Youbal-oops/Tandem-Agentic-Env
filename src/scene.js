@@ -20,38 +20,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-export const AGENT_LOOK = {
-  claude: {
-    name: 'Claude',
-    hex: '#ffb25a',
-    palette: ['#6b2a1c', '#e8663d', '#ffb25a', '#f8e6c4'],
-    rim: '#ffb25a',
-    style: 0,
-    radius: 21,
-    orbit: { a: 150, b: 138, tilt: 0.14, speed: 0.085, phase: 0.9 },
-    spin: 0.18,
-  },
-  codex: {
-    name: 'Codex',
-    hex: '#74e6ff',
-    palette: ['#05314a', '#1593b8', '#74e6ff', '#ecfdff'],
-    rim: '#74e6ff',
-    style: 1,
-    radius: 18,
-    orbit: { a: 245, b: 226, tilt: -0.11, speed: 0.052, phase: 4.1 },
-    spin: 0.12,
-  },
-};
-export const CLASS_COLORS = {
-  read: '#6ea8ff',
-  search: '#b18cff',
-  shell: '#ff8a3d',
-  edit: '#6ee7a0',
-  web: '#4de3d3',
-  mcp: '#ff7ad9',
-  agent: '#ffffff',
-  other: '#9aa3b8',
-};
+import { AGENT_LOOK, CLASS_COLORS } from './looks.js';
+export { AGENT_LOOK, CLASS_COLORS };
 const SHIELD = {
   plan: ['#74e6ff', 0.34],
   read: ['#74e6ff', 0.34],
