@@ -53,7 +53,15 @@ const liteParam = new URLSearchParams(location.search).get('lite');
 if (liteParam !== null) localStorage.setItem('tandem:lite', liteParam !== '0');
 const lite = localStorage.getItem('tandem:lite') === 'true';
 document.body.classList.toggle('lite', lite);
-const { createScene } = await (lite ? import('./scene-lite.js') : import('./scene.js'));
+const themeParam = new URLSearchParams(location.search).get('theme');
+if (themeParam === 'space' || themeParam === 'forest') localStorage.setItem('tandem:theme', themeParam);
+const theme = localStorage.getItem('tandem:theme') === 'forest' ? 'forest' : 'space';
+document.body.dataset.theme = theme;
+const { createScene } = await (lite
+  ? import('./scene-lite.js')
+  : theme === 'forest'
+    ? import('./scene-forest.js')
+    : import('./scene.js'));
 const scene = createScene($('#stage'));
 let net = null;
 let demo = null;
@@ -202,6 +210,8 @@ function status(id) {
     tps: act[id].tps,
     moons: s.tools?.running || [],
     subagents: subs,
+    // Keep each kitten's own activity; the solar theme still consumes status strings.
+    kittens: [...(s.subagents || []).map((x, i) => ({ ...x, id: x.id || `${id}-native-${i}` })), ...kids],
     tools: { total: s.tools?.total || 0, byClass: s.tools?.byClass || {} },
     plan,
     mcp: (s.mcp || []).map((x) => x.status),
@@ -417,6 +427,7 @@ const clear = (x) => {
   return x > lw + 40 && x < window.innerWidth - Math.max(rw, 0) - 40;
 };
 scene.onFrame(() => {
+  if (theme === 'forest') return;
   for (const a of AGENTS) {
     const s = scene.screen(a);
     const el = labelEls[a];
@@ -706,6 +717,11 @@ function setEco(on) { eco = on; scene.setEco(on); $('#btn-eco').classList.toggle
 $('#btn-eco').addEventListener('click', () => setEco(!eco));
 $('#btn-lite').classList.toggle('on', lite);
 $('#btn-lite').addEventListener('click', () => { localStorage.setItem('tandem:lite', !lite); location.reload(); });
+$('#btn-theme').textContent = theme === 'forest' ? 'Theme: Solar system' : 'Theme: Sunset cats';
+$('#btn-theme').addEventListener('click', () => {
+  localStorage.setItem('tandem:theme', theme === 'forest' ? 'space' : 'forest');
+  location.reload();
+});
 setEco(eco);
 const SKY = ['ship', 'meteor', 'comet', 'asteroid'];
 let skyN = 0;

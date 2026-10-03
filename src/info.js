@@ -239,7 +239,7 @@ export class InfoPanel {
     const busy = (this.ids || ['claude', 'codex']).filter((a) => this.m[a]?.busy || (this.kids[a] || []).some((k) => k.busy)).map((a) => NAME[a]);
     this.root.querySelector('#r-blurb').textContent = busy.length
       ? `${busy.join(' and ')} ${busy.length > 1 ? 'are' : 'is'} working right now.`
-      : 'Each planet shows its agent’s context, limits, tools and plan. Edits land in the star.';
+      : 'do fish live in space?.';
     const detail = sel ? this.agentDetail(sel) : (this.ids || ['claude', 'codex']).map((a) => this.agentDetail(a)).join('');
     this.body.innerHTML = this.gauges() + this.limits() + detail + `<section class="project">${this.project()}</section>`;
   }

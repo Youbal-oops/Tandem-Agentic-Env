@@ -57,6 +57,13 @@ button:disabled {
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(1, 2, 6, 0.7) 100%);
 }
+body[data-theme='forest'] #vignette {
+  background:
+    radial-gradient(ellipse at 52% 48%, rgba(255, 190, 100, 0.1), transparent 44%),
+    linear-gradient(90deg, rgba(1, 5, 4, 0.5), transparent 31% 70%, rgba(1, 5, 4, 0.45)),
+    radial-gradient(ellipse at 50% 50%, transparent 60%, rgba(1, 5, 4, 0.52) 100%);
+}
+body[data-theme='forest'] #plabels { display: none; }
 .kicker {
   margin: 20px 0 8px;
   font: 500 10px var(--mono);
