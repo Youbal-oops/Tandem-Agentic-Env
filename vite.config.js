@@ -12,5 +12,5 @@ export default defineConfig({
       '/ws': { target: 'ws://127.0.0.1:4317', ws: true },
     },
   },
-  build: { chunkSizeWarningLimit: 2000 },
+  build: { chunkSizeWarningLimit: 2000, rollupOptions: { input: { main: 'index.html', cats: 'cats.html' } } },
 });

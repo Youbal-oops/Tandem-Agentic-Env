@@ -28,7 +28,7 @@ Chats, CLI thread IDs, planet definitions and preferences save locally to the ig
 
 All coding planets share the selected repo. Isolated worktrees, automatic delegation and merging remain planned. Use separate file scopes when running agents concurrently. API chats receive pasted text and the repository path, with no automatic upload of repository files.
 
-The **Sunset Cats** theme currently shows the sunset train background with drifting clouds. The imported cat model has been removed; custom Blender characters and animations are planned. The background pauses in hidden tabs and respects reduced-motion preferences.
+The **Sunset Cats** theme currently shows the sunset train background with drifting clouds. Original, naturally proportioned Blender cat and kitten assets now live in `public/models/`, with editable sources, 25-bone rigs and seven animation clips each. Open `/cats.html` for the separate animation studio with coat switching and playback controls; integration into the carriage is still pending. See `public/models/README.md` for asset and regeneration details. The background pauses in hidden tabs and respects reduced-motion preferences.
 
 ### Local work tools
 
