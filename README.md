@@ -8,6 +8,14 @@ As of **2026-10-01**, Tandem has a first working **local cockpit** (see "Running
 
 ## Running Tandem
 
+### Windows release
+
+Tagged releases include one portable Windows executable: download `Tandem-<version>-Windows.exe` from the GitHub release and run it. No Node.js installation is needed for Tandem itself. Claude Code, Codex CLI and Git remain separate prerequisites because Tandem uses each person's locally authenticated CLI accounts.
+
+The app stores its own chats, settings and uploads in its Windows user-data directory, and opens with `Documents/Tandem Workspace` as the initial workspace. Select another repository from Workspace as usual.
+
+To create the same artifact locally, run `npm ci` followed by `npm run package:win`; the `.exe` is written under `release/`. Pushing a tag such as `v0.1.0` builds and attaches it automatically through GitHub Actions.
+
 ### Taking it to a Windows laptop
 
 Copy the updated project (or commit and push these changes before cloning), install Node.js 22.12+ and the Claude Code / Codex CLIs, and log into each CLI on that laptop. Double-click `start-tandem.cmd`; it installs dependencies if needed, builds the UI and runs the local server. Open http://127.0.0.1:4317. In PowerShell you can also use `npm.cmd ci` then `npm.cmd start`.

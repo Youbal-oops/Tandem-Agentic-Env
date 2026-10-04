@@ -21,8 +21,9 @@ import { listRepoFiles, readRepoFile, readRepoDiff } from './inspect.mjs';
 import { listFolders } from './folders.mjs';
 import { createImageStore, MAX_IMAGE_BYTES } from './images.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = path.join(ROOT, 'dist');
+const APP_ROOT = path.resolve(process.env.TANDEM_APP_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const ROOT = path.resolve(process.env.TANDEM_DATA_ROOT || APP_ROOT);
+const DIST = path.join(APP_ROOT, 'dist');
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.TANDEM_PORT || 4317);
 const UI_DEV_PORT = 5173;
@@ -69,7 +70,12 @@ const codexJs = firstExisting(roots, ['@openai', 'codex', 'bin', 'codex.js']);
 const nativeCodex = nativeBinary('codex');
 const specs = {
   claude: claudeExe ? { file: claudeExe, args: [] } : null,
-  codex: codexJs ? { file: process.execPath, args: [codexJs] } : nativeCodex ? { file: nativeCodex, args: [] } : null,
+  codex: codexJs ? {
+    file: process.execPath,
+    args: [codexJs],
+    // Electron can execute Node scripts when this child-only flag is set.
+    environment: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
+  } : nativeCodex ? { file: nativeCodex, args: [] } : null,
 };
 
 function modelChoices() {
@@ -89,7 +95,7 @@ function broadcast(msg) {
   for (const ws of clients) if (ws.readyState === 1) ws.send(data);
 }
 const delegationKeys = new Map();
-const jobScript = path.join(ROOT, 'scripts', 'tandem-job.mjs');
+const jobScript = path.join(process.env.TANDEM_JOB_SCRIPT_ROOT || APP_ROOT, 'scripts', 'tandem-job.mjs');
 const agents = createWorkspace({ root: ROOT, cwd: CWD, specs, broadcast, getAgentContext(config) {
   const key = crypto.randomBytes(24).toString('hex');
   delegationKeys.set(config.id, { key, conversationId: config.conversationId });

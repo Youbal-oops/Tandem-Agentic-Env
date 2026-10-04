@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "description": "Local cockpit for Claude Code and Codex CLI working in tandem.",
+  "main": "desktop/main.cjs",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "dev": "concurrently -k -n api,ui -c yellow,cyan \"node server/index.mjs\" \"vite\"",
     "build": "vite build",
     "start": "vite build && node server/index.mjs",
-    "server": "node server/index.mjs"
+    "server": "node server/index.mjs",
+    "desktop": "npm run build && electron .",
+    "package:win": "npm run build && electron-builder --win portable --publish never"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -25,6 +28,41 @@
   },
   "devDependencies": {
     "concurrently": "^10.0.5",
+    "electron": "^39.2.6",
+    "electron-builder": "^26.0.12",
     "vite": "^8.3.2"
+  },
+  "build": {
+    "appId": "com.tandem.local",
+    "productName": "Tandem",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "server/**",
+      "scripts/**",
+      "desktop/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "app/dist"
+      },
+      {
+        "from": "scripts",
+        "to": "app/scripts"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "Tandem-${version}-Windows.exe"
+    }
   }
 }

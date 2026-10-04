@@ -402,7 +402,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
     if (a.modelPref) args.push('--model', a.modelPref);
     if (a.effort) args.push('--effort', a.effort);
     if (a.sessionId) args.push('--resume', a.sessionId);
-    const proc = spawn(specs.claude.file, args, { cwd, env: { ...cleanEnv(), ...environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const proc = spawn(specs.claude.file, args, { cwd, env: { ...cleanEnv(), ...environment, ...specs.claude.environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     a.proc = proc;
     a.lastTotal = 0;
     a.stderr = '';
@@ -697,7 +697,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
     if (a.sessionId) args.push('resume', a.sessionId);
     for (const image of images) args.push('--image', image.path);
     args.push('-');
-    const proc = spawn(specs.codex.file, args, { cwd, env: { ...cleanEnv(), ...environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const proc = spawn(specs.codex.file, args, { cwd, env: { ...cleanEnv(), ...environment, ...specs.codex.environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     a.proc = proc;
     a.stderr = '';
     startCodexPolling(a);
