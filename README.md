@@ -22,7 +22,7 @@ When you start a subagent task, choose the agent and its model before it starts.
 
 ### Windows release
 
-Tagged releases include one portable Windows executable: download `Tandem-<version>-Windows.exe` from the GitHub release and run it. No Node.js installation is needed for Tandem itself. Claude Code, Codex CLI and Git remain separate prerequisites because Tandem uses each person's locally authenticated CLI accounts.
+Tagged releases include a normal Windows installer: download `Tandem-Setup-<version>.exe` from the GitHub release, open it, and follow the install steps. There is also a `Portable` download if you just want to run Tandem without installing it. No Node.js installation is needed for Tandem itself. Claude Code, Codex CLI and Git remain separate prerequisites because Tandem uses each person's locally authenticated CLI accounts.
 
 The app stores its own chats, settings and uploads in its Windows user-data directory, and opens with `Documents/Tandem Workspace` as the initial workspace. Select another repository from Workspace as usual.
 
