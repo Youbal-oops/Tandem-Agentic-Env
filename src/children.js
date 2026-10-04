@@ -68,7 +68,7 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, o
     if (!v) {
       const root = document.createElement('section'); root.hidden = true; $('.child-views').append(root);
       const panel = new ChatPanel(root, { id: c.id, name: name(c.provider), provider: c.provider, modes: MODES[c.provider], models: c.provider === 'claude' ? ['opus', 'sonnet', 'haiku'] : [], handlers: {
-        send: (text) => command(c, 'send', { text }), stop: () => command(c, 'stop'),
+        send: (text, attachments) => command(c, 'send', { text, attachments }), stop: () => command(c, 'stop'),
         mode: (mode) => command(c, 'mode', { mode }), model: (model) => command(c, 'model', { model }), effort: (effort) => command(c, 'effort', { effort }),
         approve: (requestId, allow) => command(c, 'approve', { requestId, allow }), newChat() {}, focus() {},
         forward: (text) => { const parent = panels[c.parentId]; if (!parent) return; parent.setDraft(`Follow-up from ${name(c.provider)} — ${c.title}:\n\n${text}`); close(); selectParent(c.parentId); },

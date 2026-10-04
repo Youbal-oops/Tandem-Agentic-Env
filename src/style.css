@@ -1022,6 +1022,16 @@ body[data-theme='forest'] #plabels { display: none; }
   border-top-color: color-mix(in srgb, var(--c) 70%, transparent);
   box-shadow: 0 -12px 30px -22px var(--c);
 }
+.attach { flex: none; padding: 5px; color: var(--c); font: 500 10px var(--mono); }
+.c-upload-status { flex: none; color: var(--mute); font: 11px/1.5 var(--mono); }
+.c-attachments { flex: none; display: flex; gap: 8px; flex-wrap: wrap; padding: 6px 0; }
+.c-attachments[hidden] { display: none; }
+.c-attachment { display: flex; align-items: center; gap: 5px; max-width: 180px; border: 1px solid var(--faint); border-radius: 6px; padding: 4px; }
+.c-attachment img { width: 42px; height: 42px; object-fit: cover; border-radius: 3px; }
+.c-attachment span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--mono); }
+.c-attachment button { flex: none; padding: 4px; }
+.message-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.message-images img { max-width: 160px; max-height: 160px; border-radius: 6px; object-fit: contain; }
 .c-compose .pr {
   font-size: 15px;
   line-height: 24px;

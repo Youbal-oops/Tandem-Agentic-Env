@@ -11,6 +11,7 @@ import { spawn, execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { claudeContent, imageMetadata } from './images.mjs';
 
 const MAX_EVENTS = 1500;
 const MAX_OUT = 6000;
@@ -689,12 +690,13 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
   const idlePoll = setInterval(() => agents.codex && !agents.codex.busy && pollCodex(agents.codex), 30000);
   idlePoll.unref();
 
-  function sendCodex(a, text) {
+  function sendCodex(a, text, images = []) {
     const args = [...specs.codex.args, 'exec', '--json', '--skip-git-repo-check', '-C', cwd, '-s', CODEX_SANDBOX[a.mode]];
     if (a.modelPref) args.push('-m', a.modelPref);
     if (a.effort) args.push('-c', `model_reasoning_effort="${a.effort}"`);
-    if (a.sessionId) args.push('resume', a.sessionId, '-');
-    else args.push('-');
+    if (a.sessionId) args.push('resume', a.sessionId);
+    for (const image of images) args.push('--image', image.path);
+    args.push('-');
     const proc = spawn(specs.codex.file, args, { cwd, env: { ...cleanEnv(), ...environment }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     a.proc = proc;
     a.stderr = '';
@@ -836,13 +838,14 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
 
   // ------------------------------------------------------------------ public
 
-  function send(id, text) {
+  function send(id, text, images = []) {
     const a = agents[id];
     if (!a || !specs[id]) return;
     if (a.busy) return fail(a, 'Still working. Stop the current task first.');
     text = String(text || '').trim();
-    if (!text) return;
-    put(a, { k: 'user', id: `${a.id}:u${++a.seq}`, text, at: Date.now() });
+    if (!text && !images.length) return;
+    if (!text) text = 'Describe these images.';
+    put(a, { k: 'user', id: `${a.id}:u${++a.seq}`, text, attachments: imageMetadata(images), at: Date.now() });
     // The global prompt goes first, once per session and again whenever its rendered text changes.
     const global = String(getInstructions(id) || '').trim();
     if (global && global !== a.promptSent) { text = `[Standing instructions from the user, apply for this whole session]\n${global}\n\n[Task]\n${text}`; a.promptSent = global; }
@@ -853,9 +856,9 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
     try {
       if (id === 'claude') {
         const proc = ensureClaude(a);
-        proc.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n');
+        proc.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content: claudeContent(text, images) } }) + '\n');
       } else {
-        sendCodex(a, text);
+        sendCodex(a, text, images);
       }
     } catch (e) {
       a.busy = false;

@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { createAgents, validModel } from './agents.mjs';
+import { createImageStore } from './images.mjs';
 
 const ACTIVE = new Set(['queued', 'running']);
 const safeId = (s) => typeof s === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(s);
@@ -117,12 +118,14 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
     if (!c || !visible(c)) throw new Error('This child chat belongs to a different conversation.');
     if (c.externalBusy) throw new Error('Claude is still running this plugin task. Wait for it to finish before replying here.');
     if (c.source === 'plugin' && !c.state?.sessionId) throw new Error('This review has no saved thread. Start a new child task to follow up.');
+    const attachments = m.action === 'send' ? createImageStore(root).resolve(m.attachments) : [];
+    if (m.action === 'send' && !String(m.text || '').trim() && attachments.length) m = { ...m, text: 'Describe these images.' };
     if (m.action === 'send' && (typeof m.text !== 'string' || !m.text.trim() || m.text.length > 40000)) throw new Error('Enter a message of up to 40,000 characters.');
     attach(c);
     const method = { send: 'send', stop: 'stop', mode: 'setMode', model: 'setModel', effort: 'setEffort', approve: 'approve' }[m.action];
     if (!method) throw new Error('Unknown child chat action.');
     if (m.action === 'stop') c.status = 'interrupted';
-    c.cli[method](c.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.allow === true);
+    c.cli[method](c.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.action === 'send' ? attachments : m.allow === true);
     publish(c); return snapshot(c);
   }
   function poll() {

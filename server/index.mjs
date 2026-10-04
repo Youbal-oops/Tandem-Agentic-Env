@@ -19,6 +19,7 @@ import { createWorkspace } from './workspace.mjs';
 import { createRepoService } from './repos.mjs';
 import { listRepoFiles, readRepoFile, readRepoDiff } from './inspect.mjs';
 import { listFolders } from './folders.mjs';
+import { createImageStore, MAX_IMAGE_BYTES } from './images.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
@@ -28,6 +29,7 @@ const UI_DEV_PORT = 5173;
 let CWD = path.resolve(process.env.TANDEM_CWD || ROOT);
 const TOKEN = crypto.randomBytes(24).toString('hex');
 const MAX_TEXT = 40000;
+const images = createImageStore(ROOT);
 
 const hosts = new Set([PORT, UI_DEV_PORT].flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`]));
 const origins = new Set([...hosts].map((h) => `http://${h}`));
@@ -206,6 +208,28 @@ const server = http.createServer((req, res) => {
     return;
   }
   const url = new URL(req.url, 'http://localhost');
+
+  if (url.pathname === '/api/images' && req.method === 'POST') {
+    if (!safeEqual(String(req.headers.authorization || '').replace(/^Bearer /, ''), TOKEN)) { res.writeHead(403).end('Forbidden'); return; }
+    const chunks = []; let size = 0;
+    req.on('data', (chunk) => { size += chunk.length; if (size <= MAX_IMAGE_BYTES) chunks.push(chunk); });
+    req.on('end', () => {
+      try {
+        if (size > MAX_IMAGE_BYTES) { res.writeHead(413).end(JSON.stringify({ error: 'Images must be at most 10 MB each.' })); return; }
+        const image = images.save(Buffer.concat(chunks));
+        res.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify(image));
+      } catch (e) { res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: e.message })); }
+    });
+    return;
+  }
+  if (url.pathname.startsWith('/api/images/') && ['GET', 'HEAD'].includes(req.method)) {
+    try {
+      const image = images.read(url.pathname.slice('/api/images/'.length));
+      res.writeHead(200, { 'Content-Type': image.mime, 'Content-Length': image.data.length });
+      res.end(req.method === 'HEAD' ? undefined : image.data);
+    } catch { res.writeHead(404).end('Image not found'); }
+    return;
+  }
 
   if (url.pathname === '/api/jobs') {
     if (req.method !== 'POST') { res.writeHead(405).end(); return; }

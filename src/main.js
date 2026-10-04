@@ -89,7 +89,7 @@ function createPanel(id, provider = id) {
     handlers: {
       effort: (effort) => (ui.demo ? onMeta(id, { effort }) : net.send({ t: 'effort', agent: id, effort })),
       model: (model) => (ui.demo ? onMeta(id, { modelPref: model || null, model: model || (id === 'claude' ? 'claude-opus-5-5' : null) }) : net.send({ t: 'model', agent: id, model })),
-      send: (text) => (ui.demo ? demo.respond(id, text) : net.send({ t: 'send', agent: id, text })),
+      send: (text, attachments) => (ui.demo ? demo.respond(id, text) : net.send({ t: 'send', agent: id, text, attachments })),
       stop: () => net.send({ t: 'stop', agent: id }),
       mode: (mode) => (ui.demo ? onMeta(id, { mode }) : net.send({ t: 'mode', agent: id, mode })),
       newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : net.send({ t: 'newchat', agent: id })),
@@ -444,7 +444,7 @@ function setGit(git) {
   if (!git) return;
   if (repoPath && git.cwd && repoPath !== git.cwd) {
     localTools?.repoChanged();
-    for (const id of AGENTS) { panels[id].ta.value = ''; panels[id].autosize(); sessionStorage.removeItem(`tandem:draft:${id}`); }
+    for (const id of AGENTS) { panels[id].ta.value = ''; panels[id].clearAttachments(); panels[id].autosize(); sessionStorage.removeItem(`tandem:draft:${id}`); }
   }
   $('#sl-repo').textContent = git.repo || 'codebase';
   $('#sl-git').textContent = git.branch ? `${git.branch} · ${git.changed ? git.changed + ' changed' : 'clean'}` : 'the codebase';
@@ -702,7 +702,7 @@ $('#btn-export').addEventListener('click', () => {
   for (const id of AGENTS) {
     lines.push(`## ${NAMES[id]}`, `Model: ${panels[id].meta.modelPref || panels[id].meta.model || 'CLI default'} · Effort: ${panels[id].meta.effort || 'default'}`, ``);
     for (const en of panels[id].entries.values()) {
-      if (en.el.classList.contains('user')) lines.push(`### You`, en.el.querySelector('.bub').textContent, ``);
+      if (en.el.classList.contains('user')) lines.push(`### You`, en.el.querySelector('.bub').textContent, ...(en.attachments || []).map(a => `Attached image: ${a.name || 'Image'} (.tandem/uploads/${a.id})`), ``);
       else if (en.el.classList.contains('bot')) lines.push(`### ${NAMES[id]}`, en.text || '', ``);
       else if (en.data) lines.push(`- ${en.data.name}: ${en.data.summary || ''} (${en.data.status})`);
       else if (en.el.classList.contains('err')) lines.push(`Error: ${en.el.textContent}`, ``);

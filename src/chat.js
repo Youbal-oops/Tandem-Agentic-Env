@@ -29,6 +29,12 @@ export class ChatPanel {
     this.offline = false;
     this.workspaceBusy = false;
     this.pending = new Set();
+    this.attachments = [];
+    this.uploading = false;
+    this.attachmentVersion = 0;
+    try { this.attachments = JSON.parse(sessionStorage.getItem(`tandem:images:${id}`) || '[]'); } catch {}
+    if (!Array.isArray(this.attachments)) this.attachments = [];
+    this.attachments = this.attachments.filter(a => /^[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(a?.id)).slice(0, 4);
 
     root.classList.add('agent');
     root.dataset.agent = id;
@@ -70,7 +76,11 @@ export class ChatPanel {
           </div>
           <div class="c-working" hidden><i></i><i></i><i></i><span>working</span></div>
         </div>
+        <div class="c-attachments" aria-label="Attached images" hidden></div>
+        <div class="c-upload-status" role="status" aria-live="polite"></div>
         <div class="c-compose">
+          <button class="attach" type="button" title="Attach images (or paste or drop them here)" aria-label="Attach images">+ image</button>
+          <input class="image-picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
           <span class="pr">›</span>
           <textarea rows="1" placeholder="Message ${esc(name)}…" spellcheck="true"></textarea>
           <button class="send" title="Send (Enter)" aria-label="Send">send ⏎</button>
@@ -110,6 +120,16 @@ export class ChatPanel {
       this.h.model(v);
     });
     this.$('.send').addEventListener('click', () => this.submit());
+    this.$('.attach').addEventListener('click', () => this.$('.image-picker').click());
+    this.$('.image-picker').addEventListener('change', () => {
+      this.addImages([...this.$('.image-picker').files]); this.$('.image-picker').value = '';
+    });
+    this.ta.addEventListener('paste', (e) => {
+      const images = [...(e.clipboardData?.items || [])].filter(i => i.kind === 'file' && i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean);
+      if (images.length) { e.preventDefault(); this.addImages(images); }
+    });
+    this.$('.c-compose').addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); });
+    this.$('.c-compose').addEventListener('drop', (e) => { e.preventDefault(); this.addImages([...e.dataTransfer.files]); });
     this.$('.stop').addEventListener('click', () => this.h.stop());
     this.$('.c-new').addEventListener('click', () => {
       if (this.entries.size === 0 || confirm(`Start a new conversation with ${name}? The current one stays in the CLI's history but leaves this view.`)) this.h.newChat();
@@ -125,6 +145,7 @@ export class ChatPanel {
     this.ta.value = sessionStorage.getItem(`tandem:draft:${id}`) || '';
     this.empty.querySelectorAll('.chips button').forEach((b) => b.addEventListener('click', () => ((this.ta.value = b.textContent), this.submit())));
     this.feed.addEventListener('click', (e) => this.onFeedClick(e));
+    this.renderAttachments();
     this.refresh();
   }
 
@@ -135,11 +156,57 @@ export class ChatPanel {
   }
   submit() {
     const text = this.ta.value.trim();
-    if (!text || this.meta.busy || this.workspaceBusy || this.offline || !this.meta.available) return;
-    this.h.send(text);
+    if ((!text && !this.attachments.length) || this.uploading || this.meta.busy || this.workspaceBusy || this.offline || !this.meta.available) return;
+    if (text.length > 40000) { this.$('.c-upload-status').textContent = 'Shorten your message to 40,000 characters.'; return; }
+    this.h.send(text, this.attachments);
+    this.clearAttachments();
     this.ta.value = '';
     sessionStorage.removeItem(`tandem:draft:${this.id}`);
     this.autosize();
+  }
+  clearAttachments() {
+    this.attachmentVersion++;
+    this.attachments = [];
+    sessionStorage.removeItem(`tandem:images:${this.id}`);
+    this.$('.c-upload-status').textContent = '';
+    this.renderAttachments();
+  }
+  renderAttachments() {
+    const list = this.$('.c-attachments'); list.replaceChildren(); list.hidden = !this.attachments.length;
+    for (const a of this.attachments) {
+      const item = document.createElement('div'); item.className = 'c-attachment';
+      const img = document.createElement('img'); img.src = `/api/images/${a.id}`; img.alt = a.name || 'Attached image';
+      const name = document.createElement('span'); name.textContent = a.name || 'Image'; name.title = name.textContent;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${a.name || 'image'}`);
+      remove.addEventListener('click', () => { this.attachments = this.attachments.filter(i => i !== a); this.renderAttachments(); });
+      item.append(img, name, remove); list.append(item);
+    }
+    try { sessionStorage.setItem(`tandem:images:${this.id}`, JSON.stringify(this.attachments)); } catch {}
+  }
+  async addImages(files) {
+    if (this.uploading || this.offline || this.workspaceBusy || !this.meta.available || !files.length) return;
+    const status = this.$('.c-upload-status');
+    if (files.length + this.attachments.length > 4) { status.textContent = 'Attach up to four images per message.'; return; }
+    if (files.some(f => !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(f.type) || !f.size || f.size > 10 * 1024 * 1024)) {
+      status.textContent = 'Choose PNG, JPEG, GIF or WebP images, up to 10 MB each.'; return;
+    }
+    const version = this.attachmentVersion;
+    this.uploading = true; status.textContent = 'Uploading images…'; this.refresh();
+    try {
+      const sessionResponse = await fetch('/api/session', { cache: 'no-store' });
+      if (!sessionResponse.ok) throw new Error('Cannot connect to the Tandem server.');
+      const session = await sessionResponse.json();
+      for (const file of files) {
+        if (version !== this.attachmentVersion) return;
+        const response = await fetch('/api/images', { method: 'POST', headers: { Authorization: `Bearer ${session.token}`, 'Content-Type': file.type }, body: file });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Image upload failed.');
+        if (version !== this.attachmentVersion) return;
+        this.attachments.push({ ...data, name: file.name }); this.renderAttachments();
+      }
+      status.textContent = '';
+    } catch (e) { if (version === this.attachmentVersion) status.textContent = e.message || 'Image upload failed. Try again.'; }
+    finally { this.uploading = false; this.refresh(); }
   }
   setDraft(text) {
     this.ta.value = text;
@@ -215,7 +282,8 @@ export class ChatPanel {
     this.ta.disabled = this.offline || !m.available;
     this.ta.placeholder = this.offline ? 'Server offline. Run npm run dev' : !m.available ? 'Connection unavailable: check CLI or API key' : m.busy ? 'Working… you can type the next message' : `Message ${this.name}…`;
     this.feed.appendChild(this.working);
-    this.$('.send').disabled = this.offline || !m.available || !!m.busy || this.workspaceBusy;
+    this.$('.send').disabled = this.offline || !m.available || !!m.busy || this.workspaceBusy || this.uploading;
+    this.$('.attach').disabled = this.offline || !m.available || this.workspaceBusy || this.uploading;
     if (this.workspaceBusy) this.ta.placeholder = 'Cloning repository… your draft is kept until it opens';
     this.$('.c-new').disabled = !!m.busy;
     this.filterFeed();
@@ -296,7 +364,17 @@ export class ChatPanel {
     el.className = 'm user';
     el.innerHTML = `<span class="pr">›</span><div class="bub"></div>`;
     el.querySelector('.bub').textContent = ev.text;
-    this.entries.set(ev.id, { el });
+    if (ev.attachments?.length) {
+      const images = document.createElement('div'); images.className = 'message-images';
+      for (const a of ev.attachments) {
+        if (!/^[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(a.id)) continue;
+        const link = document.createElement('a'); link.href = `/api/images/${a.id}`; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        const img = document.createElement('img'); img.src = link.href; img.alt = a.name || 'Attached image'; img.loading = 'lazy';
+        link.append(img); images.append(link);
+      }
+      el.querySelector('.bub').append(images);
+    }
+    this.entries.set(ev.id, { el, attachments: ev.attachments || [] });
     this.add(el);
   }
 

@@ -3,12 +3,14 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createAgents, validModel } from './agents.mjs';
 import { createChildren } from './children.mjs';
+import { createImageStore, imageMetadata, apiContent } from './images.mjs';
 
 const MAX_PROMPT = 8000;
 
 // One CLI adapter per planet, so two Codex/Claude planets never share a thread.
 export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch, getAgentContext = () => ({}), pluginRoots, childPollMs }) {
   const dir = path.join(root, '.tandem');
+  const images = createImageStore(root);
   const file = path.join(dir, 'workspace.json');
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
@@ -88,16 +90,16 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   function snapshot() {
     return Object.fromEntries([...entries].map(([id, a]) => [id, a.cli ? a.cli.snapshot()[a.config.provider] : { events: a.events, meta: apiMeta(a) }]));
   }
-  async function sendApi(a, text) {
+  async function sendApi(a, text, attachments = []) {
     if (a.controller) throw new Error('Stop the current turn first.');
     if (!apiMeta(a).available) throw new Error(`Set ${a.config.keyEnv} in the server environment and restart Tandem.`);
     const controller = a.controller = new AbortController();
     const deadline = setTimeout(() => controller.abort(), 180000);
     const id = crypto.randomUUID();
-    put(a, { k: 'user', id: `${id}:u`, text, at: Date.now() });
+    put(a, { k: 'user', id: `${id}:u`, text, attachments: imageMetadata(attachments), at: Date.now() });
     emit({ t: 'meta', agent: a.config.id, meta: apiMeta(a) });
     try {
-      const messages = [{ role: 'system', content: `You are a chat assistant in Tandem. Working repository: ${workingDir}. You have no file or shell tools. Ask the user to provide code when needed. Never claim to have read or changed local files.${renderPrompt(a.config.name) ? `\n\nStanding instructions from the user:\n${renderPrompt(a.config.name)}` : ''}` }, ...a.events.filter((e) => e.k === 'user' || (e.k === 'msg' && e.done)).map((e) => ({ role: e.k === 'user' ? 'user' : 'assistant', content: e.text }))];
+      const messages = [{ role: 'system', content: `You are a chat assistant in Tandem. Working repository: ${workingDir}. You have no file or shell tools. Ask the user to provide code when needed. Never claim to have read or changed local files.${renderPrompt(a.config.name) ? `\n\nStanding instructions from the user:\n${renderPrompt(a.config.name)}` : ''}` }, ...a.events.filter((e) => e.k === 'user' || (e.k === 'msg' && e.done)).map((e) => ({ role: e.k === 'user' ? 'user' : 'assistant', content: e.k === 'user' ? apiContent(e.text, images.resolve(e.attachments)) : e.text }))];
       const res = await fetchImpl(a.config.endpoint, { method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { 'Content-Type': 'application/json', ...(a.config.keyEnv ? { Authorization: `Bearer ${process.env[a.config.keyEnv]}` } : {}) },
         body: JSON.stringify({ model: a.config.model, messages, ...(a.effort ? { reasoning_effort: a.effort } : {}) }) });
@@ -205,6 +207,8 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (repoChanging && m.t === 'send') throw new Error('Wait for the repository clone to finish before sending a task.');
       const a = entries.get(m.agent);
       if (!a) throw new Error('Unknown agent.');
+      const attachments = m.t === 'send' ? images.resolve(m.attachments) : [];
+      if (m.t === 'send' && !String(m.text || '').trim() && attachments.length) m = { ...m, text: 'Describe these images.' };
       if (m.t === 'newchat') {
         if (children.snapshot().some((c) => c.parentId === m.agent && c.meta.busy)) throw new Error('Finish or stop this conversation’s child tasks before starting a new chat.');
         a.config.conversationId = crypto.randomUUID();
@@ -218,9 +222,9 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       }
       if (a.cli) {
         const method = { send: 'send', stop: 'stop', mode: 'setMode', model: 'setModel', effort: 'setEffort', newchat: 'newChat', approve: 'approve' }[m.t];
-        if (method) a.cli[method](a.config.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.allow === true);
+        if (method) a.cli[method](a.config.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.t === 'send' ? attachments : m.allow === true);
       } else {
-        if (m.t === 'send') return sendApi(a, m.text);
+        if (m.t === 'send') return sendApi(a, m.text, attachments);
         if (m.t === 'stop' || m.t === 'newchat') {
           a.controller?.abort(); a.controller = null;
           if (m.t === 'newchat') a.events = [];
