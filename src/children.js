@@ -8,7 +8,7 @@ const MODES = {
 const name = (provider) => provider === 'claude' ? 'Claude' : 'Codex';
 const color = (provider) => provider === 'claude' ? 'var(--claude)' : 'var(--codex)';
 
-export function createChildChats({ panels, send, selectParent, notice, isDemo, models = () => ({}), onChange = () => {} }) {
+export function createChildChats({ panels, send, selectParent, notice, isDemo, models = () => ({}), defaults = () => ({}), onChange = () => {} }) {
   const records = new Map(), views = new Map(), parents = new Map(), seen = new Map();
   let active = null, parentId = null, offline = false;
   const drawer = document.createElement('aside');
@@ -34,6 +34,8 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     const defaultOption = document.createElement('option'); defaultOption.value = ''; defaultOption.textContent = 'CLI default'; select.append(defaultOption);
     for (const model of available) { const option = document.createElement('option'); option.value = model; option.textContent = model; select.append(option); }
     const custom = document.createElement('option'); custom.value = '__custom__'; custom.textContent = 'Custom model…'; select.append(custom);
+    const last = defaults()[provider];
+    if (last && [...select.options].some((option) => option.value === last)) select.value = last;
   }
   function childrenFor(id) { return [...records.values()].filter((c) => c.parentId === id); }
   function activity(id) { return childrenFor(id).map((c) => ({ id: c.id, provider: c.provider, title: c.title, busy: !!c.meta.busy, awaiting: !!c.meta.awaiting, status: c.meta.status, thinking: !!c.meta.stats?.thinking, moons: c.meta.stats?.tools?.running || [] })); }
@@ -179,6 +181,7 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     mountParents, close, replace, activity,
     parentSelected(id) { if (!drawer.hidden && id !== parentId) close(); },
     setOffline(value) { offline = value; for (const c of records.values()) if (views.has(c.id)) view(c); },
+    setDefaults() { if (!$('.child-form').hidden) renderModelOptions($('.child-form [name="provider"]').value); },
     receive(m) {
       if (m.t === 'children') { replace(m.children); return true; }
       if (m.t === 'child') { upsert(m.child); return true; }

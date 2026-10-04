@@ -34,6 +34,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     style: ['plain', 'examples', 'diagrams', 'questions'].includes(saved.learnerProfile?.style) ? saved.learnerProfile.style : 'plain',
     checkpoints: ['light', 'normal', 'frequent'].includes(saved.learnerProfile?.checkpoints) ? saved.learnerProfile.checkpoints : 'normal',
   };
+  const childModelDefaults = saved.childModelDefaults && typeof saved.childModelDefaults === 'object' ? { ...saved.childModelDefaults } : {};
   // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
   const renderPrompt = (name) => {
     const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name);
@@ -49,7 +50,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   remember();
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: workingDir, notes, recent, globalPrompt, learnerProfile, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
+    const data = { cwd: workingDir, notes, recent, globalPrompt, learnerProfile, childModelDefaults, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
   }
@@ -194,9 +195,13 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     pollChildren: () => children.poll(),
     childAction(m) {
       if (repoChanging) throw new Error('Wait for the repository clone to finish.');
-      return m.t === 'child-create' ? children.create(m.agent, m) : children.action(m);
+      if (m.t !== 'child-create') return children.action(m);
+      const provider = m.provider;
+      if (m.model) childModelDefaults[provider] = m.model;
+      else if (childModelDefaults[provider]) m = { ...m, model: childModelDefaults[provider] };
+      const child = children.create(m.agent, m); save(); return child;
     },
-    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt, learnerProfile }),
+    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt, learnerProfile, childModelDefaults }),
     savePrompt(text, on) {
       if (typeof text !== 'string' || text.length > MAX_PROMPT) throw new Error(`The prompt can contain up to ${MAX_PROMPT.toLocaleString()} characters.`);
       globalPrompt = { text, on: on !== false }; save();

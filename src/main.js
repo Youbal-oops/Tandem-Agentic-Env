@@ -32,6 +32,7 @@ const MODES = {
 };
 // Claude accepts these aliases; Codex model names change often, so it offers its default plus a custom name.
 const MODEL_PRESETS = { claude: ['opus', 'sonnet', 'haiku'], codex: [] };
+const CHILD_MODEL_DEFAULTS = {};
 const configs = {};
 let repoPath = '';
 let cloneParent = '';
@@ -101,7 +102,7 @@ function createPanel(id, provider = id) {
 }
 
 for (const id of AGENTS) createPanel(id);
-childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, models: () => MODEL_PRESETS, onChange: childActivity });
+childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, models: () => MODEL_PRESETS, defaults: () => CHILD_MODEL_DEFAULTS, onChange: childActivity });
 
 function reconcile(next) {
   for (const id of [...AGENTS]) if (!next.some((a) => a.id === id)) {
@@ -473,6 +474,7 @@ net = createNet({
       if (!localStorage.getItem('tandem:setup-complete')) setTimeout(() => { if (!document.querySelector('dialog[open]')) $('#setup-dialog').showModal(); }, 250);
       setGit(data.git);
       if (data.local) localTools?.receive({ t: 'localstate', ...data.local });
+      if (data.local?.childModelDefaults) { Object.assign(CHILD_MODEL_DEFAULTS, data.local.childModelDefaults); childChats?.setDefaults(); }
       cloneParent = data.cloneParent || '';
       if (data.clone) setCloneStatus(data.clone);
       reconcile(data.agents);
@@ -502,6 +504,15 @@ net = createNet({
     if (localTools?.receive(msg)) return;
     if (msg.t === 'notice') { showNotice(msg.text); return; }
     if (msg.t === 'githubrepos') { receiveGithubRepos(msg); return; }
+    if (msg.t === 'apimodels') {
+      const status = $('#api-model-status');
+      if (msg.error) { status.textContent = msg.error; return; }
+      const list = $('#api-model-options'); list.replaceChildren();
+      for (const model of msg.models || []) { const option = document.createElement('option'); option.value = model; list.append(option); }
+      status.textContent = `${msg.models.length} model${msg.models.length === 1 ? '' : 's'} found`;
+      if (!$('#agent-form [name="model"]').value && msg.models[0]) $('#agent-form [name="model"]').value = msg.models[0];
+      return;
+    }
     if (msg.t === 'clone') { setCloneStatus(msg); return; }
     if (msg.t === 'snapshot') {
       if (msg.configs) reconcile(msg.configs);
@@ -711,6 +722,11 @@ $('#agent-provider').addEventListener('change', () => {
   $('#api-fields').hidden = !api;
   $('#agent-form [name="model"]').required = api;
   $('#agent-form [name="endpoint"]').required = api;
+});
+$('#detect-api-models').addEventListener('click', () => {
+  if (!net.open) return showNotice('Connect to the server first.');
+  $('#api-model-status').textContent = 'Checking…';
+  net.send({ t: 'apimodels', endpoint: $('#agent-form [name="endpoint"]').value.trim(), keyEnv: $('#agent-form [name="keyEnv"]').value.trim() });
 });
 $('#agent-form').addEventListener('submit', (e) => {
   e.preventDefault();

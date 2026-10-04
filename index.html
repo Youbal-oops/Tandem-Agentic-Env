@@ -95,10 +95,12 @@
       <form id="agent-form">
         <h3>Add a planet</h3>
         <div class="form-row"><label>Name<input name="name" required maxlength="32" placeholder="Reviewer" /></label><label>Connection<select name="provider" id="agent-provider"><option value="codex">Codex CLI</option><option value="claude">Claude Code CLI</option><option value="api">Compatible API chat</option></select></label></div>
-        <label>Model<input name="model" placeholder="Default for CLI; required for API" /></label>
+        <label>Model<input name="model" list="api-model-options" placeholder="Default for CLI; required for API" /></label>
+        <datalist id="api-model-options"></datalist>
         <div id="api-fields" hidden>
           <label>Chat Completions endpoint<input name="endpoint" placeholder="https://api.openai.com/v1/chat/completions" /></label>
           <label>API key environment variable<input name="keyEnv" placeholder="OPENAI_API_KEY (leave blank for local models)" /></label>
+          <div class="form-row"><button id="detect-api-models" type="button">Detect models</button><span id="api-model-status" role="status"></span></div>
           <p>API chat can review pasted code and replies. It has no local file tools. Hosted APIs use separate billing. Keys stay in the server environment.</p>
         </div>
         <button type="submit">Add planet</button>
