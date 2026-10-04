@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import { createAgents, validModel } from './agents.mjs';
 import { createChildren } from './children.mjs';
 import { createImageStore, imageMetadata, apiContent } from './images.mjs';
+import { createWorktrees } from './worktrees.mjs';
+import { ensureProjectContext } from './project-context.mjs';
 
 const MAX_PROMPT = 8000;
 
@@ -11,10 +13,12 @@ const MAX_PROMPT = 8000;
 export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch, getAgentContext = () => ({}), pluginRoots, childPollMs }) {
   const dir = path.join(root, '.tandem');
   const images = createImageStore(root);
+  const worktrees = createWorktrees({ root });
   const file = path.join(dir, 'workspace.json');
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
   let workingDir = fs.existsSync(saved.cwd || '') ? saved.cwd : cwd;
+  let projectContext = ensureProjectContext(workingDir);
   const entries = new Map();
   let children;
   let timer;
@@ -34,7 +38,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   const renderPrompt = (name) => {
     const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name);
     const profile = [learnerProfile.familiar && `Familiar stack: ${learnerProfile.familiar}`, learnerProfile.learning && `Learning goals: ${learnerProfile.learning}`, learnerProfile.observed.length && `Observed in their work: ${learnerProfile.observed.join(', ')}`, `Experience: ${learnerProfile.level}; teaching preference: ${learnerProfile.style}; checkpoint frequency: ${learnerProfile.checkpoints}.`, 'For material design choices, show viable options with complexity and tradeoffs. Recommend, but let the user choose before implementing.'].filter(Boolean).join('\n');
-    return [prompt, profile && `[Learner profile]\n${profile}`].filter(Boolean).join('\n\n');
+    return [prompt, projectContext.text && `[Shared project context: ${projectContext.file}]\n${projectContext.text}`, profile && `[Learner profile]\n${profile}`].filter(Boolean).join('\n\n');
   };
   // Chats of every repository other than the open one, keyed by its real path, so switching back (or
   // restarting tomorrow) finds them where they were. The open repo's chats live in `entries`.
@@ -87,10 +91,11 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       config.keyEnv = String(input.keyEnv || '');
       if (config.keyEnv && !/^[A-Z][A-Z0-9_]{0,79}$/.test(config.keyEnv)) throw new Error('Enter an environment variable name, not an API key.');
     }
-    const a = { config, events: state?.events || [], effort: state?.effort || null, controller: null };
+    const agentCwd = provider === 'api' ? workingDir : worktrees.ensure(workingDir, `agent-${config.id}`);
+    const a = { config, cwd: agentCwd, events: state?.events || [], effort: state?.effort || null, controller: null };
     entries.set(config.id, a);
     if (provider !== 'api') {
-      a.cli = createAgents({ cwd: workingDir, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name), broadcast: (msg) => {
+      a.cli = createAgents({ cwd: a.cwd, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name), broadcast: (msg) => {
         if (entries.get(config.id) !== a) return;
         emit({ ...msg, agent: config.id });
       } });
@@ -138,8 +143,8 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (a.controller === controller) { a.controller = null; emit({ t: 'meta', agent: a.config.id, meta: apiMeta(a) }); }
     }
   }
-  children = createChildren({ root, specs, getCwd: () => workingDir, broadcast: emit, pluginRoots, pollMs: childPollMs, getInstructions: (provider) => renderPrompt(provider === 'claude' ? 'Claude' : 'Codex'),
-    getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, provider: a.config.provider,
+  children = createChildren({ root, specs, getCwd: () => workingDir, getWorktree: (repo, id) => worktrees.ensure(repo, id), broadcast: emit, pluginRoots, pollMs: childPollMs, getInstructions: (provider) => renderPrompt(provider === 'claude' ? 'Claude' : 'Codex'),
+    getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, cwd: a.cwd, provider: a.config.provider,
       sessionId: a.cli?.save()[a.config.provider]?.sessionId })) });
   const busy = () => Object.values(snapshot()).some((s) => s.meta.busy) || children.busy();
   function remove(id) {
@@ -165,7 +170,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     // Keep this repo's chats (full state, same session ids) for when it is opened again.
     repoChats[workingDir] = [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } }));
     for (const a of entries.values()) a.cli?.closeAll();
-    entries.clear(); workingDir = next;
+    entries.clear(); workingDir = next; projectContext = ensureProjectContext(workingDir);
     remember();
     const returning = repoChats[next];
     delete repoChats[next];
@@ -244,7 +249,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         // Refresh the delegation token and instructions for the new conversation.
         if (a.cli) {
           const saved = a.cli.save(); a.cli.closeAll();
-          a.cli = createAgents({ cwd: workingDir, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
+          a.cli = createAgents({ cwd: a.cwd, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
           a.cli.restore(saved);
         }
         emit({ t: 'children', children: children.snapshot() });

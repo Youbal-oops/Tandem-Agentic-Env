@@ -368,8 +368,15 @@ export class ChatPanel {
       const images = document.createElement('div'); images.className = 'message-images';
       for (const a of ev.attachments) {
         if (!/^[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(a.id)) continue;
-        const link = document.createElement('a'); link.href = `/api/images/${a.id}`; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        const link = document.createElement('a'); link.href = `/api/images/${a.id}`; link.rel = 'noopener noreferrer';
         const img = document.createElement('img'); img.src = link.href; img.alt = a.name || 'Attached image'; img.loading = 'lazy';
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          const viewer = document.createElement('dialog'); viewer.className = 'image-viewer';
+          const full = document.createElement('img'); full.src = link.href; full.alt = img.alt;
+          viewer.append(full); viewer.addEventListener('click', () => viewer.close());
+          viewer.addEventListener('close', () => viewer.remove()); document.body.append(viewer); viewer.showModal();
+        });
         link.append(img); images.append(link);
       }
       el.querySelector('.bub').append(images);

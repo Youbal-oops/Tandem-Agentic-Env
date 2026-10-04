@@ -40,6 +40,17 @@ dialog .github-repo.selected { border-color: #74e6ff; background: #74e6ff15; }
 #notes-status { font-size: 11px; color: #7ee0a3; }
 #recent-repos { max-height: 150px; overflow-y: auto; }
 dialog .recent-repo { display: block; width: 100%; text-align: left; overflow-wrap: anywhere; margin-bottom: 6px; }
+.setup-dialog { width: min(820px, 94vw); }
+.setup-lede { max-width: 620px; margin: -8px 0 24px; }
+.setup-section { border-top: 1px solid var(--faint); padding: 18px 0; }
+.setup-section > .kicker { display: block; margin-bottom: 12px; color: var(--warn); }
+.setup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.setup-grid button { min-height: 88px; text-align: left; display: grid; gap: 8px; align-content: start; background: rgba(8,10,18,.5); }
+.setup-grid button:hover { border-color: var(--warn); }
+.setup-grid b { font: 500 12px var(--mono); color: var(--ink); }
+.setup-grid small { font: 10px/1.45 var(--mono); color: var(--mute); }
+.setup-section > p { margin: 0 0 14px; }
+@media (max-width:699px) { .setup-grid { grid-template-columns: 1fr; } }
 #btn-stop-all { color: #ff9a9a; }
 
 /* Functional additions inherit the original transparent, serif/mono design. */

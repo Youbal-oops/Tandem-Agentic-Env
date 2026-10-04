@@ -27,6 +27,7 @@
           <span id="conn" class="conn"><i></i><em>connecting</em></span>
           <button id="btn-overview" title="Top-down view of the whole system (Esc)">System <kbd>Esc</kbd></button>
           <button id="btn-workspace">Workspace</button>
+          <button id="btn-setup" title="Set up projects, Git and agents">Set up</button>
           <button id="btn-inspect">Files / Diff</button>
           <button id="btn-notes">Notes</button>
           <button id="btn-prompt" title="Instructions every agent receives at the start of each session">Prompt</button>
@@ -143,6 +144,13 @@
       <div class="form-row"><label>Experience<select id="profile-level"><option value="new">New</option><option value="familiar">Familiar</option><option value="confident">Confident</option></select></label><label>Teaching<select id="profile-style"><option value="plain">Plain language</option><option value="examples">Examples</option><option value="diagrams">Diagrams</option><option value="questions">Guiding questions</option></select></label><label>Checkpoints<select id="profile-checkpoints"><option value="light">Light</option><option value="normal">Normal</option><option value="frequent">Frequent</option></select></label></div>
       <p id="profile-observed"></p><div class="form-row"><button id="save-profile">Save profile</button><span id="profile-status" role="status"></span></div>
       <p>Used by every agent and child task. Tandem updates observed technologies from your work; you can always edit this profile.</p>
+    </dialog>
+    <dialog id="setup-dialog" class="setup-dialog">
+      <header><div><span class="eyebrow">TANDEM SETUP</span><h2>Make this your dev space</h2></div><button id="close-setup">Close ×</button></header>
+      <p class="setup-lede">Pick where your project lives, then connect whichever models you want to work with. Tandem keeps the project context, learning profile and work flow in one place.</p>
+      <section class="setup-section"><span class="kicker">1 · PROJECT</span><div class="setup-grid"><button data-setup="folder"><b>Open a folder</b><small>Use a project already on this computer</small></button><button data-setup="clone"><b>Clone from GitHub</b><small>Use your GitHub account or a public link</small></button><button data-setup="new"><b>New project</b><small>Create a fresh local Git project</small></button></div></section>
+      <section class="setup-section"><span class="kicker">2 · CONNECTIONS</span><div class="setup-grid"><button data-setup="github"><b>GitHub</b><small id="setup-github">Connect to browse and clone repositories</small></button><button data-setup="agents"><b>Agents & models</b><small id="setup-agents">Choose Claude, Codex, local or API models</small></button><button data-setup="profile"><b>Learn profile</b><small>Tell Tandem what you know and want to learn</small></button></div></section>
+      <section class="setup-section"><span class="kicker">3 · READY</span><p>Every coding agent gets Tandem’s shared project context. When you are ready, select an agent and describe what you want to build.</p><button id="finish-setup" class="primary">I’m ready →</button></section>
     </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>

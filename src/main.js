@@ -470,6 +470,7 @@ function setOffline(off) {
 net = createNet({
   onStatus(kind, data) {
     if (kind === 'session') {
+      if (!localStorage.getItem('tandem:setup-complete')) setTimeout(() => { if (!document.querySelector('dialog[open]')) $('#setup-dialog').showModal(); }, 250);
       setGit(data.git);
       if (data.local) localTools?.receive({ t: 'localstate', ...data.local });
       cloneParent = data.cloneParent || '';
@@ -590,6 +591,10 @@ function openWorkspace() {
   localTools.openWorkspace();
   $('#workspace-dialog').showModal();
 }
+function openWorkspaceTab(tab) {
+  openWorkspace();
+  document.querySelector(`[data-workspace-tab="${tab}"]`)?.click();
+}
 function setCloneStatus(state) {
   cloneBusy = !!state.busy;
   $('#clone-status').textContent = state.text || '';
@@ -675,6 +680,22 @@ function renderAgentList() {
   }
 }
 $('#btn-workspace').addEventListener('click', openWorkspace);
+$('#btn-setup').addEventListener('click', () => $('#setup-dialog').showModal());
+$('#close-setup').addEventListener('click', () => $('#setup-dialog').close());
+$('#finish-setup').addEventListener('click', () => { localStorage.setItem('tandem:setup-complete', '1'); $('#setup-dialog').close(); showNotice('Setup saved. You can reopen it anytime from Set up.'); });
+document.querySelectorAll('[data-setup]').forEach((button) => button.addEventListener('click', () => {
+  const action = button.dataset.setup;
+  $('#setup-dialog').close();
+  if (action === 'folder') return openWorkspaceTab('local');
+  if (action === 'clone' || action === 'github') {
+    openWorkspaceTab('clone');
+    if (action === 'github') { $('#clone-source').value = 'account'; $('#clone-source').dispatchEvent(new Event('change')); }
+    return;
+  }
+  if (action === 'agents') return openWorkspaceTab('agents');
+  if (action === 'profile') return $('#btn-profile').click();
+  showNotice('New project setup is the next Tandem step. For now, choose a new empty folder with Open a folder.');
+}));
 $('#close-workspace').addEventListener('click', () => $('#workspace-dialog').close());
 $('.sl').style.pointerEvents = 'auto';
 $('.sl').style.cursor = 'pointer';
