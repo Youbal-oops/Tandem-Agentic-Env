@@ -361,6 +361,8 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ t: 'localstate', ...(m.t === 'savenotes' ? agents.saveNotes(m.cwd, m.text) : agents.localState()), saved: m.t === 'savenotes' }));
       } else if (m.t === 'saveprompt') {
         ws.send(JSON.stringify({ t: 'prompt', ...agents.savePrompt(m.text, m.on) }));
+      } else if (m.t === 'savelearnerprofile') {
+        ws.send(JSON.stringify({ t: 'learnerprofile', ...agents.saveLearnerProfile(m.profile) }));
       } else if (m.t === 'folders') {
         try { ws.send(JSON.stringify({ t: 'folders', request: m.request, ...await listFolders(m.path || os.homedir()) })); }
         catch (e) { ws.send(JSON.stringify({ t: 'folders', request: m.request, error: e.message })); }

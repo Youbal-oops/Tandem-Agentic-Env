@@ -1,12 +1,24 @@
 # Tandem
 
-A planned local environment for two coding agents to collaborate on one codebase through bounded, delegated jobs.
+Tandem is a local AI coding space that lets models help build your project without making you feel like you have to just accept whatever they write.
+
+The main goal is simple: let AI do the coding work while it helps you learn the architecture, the choices behind it, and how development actually fits together. You can ask for a plain explanation, examples, diagrams, or a slower walkthrough. When there are a few valid ways to build something, Tandem should show the options, explain the tradeoffs and complexity, and let you pick the direction before it starts changing code.
+
+It is not here to force you to type every line yourself. It is here to help you understand the project you are building so you can make better calls over time.
 
 ## Status
 
 As of **2026-10-01**, Tandem has a first working **local cockpit** (see "Running Tandem" below): a chat interface for Claude Code and Codex CLI, shown as planets orbiting a star that stands for the selected codebase. Repo switching, additional CLI/API planets, reasoning controls, chat filters, local persistence, export and an Eco mode are implemented. Delegation between the agents, a git worktree per job and session export to the site are still **planned, not built**. The repository folder is `Tandem-Agentic-Env`.
 
 ## Running Tandem
+
+### Learn while you build
+
+Open **Learn profile** to tell Tandem what stack you already know, what you want to learn, how much experience you have, and how you like things explained. The profile is saved locally and shared with every agent you add, including Claude, Codex, compatible API models, and subagent jobs.
+
+Tandem also keeps a small local list of technologies it notices in your messages, like React, SQL, Docker or testing. It treats these as things you have worked around, not proof that you already know them well, so you can edit the profile whenever it gets something wrong.
+
+When you start a subagent task, choose the agent and its model before it starts. You can use the CLI default, one of the detected models, or enter a custom model name.
 
 ### Windows release
 

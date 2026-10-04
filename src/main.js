@@ -101,7 +101,7 @@ function createPanel(id, provider = id) {
 }
 
 for (const id of AGENTS) createPanel(id);
-childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, onChange: childActivity });
+childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, models: () => MODEL_PRESETS, onChange: childActivity });
 
 function reconcile(next) {
   for (const id of [...AGENTS]) if (!next.some((a) => a.id === id)) {

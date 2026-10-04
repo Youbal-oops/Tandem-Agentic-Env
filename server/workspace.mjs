@@ -22,9 +22,20 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   let closed = false;
   let repoChanging = false;
   let globalPrompt = { text: typeof saved.globalPrompt?.text === 'string' ? saved.globalPrompt.text.slice(0, MAX_PROMPT) : '', on: saved.globalPrompt?.on !== false };
+  let learnerProfile = {
+    familiar: String(saved.learnerProfile?.familiar || '').slice(0, 2000),
+    learning: String(saved.learnerProfile?.learning || '').slice(0, 2000),
+    observed: Array.isArray(saved.learnerProfile?.observed) ? saved.learnerProfile.observed.filter((x) => typeof x === 'string').slice(0, 40) : [],
+    level: ['new', 'familiar', 'confident'].includes(saved.learnerProfile?.level) ? saved.learnerProfile.level : 'familiar',
+    style: ['plain', 'examples', 'diagrams', 'questions'].includes(saved.learnerProfile?.style) ? saved.learnerProfile.style : 'plain',
+    checkpoints: ['light', 'normal', 'frequent'].includes(saved.learnerProfile?.checkpoints) ? saved.learnerProfile.checkpoints : 'normal',
+  };
   // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
-  const renderPrompt = (name) => (!globalPrompt.on ? '' : globalPrompt.text.trim()
-    .replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name));
+  const renderPrompt = (name) => {
+    const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name);
+    const profile = [learnerProfile.familiar && `Familiar stack: ${learnerProfile.familiar}`, learnerProfile.learning && `Learning goals: ${learnerProfile.learning}`, learnerProfile.observed.length && `Observed in their work: ${learnerProfile.observed.join(', ')}`, `Experience: ${learnerProfile.level}; teaching preference: ${learnerProfile.style}; checkpoint frequency: ${learnerProfile.checkpoints}.`, 'For material design choices, show viable options with complexity and tradeoffs. Recommend, but let the user choose before implementing.'].filter(Boolean).join('\n');
+    return [prompt, profile && `[Learner profile]\n${profile}`].filter(Boolean).join('\n\n');
+  };
   // Chats of every repository other than the open one, keyed by its real path, so switching back (or
   // restarting tomorrow) finds them where they were. The open repo's chats live in `entries`.
   const repoChats = saved.repoChats && typeof saved.repoChats === 'object' && !Array.isArray(saved.repoChats) ? saved.repoChats : {};
@@ -34,7 +45,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   remember();
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: workingDir, notes, recent, globalPrompt, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
+    const data = { cwd: workingDir, notes, recent, globalPrompt, learnerProfile, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
   }
@@ -44,6 +55,14 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     timer = setTimeout(() => { try { save(); } catch (e) { console.error('Could not save workspace:', e.message); } }, 500);
   }
   const emit = (msg) => { if (closed) return; broadcast(msg); schedule(); };
+  function observeLearning(text) {
+    const matches = String(text || '').toLowerCase().match(/\b(javascript|typescript|react|next\.js|node\.js|python|java|sql|postgres(?:ql)?|supabase|docker|git|testing|css|html|api|authentication|security)\b/g) || [];
+    const found = [...new Set(matches.map((x) => x === 'postgresql' ? 'Postgres' : x === 'next.js' ? 'Next.js' : x === 'node.js' ? 'Node.js' : x.toUpperCase() === x ? x : x[0].toUpperCase() + x.slice(1)))];
+    const add = found.filter((x) => !learnerProfile.observed.includes(x));
+    if (!add.length) return;
+    learnerProfile.observed = [...learnerProfile.observed, ...add].slice(-40);
+    emit({ t: 'learnerprofile', learnerProfile });
+  }
   function apiMeta(a) {
     return { available: !a.config.keyEnv || !!process.env[a.config.keyEnv], busy: !!a.controller,
       model: a.config.model, modelPref: a.config.model, effort: a.effort || null,
@@ -172,11 +191,20 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (repoChanging) throw new Error('Wait for the repository clone to finish.');
       return m.t === 'child-create' ? children.create(m.agent, m) : children.action(m);
     },
-    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt }),
+    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt, learnerProfile }),
     savePrompt(text, on) {
       if (typeof text !== 'string' || text.length > MAX_PROMPT) throw new Error(`The prompt can contain up to ${MAX_PROMPT.toLocaleString()} characters.`);
       globalPrompt = { text, on: on !== false }; save();
       return { prompt: globalPrompt };
+    },
+    saveLearnerProfile(profile) {
+      if (!profile || typeof profile !== 'object') throw new Error('Invalid learner profile.');
+      learnerProfile = {
+        familiar: String(profile.familiar || '').slice(0, 2000), learning: String(profile.learning || '').slice(0, 2000),
+        observed: Array.isArray(profile.observed) ? profile.observed.filter((x) => typeof x === 'string').slice(0, 40) : learnerProfile.observed,
+        level: ['new', 'familiar', 'confident'].includes(profile.level) ? profile.level : 'familiar', style: ['plain', 'examples', 'diagrams', 'questions'].includes(profile.style) ? profile.style : 'plain', checkpoints: ['light', 'normal', 'frequent'].includes(profile.checkpoints) ? profile.checkpoints : 'normal',
+      };
+      save(); return { learnerProfile };
     },
     saveNotes(cwd, text) {
       if (cwd !== workingDir) throw new Error('Repository changed. Reopen Notes before saving.');
@@ -207,6 +235,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (repoChanging && m.t === 'send') throw new Error('Wait for the repository clone to finish before sending a task.');
       const a = entries.get(m.agent);
       if (!a) throw new Error('Unknown agent.');
+      if (m.t === 'send') observeLearning(m.text);
       const attachments = m.t === 'send' ? images.resolve(m.attachments) : [];
       if (m.t === 'send' && !String(m.text || '').trim() && attachments.length) m = { ...m, text: 'Describe these images.' };
       if (m.t === 'newchat') {

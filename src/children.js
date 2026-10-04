@@ -8,7 +8,7 @@ const MODES = {
 const name = (provider) => provider === 'claude' ? 'Claude' : 'Codex';
 const color = (provider) => provider === 'claude' ? 'var(--claude)' : 'var(--codex)';
 
-export function createChildChats({ panels, send, selectParent, notice, isDemo, onChange = () => {} }) {
+export function createChildChats({ panels, send, selectParent, notice, isDemo, models = () => ({}), onChange = () => {} }) {
   const records = new Map(), views = new Map(), parents = new Map(), seen = new Map();
   let active = null, parentId = null, offline = false;
   const drawer = document.createElement('aside');
@@ -21,6 +21,20 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, o
     <form class="child-form" hidden><h3>Give it a task</h3><p>The child gets its own conversation, attached to your main chat.</p><label>Agent<select name="provider"><option value="claude">Claude</option><option value="codex">Codex</option></select></label><label>Task<textarea name="task" required maxlength="40000" rows="6" placeholder="What should this agent work on?"></textarea></label><p>Starts in Edit mode in the current repository. You can change the mode in the child chat.</p><button type="submit">Start child task →</button></form>`;
   document.body.append(drawer);
   const $ = (s) => drawer.querySelector(s);
+  const modelLabel = document.createElement('label');
+  modelLabel.textContent = 'Model';
+  const modelSelect = document.createElement('select');
+  modelSelect.name = 'model'; modelSelect.setAttribute('aria-label', 'Subagent model');
+  modelLabel.append(modelSelect);
+  $('.child-form [name="provider"]').closest('label').after(modelLabel);
+  function renderModelOptions(provider) {
+    const select = $('.child-form [name="model"]');
+    const available = models()[provider] || [];
+    select.replaceChildren();
+    const defaultOption = document.createElement('option'); defaultOption.value = ''; defaultOption.textContent = 'CLI default'; select.append(defaultOption);
+    for (const model of available) { const option = document.createElement('option'); option.value = model; option.textContent = model; select.append(option); }
+    const custom = document.createElement('option'); custom.value = '__custom__'; custom.textContent = 'Custom model…'; select.append(custom);
+  }
   function childrenFor(id) { return [...records.values()].filter((c) => c.parentId === id); }
   function activity(id) { return childrenFor(id).map((c) => ({ id: c.id, provider: c.provider, title: c.title, busy: !!c.meta.busy, awaiting: !!c.meta.awaiting, status: c.meta.status, thinking: !!c.meta.stats?.thinking, moons: c.meta.stats?.tools?.running || [] })); }
   function label(c) { return c.meta.external ? 'Working with Claude' : c.meta.busy ? c.meta.awaiting ? 'Needs approval' : 'Working' : c.meta.status === 'failed' ? 'Failed' : c.meta.status === 'interrupted' ? 'Interrupted' : 'Ready'; }
@@ -67,7 +81,7 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, o
     let v = views.get(c.id);
     if (!v) {
       const root = document.createElement('section'); root.hidden = true; $('.child-views').append(root);
-      const panel = new ChatPanel(root, { id: c.id, name: name(c.provider), provider: c.provider, modes: MODES[c.provider], models: c.provider === 'claude' ? ['opus', 'sonnet', 'haiku'] : [], handlers: {
+      const panel = new ChatPanel(root, { id: c.id, name: name(c.provider), provider: c.provider, modes: MODES[c.provider], models: models()[c.provider] || [], handlers: {
         send: (text, attachments) => command(c, 'send', { text, attachments }), stop: () => command(c, 'stop'),
         mode: (mode) => command(c, 'mode', { mode }), model: (model) => command(c, 'model', { model }), effort: (effort) => command(c, 'effort', { effort }),
         approve: (requestId, allow) => command(c, 'approve', { requestId, allow }), newChat() {}, focus() {},
@@ -123,7 +137,9 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, o
     for (const v of views.values()) v.panel.root.hidden = true;
     $('.child-form').hidden = false; $('.child-picker-row').hidden = true; $('.child-context').hidden = true;
     setTitle(id, 'New task'); $('.child-state').textContent = 'new task';
-    $('.child-form select').value = panels[id]?.name === 'Claude' ? 'codex' : 'claude';
+    const provider = $('.child-form [name="provider"]');
+    provider.value = panels[id]?.name === 'Claude' ? 'codex' : 'claude';
+    renderModelOptions(provider.value);
     $('.child-form textarea').focus();
   }
   function upsert(c) {
@@ -136,19 +152,27 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, o
     const ids = new Set(items.map((c) => c.id));
     for (const id of records.keys()) if (!ids.has(id)) { records.delete(id); views.get(id)?.panel.root.remove(); views.delete(id); if (active === id) close(); }
     items.forEach(upsert); mountParents();
+    for (const [id, view] of views) {
+      const child = records.get(id);
+      if (child) view.panel.setModels(models()[child.provider] || []);
+    }
     for (const id of Object.keys(panels)) onChange(id);
   }
   $('.child-close').addEventListener('click', close);
   $('[data-view="main"]').addEventListener('click', () => { close(); if (parentId) selectParent(parentId); });
   $('[data-view="child"]').addEventListener('click', () => active && views.get(active)?.panel.focusInput());
   $('.child-picker').addEventListener('change', (e) => open(e.target.value));
+  $('.child-form [name="provider"]').addEventListener('change', (e) => renderModelOptions(e.target.value));
   $('.child-new').addEventListener('click', () => newTask(parentId));
   drawer.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); panels[parentId]?.focusInput(); } });
   $('.child-form').addEventListener('submit', (e) => {
     e.preventDefault();
     if (offline || isDemo()) { notice(isDemo() ? 'Turn off Demo to start a real child task.' : 'Reconnect to start a task.'); return; }
     const form = new FormData(e.target);
-    send({ t: 'child-create', agent: parentId, provider: form.get('provider'), text: form.get('task') });
+    const provider = form.get('provider');
+    let model = form.get('model');
+    if (model === '__custom__') model = (prompt(`Model name for ${name(provider)}`, '') || '').trim();
+    send({ t: 'child-create', agent: parentId, provider, text: form.get('task'), ...(model ? { model } : {}) });
   });
   mountParents();
   return {
