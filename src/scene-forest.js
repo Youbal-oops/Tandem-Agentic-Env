@@ -1,5 +1,6 @@
-// Sunset carriage background. Custom Blender cats will be added separately.
+// Sunset carriage with illustrated, agent-driven cats and subagent kittens.
 import { AGENT_LOOK, CLASS_COLORS } from './looks.js';
+import { createTandemCatStage } from './tandem-cat-stage.js';
 export { AGENT_LOOK, CLASS_COLORS };
 
 const W = 1600, H = 1000;
@@ -144,6 +145,9 @@ export function createScene(host) {
   const foreground = document.createElement('canvas'); foreground.width = W; foreground.height = H;
   vines(foreground.getContext('2d'), true);
   const agents = new Set(Object.keys(AGENT_LOOK)), hooks = new Set();
+  let pickHandler = () => {}, hoverHandler = () => {};
+  const cats = createTandemCatStage(host, { assetUrl: '/models/tandem_cat.glb', autoRender: false, fit: 'cover', baseline: 116, scale: 44, positions: [680, 1165], onPick: id => pickHandler(id), onHover: id => hoverHandler(id) });
+  for (const id of agents) cats.syncAgent(id, {}, AGENT_LOOK[id]?.name || id);
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   let selected = null, eco = false, eventsOn = true;
   let width = 1, height = 1, zoom = 1, ox = 0, oy = 0;
@@ -171,30 +175,31 @@ export function createScene(host) {
     ctx.drawImage(foreground, 0, 0);
     const glow = ctx.createRadialGradient(920, 560, 170, 810, 480, 1000);
     glow.addColorStop(0, '#ffad3b00'); glow.addColorStop(1, '#28131170'); ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    cats.update(dt); cats.render();
     for (const hook of hooks) hook(now);
     timer = window.setTimeout(() => { frame = requestAnimationFrame(draw); }, 1000 / (reduced.matches ? 4 : eco ? 18 : 30));
   }
   function resume() { clearTimeout(timer); cancelAnimationFrame(frame); last = 0; if (!document.hidden) frame = requestAnimationFrame(draw); }
   window.addEventListener('resize', resize); document.addEventListener('visibilitychange', resume);
   reduced.addEventListener('change', resume); resize(); resume();
-  // Keep main.js's scene interface while character rendering is removed.
+  // Keep the shared scene interface; agent meta drives each cat independently.
   return {
-    addPlanet(id) { agents.add(id); },
-    removePlanet(id) { agents.delete(id); if (selected === id) selected = null; },
-    screen() { return { x: 0, y: 0, r: 0, visible: false }; },
-    setStatus() {},
-    setSelected(id) { selected = agents.has(id) ? id : null; },
+    addPlanet(id, look) { agents.add(id); cats.syncAgent(id, {}, look?.name || id); },
+    removePlanet(id) { agents.delete(id); cats.removeAgent(id); if (selected === id) selected = null; },
+    screen(id) { return cats.screen(id); },
+    setStatus(id, state) { cats.syncAgent(id, state, AGENT_LOOK[id]?.name || id); },
+    setSelected(id) { selected = agents.has(id) ? id : null; cats.setSelected(selected); },
     setInsets() {}, setTopDown() {},
-    setEco(on) { eco = !!on; resize(); },
+    setEco(on) { eco = !!on; cats.setEco(eco); resize(); },
     setSkyEvents(on) { eventsOn = !!on; },
     sky() { if (eventsOn) sparkle = 1; },
     fx() {}, workPacket() {}, flashSun() {}, handoff() {},
-    onPick() {}, onHover() {}, onFrame(fn) { hooks.add(fn); },
+    onPick(fn) { pickHandler = fn; }, onHover(fn) { hoverHandler = fn; }, onFrame(fn) { hooks.add(fn); },
     get selected() { return selected; }, get quality() { return eco ? 'eco' : 'high'; },
     dispose() {
       clearTimeout(timer); cancelAnimationFrame(frame); window.removeEventListener('resize', resize);
       document.removeEventListener('visibilitychange', resume); reduced.removeEventListener('change', resume);
-      canvas.remove(); hooks.clear();
+      cats.dispose(); canvas.remove(); hooks.clear();
     },
   };
 }

@@ -40,12 +40,14 @@ function play(name) {
   for (const b of document.querySelectorAll('[data-clip]')) b.setAttribute('aria-pressed', String(b.dataset.clip === name));
 }
 function coat() {
-  const blue = document.querySelector('#coat').value === 'blue';
+  const choice = document.querySelector('#coat').value;
+  const blue = choice === 'blue';
+  const black = choice === 'black';
   for (const m of models) m.root.traverse(o => {
     if (!o.isMesh) return;
     for (const mat of Array.isArray(o.material) ? o.material : [o.material]) {
-      if (/^Coat(?:\.\d+)?$/.test(mat.name)) mat.color.setRGB(...(blue ? [.30,.43,.56] : [.87,.72,.49]));
-      if (/^Accent(?:\.\d+)?$/.test(mat.name)) mat.color.setRGB(...(blue ? [.12,.22,.32] : [.68,.31,.12]));
+      if (/^Coat(?:\.\d+)?$/.test(mat.name)) mat.color.setRGB(...(black ? [.012,.011,.009] : blue ? [.30,.43,.56] : [.87,.72,.49]));
+      if (/^Accent(?:\.\d+)?$/.test(mat.name)) mat.color.setRGB(...(black ? [.006,.005,.004] : blue ? [.12,.22,.32] : [.68,.31,.12]));
     }
   });
 }
