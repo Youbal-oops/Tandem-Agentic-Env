@@ -29,10 +29,6 @@ Go to the repository's **Releases** page and download one of these assets:
 
 No Node.js is needed just to run the desktop app. To use Claude Code, Codex, Git, or GitHub features, install those tools separately and sign into them on the same computer.
 
-If a release only shows **Source code (zip)** and **Source code (tar.gz)**, the Windows build is still running or failed. Wait for the GitHub Actions release workflow to finish; the installer assets appear only after it succeeds.
-
-## First setup
-
 Open Tandem and hit **Set up**. From there you can:
 
 1. Open an existing local repository.
