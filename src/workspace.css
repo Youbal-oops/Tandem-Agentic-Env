@@ -81,6 +81,15 @@ body[data-sel]:not([data-sel='']) .agent.collapsed .tag { display: none; }
 .chat-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .a-info { min-width: 0; text-align: left; }
 .c-new { flex: none; }
+.c-history { flex: none; }
+#history-dialog { width: min(720px,94vw); }
+.history-location { overflow-wrap: anywhere; color: var(--mute); font: 11px/1.6 var(--mono); }
+.history-search { width: 100%; }
+.history-list { max-height: 50vh; overflow: auto; display: grid; gap: 8px; }
+dialog .history-entry { display: grid; gap: 7px; width: 100%; padding: 14px; text-align: left; }
+.history-entry span { overflow-wrap: anywhere; }
+.history-entry small { color: var(--mute); font: 10px/1.6 var(--mono); }
+.history-entry:disabled { opacity: .6; }
 .feed-controls { display: grid; grid-template-columns: minmax(0,1fr) 120px; gap: 8px; padding-bottom: 8px; flex: none; }
 .feed-controls input, .feed-controls select { width: 100%; font-size: 10px; }
 .c-feed { min-height: 70px; }

@@ -13,6 +13,7 @@ import { createNet } from './net.js';
 import { createDemo } from './demo.js';
 import { createLocalTools } from './local.js';
 import { createChildChats } from './children.js';
+import { createChatHistory } from './history.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const AGENTS = ['claude', 'codex'];
@@ -69,6 +70,7 @@ let demo = null;
 let localTools = null;
 let folderPicker = null;
 let childChats = null;
+const chatHistory = createChatHistory({ send: (msg) => net?.send(msg), connected: () => !!net?.open && !ui.demo, getRepo: () => repoPath, getName: (id) => NAMES[id], notify: (text) => showNotice(text) });
 
 // ---------------------------------------------------------------- panels
 const info = new InfoPanel($('#right'), { onSelect: (id) => select(id) });
@@ -94,6 +96,7 @@ function createPanel(id, provider = id) {
       stop: () => net.send({ t: 'stop', agent: id }),
       mode: (mode) => (ui.demo ? onMeta(id, { mode }) : net.send({ t: 'mode', agent: id, mode })),
       newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : net.send({ t: 'newchat', agent: id })),
+      history: () => chatHistory.open(id),
       approve: (requestId, allow) => net.send({ t: 'approve', agent: id, requestId, allow }),
       forward: (text) => forward(id, text),
       focus: () => select(ui.sel === id ? null : id),
@@ -121,6 +124,7 @@ function reconcile(next) {
       const el = document.createElement('div'); el.className = 'pl'; el.dataset.agent = c.id; el.innerHTML = '<b></b><small>idle</small>'; $('b', el).textContent = c.name; $('#plabels').append(el); labelEls[c.id] = el;
     }
     panels[c.id].root.style.setProperty('--c', AGENT_LOOK[c.id].hex);
+    panels[c.id].setConversation(c.conversationId);
     onMeta(c.id, { available: c.available ?? true });
   });
   info.setAgents(next, AGENT_LOOK);
@@ -499,6 +503,7 @@ net = createNet({
   },
   onMessage(msg) {
     if (ui.demo) return;
+    if (chatHistory.receive(msg)) return;
     if (childChats?.receive(msg)) return;
     if (folderPicker?.receive(msg)) return;
     if (localTools?.receive(msg)) return;

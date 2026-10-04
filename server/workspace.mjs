@@ -48,11 +48,60 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   let recent = Array.isArray(saved.recent) ? saved.recent.filter((p) => typeof p === 'string').slice(0, 12) : [];
   const remember = () => { recent = [workingDir, ...recent.filter((p) => p !== workingDir)].slice(0, 12); };
   remember();
+  const historyDir = path.join(dir, 'conversations');
+  const validConversationId = (id) => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id);
+  const conversationState = (a) => a.cli ? a.cli.save() : { events: a.events, effort: a.effort };
+  function saveConversation(a) {
+    if (!validConversationId(a.config.conversationId)) return;
+    fs.mkdirSync(historyDir, { recursive: true });
+    const target = path.join(historyDir, `${a.config.conversationId}.json`);
+    fs.writeFileSync(target + '.tmp', JSON.stringify({ cwd: workingDir, config: { ...a.config }, state: conversationState(a), updatedAt: Date.now() }));
+    fs.renameSync(target + '.tmp', target);
+  }
+  function readConversation(id) {
+    if (!validConversationId(id)) throw new Error('Invalid conversation ID.');
+    try { return JSON.parse(fs.readFileSync(path.join(historyDir, `${id}.json`), 'utf8')); }
+    catch { throw new Error('That conversation could not be loaded.'); }
+  }
+  function chatHistory(agent) {
+    const a = entries.get(agent);
+    if (!a) throw new Error('Unknown agent.');
+    const rows = [];
+    for (const filename of fs.existsSync(historyDir) ? fs.readdirSync(historyDir) : []) {
+      if (!filename.endsWith('.json')) continue;
+      try {
+        const row = readConversation(filename.slice(0, -5));
+        if (row.cwd === workingDir && row.config.id === agent && row.config.provider === a.config.provider && row.config.conversationId !== a.config.conversationId) rows.push(row);
+      } catch { /* Leave damaged records intact, but omit them from the picker. */ }
+    }
+    rows.push({ cwd: workingDir, config: a.config, state: conversationState(a), updatedAt: Date.now() });
+    return rows.map((row) => {
+      const events = row.config.provider === 'api' ? row.state.events : row.state[row.config.provider]?.events;
+      const messages = (events || []).filter((event) => event.k === 'user');
+      return { id: row.config.conversationId, title: String(messages[0]?.text || 'New conversation').replace(/\s+/g, ' ').slice(0, 120), updatedAt: row.updatedAt, messages: messages.length, active: row.config.conversationId === a.config.conversationId };
+    }).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  function reopenChat(agent, id, cwd) {
+    if (repoChanging) throw new Error('Wait for the repository clone to finish.');
+    if (cwd !== workingDir) throw new Error('Repository changed. Reopen chat history.');
+    const a = entries.get(agent);
+    if (!a) throw new Error('Unknown agent.');
+    if (snapshot()[agent].meta.busy || children.snapshot().some((c) => c.parentId === agent && c.meta.busy)) throw new Error('Stop this agent and its child tasks before switching conversations.');
+    if (id === a.config.conversationId) return;
+    const row = readConversation(id);
+    if (row.cwd !== workingDir || row.config.id !== agent || row.config.provider !== a.config.provider) throw new Error('That conversation belongs to a different project or agent.');
+    saveConversation(a);
+    a.cli?.closeAll();
+    entries.delete(agent);
+    add(row.config, row.state);
+    save();
+  }
   function save() {
     fs.mkdirSync(dir, { recursive: true });
     const data = { cwd: workingDir, notes, recent, globalPrompt, learnerProfile, childModelDefaults, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
+    for (const a of entries.values()) saveConversation(a);
   }
   function schedule() {
     if (loading || closed) return;
@@ -155,6 +204,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     if (snapshot()[id].meta.busy || children.snapshot().some((c) => c.parentId === id && c.meta.busy)) throw new Error('Stop this agent and its child tasks before removing it.');
     fs.mkdirSync(path.join(dir, 'archives'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'archives', `${Date.now()}-${id}.json`), JSON.stringify({ cwd: workingDir, config: a.config, conversation: snapshot()[id] }));
+    saveConversation(a);
     entries.delete(id); a.cli?.closeAll(); a.controller?.abort(); schedule();
   }
   function switchRepo(next, reserved = false) {
@@ -167,9 +217,10 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     // Archive old chats before resetting their repo-bound CLI sessions.
     fs.mkdirSync(path.join(dir, 'archives'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'archives', `${Date.now()}.json`), JSON.stringify({ cwd: workingDir, agents: snapshot() }));
-    const configs = [...entries.values()].map((a) => ({ config: a.config, settings: a.cli ? a.cli.save() : { effort: a.effort } }));
+    for (const a of entries.values()) saveConversation(a);
+    const configs = [...entries.values()].map((a) => ({ config: { ...a.config }, settings: a.cli ? a.cli.save() : { effort: a.effort } }));
     // Keep this repo's chats (full state, same session ids) for when it is opened again.
-    repoChats[workingDir] = [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } }));
+    repoChats[workingDir] = [...entries.values()].map((a) => ({ config: { ...a.config }, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } }));
     for (const a of entries.values()) a.cli?.closeAll();
     entries.clear(); workingDir = next; projectContext = ensureProjectContext(workingDir);
     remember();
@@ -190,7 +241,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   return {
     get cwd() { return workingDir; },
     configs: () => [...entries.values()].map((a) => ({ ...a.config, available: !!snapshot()[a.config.id].meta.available })),
-    snapshot, add, remove, switchRepo,
+    snapshot, add, remove, switchRepo, chatHistory, reopenChat,
     children: () => children.snapshot(),
     pollChildren: () => children.poll(),
     childAction(m) {
@@ -249,7 +300,10 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       const attachments = m.t === 'send' ? images.resolve(m.attachments) : [];
       if (m.t === 'send' && !String(m.text || '').trim() && attachments.length) m = { ...m, text: 'Describe these images.' };
       if (m.t === 'newchat') {
+        if (repoChanging) throw new Error('Wait for the repository clone to finish.');
+        if (snapshot()[m.agent].meta.busy) throw new Error('Stop this agent before starting a new chat.');
         if (children.snapshot().some((c) => c.parentId === m.agent && c.meta.busy)) throw new Error('Finish or stop this conversation’s child tasks before starting a new chat.');
+        saveConversation(a);
         a.config.conversationId = crypto.randomUUID();
         // Refresh the delegation token and instructions for the new conversation.
         if (a.cli) {
@@ -274,6 +328,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         emit({ t: 'meta', agent: m.agent, meta: apiMeta(a) });
       }
       schedule();
+      if (m.t === 'newchat') save();
     },
     closeAll() { clearTimeout(timer); if (!closed) { children.close(); try { save(); } catch {} } closed = true; for (const a of entries.values()) { a.cli?.closeAll(); a.controller?.abort(); } },
   };

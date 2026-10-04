@@ -413,12 +413,19 @@ wss.on('connection', (ws) => {
         agents.switchRepo(m.cwd); CWD = agents.cwd; git = emptyGit();
         broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
         await readGit();
+      } else if (m.t === 'chat-history') {
+        ws.send(JSON.stringify({ t: 'chat-history', agent: m.agent, cwd: agents.cwd, request: m.request, conversations: agents.chatHistory(m.agent) }));
+      } else if (m.t === 'chat-reopen') {
+        agents.reopenChat(m.agent, m.id, m.cwd);
+        broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
+        ws.send(JSON.stringify({ t: 'chat-reopened', agent: m.agent, id: m.id }));
       } else if (m.t === 'addagent' || m.t === 'removeagent') {
         if (m.t === 'addagent') agents.add(m.config || {}); else agents.remove(m.agent);
         broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
       } else if (typeof m.agent === 'string') {
         if (m.t === 'send' && (typeof m.text !== 'string' || m.text.length > MAX_TEXT)) return;
         await agents.action(m);
+        if (m.t === 'newchat') broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
       }
     } catch (e) {
       ws.send(JSON.stringify({ t: 'notice', text: e.message }));

@@ -17,12 +17,13 @@ function setup(t) {
   const events = [];
   const options = { root, cwd: repo, specs, pluginRoots: [pluginRoot], childPollMs: 60000, broadcast: (m) => events.push(m) };
   const w = createWorkspace(options);
-  t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
-  return { w, root, repo, pluginRoot, events, options };
+  const workspaces = [w];
+  t.after(async () => { for (const workspace of workspaces) workspace.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
+  return { w, root, repo, pluginRoot, events, options, workspaces };
 }
 
 test('child tasks stream independently, resume, and preserve their parent after restart', async (t) => {
-  const { w, options, events } = setup(t);
+  const { w, options, events, workspaces } = setup(t);
   const c = w.childAction({ t: 'child-create', agent: 'codex', provider: 'claude', text: 'Review settings' });
   await waitFor(() => !w.children()[0].meta.busy);
   assert.equal(w.snapshot().codex.events.length, 0);
@@ -34,14 +35,15 @@ test('child tasks stream independently, resume, and preserve their parent after 
   assert.equal(w.children()[0].events.filter((e) => e.k === 'user').length, 2);
   w.closeAll();
   const restored = createWorkspace(options);
-  t.after(() => restored.closeAll());
+  workspaces.push(restored);
   assert.equal(restored.children().length, 1);
   assert.equal(restored.children()[0].id, c.id);
   restored.childAction({ id: c.id, action: 'send', text: 'Continue after restart' });
   await waitFor(() => restored.children()[0].meta.turns === 3);
   const reply = JSON.parse(restored.children()[0].events.filter((e) => e.k === 'msg').at(-1).text);
   assert.ok(reply.args.includes('--resume'));
-  assert.equal(reply.text, 'Continue after restart');
+  assert.match(reply.text, /Continue after restart$/);
+  assert.match(reply.text, /Shared project context/);
   restored.closeAll();
 });
 

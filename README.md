@@ -16,6 +16,7 @@ It is built around local agent tools first, but it is not tied to one provider. 
 - Give each CLI agent and Tandem-created subagent an isolated Git worktree and branch where Git is available.
 - Create a shared `.tandem/PROJECT_CONTEXT.md` in every selected or created project. All Tandem agents receive it as common project context.
 - Browse files, inspect Git changes, attach images, save notes, export chats, and keep local workspace state.
+- Reopen saved conversations from **history** beside **new chat**. Chats stay grouped by project and agent, with their messages, model settings, and associated subagent chats. CLI conversations resume using that CLI's local thread history.
 - Set up a folder, clone a repo, connect GitHub through the GitHub CLI, and configure agents from inside the app.
 
 API agents are chat-only: they do not receive local shell or file tools. Their usage is billed by their provider. CLI agents use the local CLI account already signed in on your computer.
