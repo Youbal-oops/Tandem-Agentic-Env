@@ -46,7 +46,7 @@ export function readPluginJobs(cwd, roots) {
   return jobs;
 }
 
-export function createChildren({ root, specs, getCwd, getParents, broadcast, pluginRoots, pollMs = 1500, getInstructions = () => '' }) {
+export function createChildren({ root, specs, getCwd, getParents, getWorktree = (_, __) => getCwd(), broadcast, pluginRoots, pollMs = 1500, getInstructions = () => '' }) {
   const file = path.join(root, '.tandem', 'children.json');
   const children = new Map();
   let timer, saveTimer, closed = false;
@@ -55,7 +55,7 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
     path.join(os.homedir(), '.claude', 'plugins', 'data', 'codex-openai-codex', 'state'),
     path.join(os.tmpdir(), 'codex-companion'),
   ];
-  const parentOf = (c) => getParents().find((p) => p.id === c.parentId && p.key === c.parentKey && c.cwd === getCwd());
+  const parentOf = (c) => getParents().find((p) => p.id === c.parentId && p.key === c.parentKey);
   const visible = (c) => !!parentOf(c);
   function save() {
     if (closed) return;
@@ -108,7 +108,7 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
     if (effort && !['low', 'medium', 'high', 'xhigh', ...(provider === 'claude' ? ['max'] : [])].includes(effort)) throw new Error('Invalid reasoning effort.');
     if ([...children.values()].filter((c) => visible(c)).length >= 40) throw new Error('This conversation has reached its 40 child chat limit. Start a new main chat.');
     const id = `child-${crypto.randomBytes(8).toString('hex')}`;
-    const c = { id, parentId, parentKey: parent.key, cwd: getCwd(), provider, source: 'tandem',
+    const c = { id, parentId, parentKey: parent.key, cwd: getWorktree(getCwd(), id), provider, source: 'tandem',
       title: String(title || text).replace(/\s+/g, ' ').slice(0, 100), status: 'running', updatedAt: Date.now(),
       state: { events: [], mode: 'edit', modelPref: model || null, effort: effort || null } };
     children.set(id, c); attach(c); publish(c);
@@ -160,7 +160,7 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
   return {
     create, action, poll,
     snapshot: () => [...children.values()].filter(visible).map(snapshot),
-    busy: () => [...children.values()].some((c) => c.cwd === getCwd() && (c.externalBusy || c.cli?.snapshot()[c.provider].meta.busy)),
+    busy: () => [...children.values()].some((c) => visible(c) && (c.externalBusy || c.cli?.snapshot()[c.provider].meta.busy)),
     stopAll() { for (const c of children.values()) if (c.cli) { c.cli.stop(c.provider); c.status = 'interrupted'; publish(c); } },
     close() { clearInterval(timer); clearTimeout(saveTimer); try { save(); } catch {} closed = true; for (const c of children.values()) c.cli?.closeAll(); },
   };

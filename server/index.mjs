@@ -22,8 +22,9 @@ import { listFolders } from './folders.mjs';
 import { pushBranch } from './gitpush.mjs';
 import { createImageStore, MAX_IMAGE_BYTES } from './images.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = path.join(ROOT, 'dist');
+const APP_ROOT = path.resolve(process.env.TANDEM_APP_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..'));
+const ROOT = path.resolve(process.env.TANDEM_DATA_ROOT || APP_ROOT);
+const DIST = path.join(APP_ROOT, 'dist');
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.TANDEM_PORT || 4317);
 const UI_DEV_PORT = 5173;
@@ -70,7 +71,12 @@ const codexJs = firstExisting(roots, ['@openai', 'codex', 'bin', 'codex.js']);
 const nativeCodex = nativeBinary('codex');
 const specs = {
   claude: claudeExe ? { file: claudeExe, args: [] } : null,
-  codex: codexJs ? { file: process.execPath, args: [codexJs] } : nativeCodex ? { file: nativeCodex, args: [] } : null,
+  codex: codexJs ? {
+    file: process.execPath,
+    args: [codexJs],
+    // Electron can execute Node scripts when this child-only flag is set.
+    environment: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
+  } : nativeCodex ? { file: nativeCodex, args: [] } : null,
 };
 
 function modelChoices() {
@@ -90,7 +96,7 @@ function broadcast(msg) {
   for (const ws of clients) if (ws.readyState === 1) ws.send(data);
 }
 const delegationKeys = new Map();
-const jobScript = path.join(ROOT, 'scripts', 'tandem-job.mjs');
+const jobScript = path.join(process.env.TANDEM_JOB_SCRIPT_ROOT || APP_ROOT, 'scripts', 'tandem-job.mjs');
 const agents = createWorkspace({ root: ROOT, cwd: CWD, specs, broadcast, getAgentContext(config) {
   const key = crypto.randomBytes(24).toString('hex');
   delegationKeys.set(config.id, { key, conversationId: config.conversationId });
@@ -356,6 +362,8 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ t: 'localstate', ...(m.t === 'savenotes' ? agents.saveNotes(m.cwd, m.text) : agents.localState()), saved: m.t === 'savenotes' }));
       } else if (m.t === 'saveprompt') {
         ws.send(JSON.stringify({ t: 'prompt', ...agents.savePrompt(m.text, m.on) }));
+      } else if (m.t === 'savelearnerprofile') {
+        ws.send(JSON.stringify({ t: 'learnerprofile', ...agents.saveLearnerProfile(m.profile) }));
       } else if (m.t === 'folders') {
         try { ws.send(JSON.stringify({ t: 'folders', request: m.request, ...await listFolders(m.path || os.homedir()) })); }
         catch (e) { ws.send(JSON.stringify({ t: 'folders', request: m.request, error: e.message })); }
@@ -375,6 +383,21 @@ wss.on('connection', (ws) => {
       } else if (m.t === 'githubrepos') {
         try { ws.send(JSON.stringify({ t: 'githubrepos', ...await repos.listAccountRepos(m.page ?? 1) })); }
         catch (e) { ws.send(JSON.stringify({ t: 'githubrepos', error: e.message })); }
+      } else if (m.t === 'apimodels') {
+        try {
+          const endpoint = new URL(String(m.endpoint || ''));
+          const keyEnv = String(m.keyEnv || '');
+          if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash || (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname)))) throw new Error('Use HTTPS, or HTTP for a local model server.');
+          if (keyEnv && !/^[A-Z][A-Z0-9_]{0,79}$/.test(keyEnv)) throw new Error('Enter an environment variable name, not an API key.');
+          endpoint.pathname = endpoint.pathname.replace(/\/chat\/completions\/?$/, '/models');
+          if (!endpoint.pathname.endsWith('/models')) throw new Error('Use a Chat Completions endpoint ending in /chat/completions.');
+          const response = await fetch(endpoint, { headers: keyEnv ? { Authorization: `Bearer ${process.env[keyEnv] || ''}` } : {} });
+          if (!response.ok) throw new Error(`Model request returned HTTP ${response.status}. Check the endpoint and connection.`);
+          const data = await response.json();
+          const models = (data.data || data.models || []).map((row) => typeof row === 'string' ? row : row?.id).filter((id) => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$/.test(id)).slice(0, 200);
+          if (!models.length) throw new Error('This endpoint did not return any usable model IDs.');
+          ws.send(JSON.stringify({ t: 'apimodels', models }));
+        } catch (e) { ws.send(JSON.stringify({ t: 'apimodels', error: e.message })); }
       } else if (m.t === 'clone') {
         await agents.withRepoChange(async (switchTo) => {
           cloneStatus({ busy: true, text: 'Starting clone…' });
@@ -396,12 +419,19 @@ wss.on('connection', (ws) => {
         agents.switchRepo(m.cwd); CWD = agents.cwd; git = emptyGit();
         broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
         await readGit();
+      } else if (m.t === 'chat-history') {
+        ws.send(JSON.stringify({ t: 'chat-history', agent: m.agent, cwd: agents.cwd, request: m.request, conversations: agents.chatHistory(m.agent) }));
+      } else if (m.t === 'chat-reopen') {
+        agents.reopenChat(m.agent, m.id, m.cwd);
+        broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
+        ws.send(JSON.stringify({ t: 'chat-reopened', agent: m.agent, id: m.id }));
       } else if (m.t === 'addagent' || m.t === 'removeagent') {
         if (m.t === 'addagent') agents.add(m.config || {}); else agents.remove(m.agent);
         broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
       } else if (typeof m.agent === 'string') {
         if (m.t === 'send' && (typeof m.text !== 'string' || m.text.length > MAX_TEXT)) return;
         await agents.action(m);
+        if (m.t === 'newchat') broadcast({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git });
       }
     } catch (e) {
       ws.send(JSON.stringify({ t: 'notice', text: e.message }));

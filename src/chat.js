@@ -19,6 +19,7 @@ export class ChatPanel {
   constructor(root, { id, name, otherName, modes, models = [], provider = id, number = 1, handlers }) {
     this.root = root;
     this.id = id;
+    this.storageId = id;
     this.name = name;
     this.otherName = otherName;
     this.h = handlers;
@@ -61,6 +62,7 @@ export class ChatPanel {
           </select></label></div>
           <div class="chat-meta"><span class="a-info"></span>
           <button class="c-new" title="Start a fresh conversation">new chat</button>
+          ${handlers.history ? '<button class="c-history" title="Reopen a saved conversation">history</button>' : ''}
           </div>
         </div>
         <div class="feed-controls"><input class="chat-search" type="search" placeholder="Search this chat" aria-label="Search chat" /><select class="chat-filter" aria-label="Chat filter"><option value="all">Everything</option><option value="messages">Messages</option><option value="tools">Tools</option><option value="thinking">Thinking</option></select></div>
@@ -135,8 +137,9 @@ export class ChatPanel {
     this.$('.c-compose').addEventListener('drop', (e) => { e.preventDefault(); this.addImages([...e.dataTransfer.files]); });
     this.$('.stop').addEventListener('click', () => this.h.stop());
     this.$('.c-new').addEventListener('click', () => {
-      if (this.entries.size === 0 || confirm(`Start a new conversation with ${name}? The current one stays in the CLI's history but leaves this view.`)) this.h.newChat();
+      this.h.newChat();
     });
+    this.$('.c-history')?.addEventListener('click', () => this.h.history());
     root.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => this.h.mode(b.dataset.mode)));
     this.ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -144,7 +147,7 @@ export class ChatPanel {
         this.submit();
       }
     });
-    this.ta.addEventListener('input', () => { this.autosize(); sessionStorage.setItem(`tandem:draft:${id}`, this.ta.value); });
+    this.ta.addEventListener('input', () => { this.autosize(); sessionStorage.setItem(`tandem:draft:${this.storageId}`, this.ta.value); });
     this.ta.value = sessionStorage.getItem(`tandem:draft:${id}`) || '';
     this.empty.querySelectorAll('.chips button').forEach((b) => b.addEventListener('click', () => ((this.ta.value = b.textContent), this.submit())));
     this.feed.addEventListener('click', (e) => this.onFeedClick(e));
@@ -154,6 +157,22 @@ export class ChatPanel {
   }
 
   // ------------------------------------------------------------ input
+  setConversation(id) {
+    if (!id || this.conversationId === id) return;
+    sessionStorage.setItem(`tandem:draft:${this.storageId}`, this.ta.value);
+    sessionStorage.setItem(`tandem:images:${this.storageId}`, JSON.stringify(this.attachments));
+    const first = !this.conversationId;
+    this.conversationId = id; this.storageId = `${this.id}:${id}`;
+    this.attachmentVersion++;
+    if (!first || sessionStorage.getItem(`tandem:draft:${this.storageId}`) !== null || sessionStorage.getItem(`tandem:images:${this.storageId}`) !== null) {
+      this.ta.value = sessionStorage.getItem(`tandem:draft:${this.storageId}`) || '';
+      try { this.attachments = JSON.parse(sessionStorage.getItem(`tandem:images:${this.storageId}`) || '[]'); } catch { this.attachments = []; }
+      if (!Array.isArray(this.attachments)) this.attachments = [];
+      this.attachments = this.attachments.filter(a => /^[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(a?.id)).slice(0, 4);
+    }
+    this.$('.chat-search').value = ''; this.$('.chat-filter').value = 'all';
+    this.renderAttachments(); this.autosize();
+  }
   autosize() {
     this.ta.style.height = 'auto';
     this.ta.style.height = Math.min(this.ta.scrollHeight, 260) + 'px';
@@ -165,13 +184,13 @@ export class ChatPanel {
     this.h.send(text, this.attachments);
     this.clearAttachments();
     this.ta.value = '';
-    sessionStorage.removeItem(`tandem:draft:${this.id}`);
+    sessionStorage.removeItem(`tandem:draft:${this.storageId}`);
     this.autosize();
   }
   clearAttachments() {
     this.attachmentVersion++;
     this.attachments = [];
-    sessionStorage.removeItem(`tandem:images:${this.id}`);
+    sessionStorage.removeItem(`tandem:images:${this.storageId}`);
     this.$('.c-upload-status').textContent = '';
     this.renderAttachments();
   }
@@ -185,7 +204,7 @@ export class ChatPanel {
       remove.addEventListener('click', () => { this.attachments = this.attachments.filter(i => i !== a); this.renderAttachments(); });
       item.append(img, name, remove); list.append(item);
     }
-    try { sessionStorage.setItem(`tandem:images:${this.id}`, JSON.stringify(this.attachments)); } catch {}
+    try { sessionStorage.setItem(`tandem:images:${this.storageId}`, JSON.stringify(this.attachments)); } catch {}
   }
   async addImages(files) {
     if (this.uploading || this.offline || this.workspaceBusy || !this.meta.available || !files.length) return;
@@ -372,8 +391,15 @@ export class ChatPanel {
       const images = document.createElement('div'); images.className = 'message-images';
       for (const a of ev.attachments) {
         if (!/^[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(a.id)) continue;
-        const link = document.createElement('a'); link.href = `/api/images/${a.id}`; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        const link = document.createElement('a'); link.href = `/api/images/${a.id}`; link.rel = 'noopener noreferrer';
         const img = document.createElement('img'); img.src = link.href; img.alt = a.name || 'Attached image'; img.loading = 'lazy';
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          const viewer = document.createElement('dialog'); viewer.className = 'image-viewer';
+          const full = document.createElement('img'); full.src = link.href; full.alt = img.alt;
+          viewer.append(full); viewer.addEventListener('click', () => viewer.close());
+          viewer.addEventListener('close', () => viewer.remove()); document.body.append(viewer); viewer.showModal();
+        });
         link.append(img); images.append(link);
       }
       el.querySelector('.bub').append(images);

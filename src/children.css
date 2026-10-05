@@ -39,7 +39,6 @@
 .child-form p { font: 11px/1.7 var(--mono); color: #a6a79f; margin: 0 0 4px; }
 .child-form label { display: grid; gap: 8px; font: 500 10px var(--mono); letter-spacing: .24em; text-transform: uppercase; color: var(--mute); margin: 18px 0; }
 .child-form label select { letter-spacing: .06em; text-transform: none; padding: 5px 6px; font-size: 11px; }
-.child-model-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .child-form textarea { resize: vertical; width: 100%; color: var(--ink); background: transparent; border: 0; border-bottom: 1px solid var(--faint); font: 12.5px/1.6 var(--mono); letter-spacing: 0; text-transform: none; padding: 6px 0; outline: none; transition: border-color .2s; }
 .child-form textarea:focus { border-color: var(--c); }
 .child-form > button { padding: 4px 0; color: var(--c); font: 500 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; border-bottom: 1px solid var(--c); text-shadow: 0 0 12px color-mix(in srgb, var(--c) 60%, transparent); }

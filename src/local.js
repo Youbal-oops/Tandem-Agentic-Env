@@ -61,6 +61,21 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
   $('#prompt-on').addEventListener('change', promptStatus);
   $('#save-prompt').addEventListener('click', () => { if (ask({ t: 'saveprompt', text: $('#global-prompt').value, on: $('#prompt-on').checked })) $('#prompt-status').textContent = 'Saving…'; });
   $('#global-prompt').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('#save-prompt').click(); } });
+  let learnerProfile = null;
+  function showProfile(profile) {
+    if (!profile) return;
+    learnerProfile = profile;
+    $('#profile-familiar').value = profile.familiar || ''; $('#profile-learning').value = profile.learning || '';
+    $('#profile-level').value = profile.level || 'familiar'; $('#profile-style').value = profile.style || 'plain'; $('#profile-checkpoints').value = profile.checkpoints || 'normal';
+    $('#profile-observed').textContent = profile.observed?.length ? `Observed in your work: ${profile.observed.join(', ')}` : 'No technologies observed yet.';
+    $('#profile-status').textContent = 'Saved locally';
+  }
+  $('#btn-profile').addEventListener('click', () => { if (!connected()) return notify('Connect to the local server first.'); $('#profile-dialog').showModal(); ask({ t: 'localstate' }); });
+  $('#close-profile').addEventListener('click', () => $('#profile-dialog').close());
+  $('#save-profile').addEventListener('click', () => {
+    const profile = { familiar: $('#profile-familiar').value, learning: $('#profile-learning').value, level: $('#profile-level').value, style: $('#profile-style').value, checkpoints: $('#profile-checkpoints').value, observed: learnerProfile?.observed || [] };
+    if (ask({ t: 'savelearnerprofile', profile })) $('#profile-status').textContent = 'Saving…';
+  });
   function showPrompt(p, force) {
     if (!p) return;
     if (force || !promptDirty()) { $('#global-prompt').value = p.text; $('#prompt-on').checked = p.on; }
@@ -72,8 +87,10 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
     repoChanged() { folder = ''; preview = null; request++; $('#inspect-dialog').close(); },
     receive(msg) {
       if (msg.t === 'prompt') { showPrompt(msg.prompt, true); return true; }
+      if (msg.t === 'learnerprofile') { showProfile(msg.learnerProfile); return true; }
       if (msg.t === 'localstate') {
         showPrompt(msg.prompt, false);
+        showProfile(msg.learnerProfile);
         const list = $('#recent-repos'); list.replaceChildren();
         for (const cwd of msg.recent || []) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'recent-repo';

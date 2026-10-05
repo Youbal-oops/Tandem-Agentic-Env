@@ -1,0 +1,39 @@
+name: Build Windows release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run package:win
+      - name: Check packaged desktop startup and features
+        run: node scripts/check-desktop.mjs
+      - name: Check portable executable
+        shell: pwsh
+        run: |
+          $portable = Get-ChildItem release/Tandem-*-Portable.exe | Select-Object -First 1
+          node scripts/check-desktop.mjs $portable.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check installer payload
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/Tandem-Setup-*.exe | Select-Object -First 1
+          node scripts/check-desktop.mjs $installer.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe

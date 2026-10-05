@@ -1786,3 +1786,6 @@ body.hide-ui #ticker {
 body.lite #stage, body.lite #vignette, body.lite #plabels { display: none; }
 body.lite *, body.lite *::before, body.lite *::after { animation: none !important; transition: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 body.lite { background: #0b0f17; }
+.image-viewer { max-width: min(96vw, 1400px); max-height: 94vh; padding: 10px; background: #050914; border: 1px solid var(--faint); }
+.image-viewer::backdrop { background: #000c; }
+.image-viewer img { display: block; max-width: min(94vw, 1360px); max-height: 90vh; object-fit: contain; cursor: zoom-out; }

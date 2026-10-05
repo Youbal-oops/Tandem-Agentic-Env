@@ -9,9 +9,9 @@ const name = (provider) => provider === 'claude' ? 'Claude' : 'Codex';
 const color = (provider) => provider === 'claude' ? 'var(--claude)' : 'var(--codex)';
 
 const EFFORTS = [['', 'Default effort'], ['low', 'Light'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high']];
-const lastChoice = (provider) => { try { return JSON.parse(localStorage.getItem(`tandem:child-choice:${provider}`)) || {}; } catch { return {}; } };
+const lastEffort = (provider) => { try { return localStorage.getItem(`tandem:child-effort:${provider}`) || ''; } catch { return ''; } };
 
-export function createChildChats({ panels, send, selectParent, notice, isDemo, models = () => [], onChange = () => {} }) {
+export function createChildChats({ panels, send, selectParent, notice, isDemo, models = () => ({}), defaults = () => ({}), onChange = () => {} }) {
   const records = new Map(), views = new Map(), parents = new Map(), seen = new Map();
   let active = null, parentId = null, offline = false;
   const drawer = document.createElement('aside');
@@ -21,9 +21,34 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     <div class="child-switch" role="group" aria-label="Conversation"><button data-view="main">My chat</button><button data-view="child" aria-pressed="true">Subagent chat</button></div>
     <div class="child-picker-row"><select class="child-picker" aria-label="Choose a child task"></select><button class="child-new">+ Task</button></div>
     <p class="child-context"></p><div class="child-views"></div>
-    <form class="child-form" hidden><h3>Give it a task</h3><p>The child gets its own conversation, attached to your main chat.</p><label>Agent<select name="provider"><option value="claude">Claude</option><option value="codex">Codex</option></select></label><div class="child-model-row"><label>Model<select name="model"></select></label><label>Reasoning<select name="effort"></select></label></div><label>Task<textarea name="task" required maxlength="40000" rows="6" placeholder="What should this agent work on?"></textarea></label><p>Starts in Edit mode in the current repository. You can change the mode in the child chat.</p><button type="submit">Start child task →</button></form>`;
+    <form class="child-form" hidden><h3>Give it a task</h3><p>The child gets its own conversation, attached to your main chat.</p><label>Agent<select name="provider"><option value="claude">Claude</option><option value="codex">Codex</option></select></label><label>Task<textarea name="task" required maxlength="40000" rows="6" placeholder="What should this agent work on?"></textarea></label><p>Starts in Edit mode in the current repository. You can change the mode in the child chat.</p><button type="submit">Start child task →</button></form>`;
   document.body.append(drawer);
   const $ = (s) => drawer.querySelector(s);
+  const modelLabel = document.createElement('label');
+  modelLabel.textContent = 'Model';
+  const modelSelect = document.createElement('select');
+  modelSelect.name = 'model'; modelSelect.setAttribute('aria-label', 'Subagent model');
+  modelLabel.append(modelSelect);
+  const effortLabel = document.createElement('label');
+  effortLabel.textContent = 'Reasoning';
+  const effortSelect = document.createElement('select');
+  effortSelect.name = 'effort'; effortSelect.setAttribute('aria-label', 'Subagent reasoning effort');
+  effortLabel.append(effortSelect);
+  $('.child-form [name="provider"]').closest('label').after(modelLabel);
+  modelLabel.after(effortLabel);
+  function renderModelOptions(provider) {
+    const select = $('.child-form [name="model"]');
+    const available = models()[provider] || [];
+    select.replaceChildren();
+    const defaultOption = document.createElement('option'); defaultOption.value = ''; defaultOption.textContent = 'CLI default'; select.append(defaultOption);
+    for (const model of available) { const option = document.createElement('option'); option.value = model; option.textContent = model; select.append(option); }
+    const custom = document.createElement('option'); custom.value = '__custom__'; custom.textContent = 'Custom model…'; select.append(custom);
+    const last = defaults()[provider];
+    if (last && [...select.options].some((option) => option.value === last)) select.value = last;
+    const efforts = $('.child-form [name="effort"]');
+    efforts.replaceChildren(...[...EFFORTS, ...(provider === 'claude' ? [['max', 'Max']] : [])].map(([value, text]) => Object.assign(document.createElement('option'), { value, textContent: text })));
+    efforts.value = [...efforts.options].some((o) => o.value === lastEffort(provider)) ? lastEffort(provider) : '';
+  }
   function childrenFor(id) { return [...records.values()].filter((c) => c.parentId === id); }
   function activity(id) { return childrenFor(id).map((c) => ({ id: c.id, provider: c.provider, title: c.title, busy: !!c.meta.busy, awaiting: !!c.meta.awaiting, status: c.meta.status, thinking: !!c.meta.stats?.thinking, moons: c.meta.stats?.tools?.running || [] })); }
   function label(c) { return c.meta.external ? 'Working with Claude' : c.meta.busy ? c.meta.awaiting ? 'Needs approval' : 'Working' : c.meta.status === 'failed' ? 'Failed' : c.meta.status === 'interrupted' ? 'Interrupted' : 'Ready'; }
@@ -70,7 +95,7 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     let v = views.get(c.id);
     if (!v) {
       const root = document.createElement('section'); root.hidden = true; $('.child-views').append(root);
-      const panel = new ChatPanel(root, { id: c.id, name: name(c.provider), provider: c.provider, modes: MODES[c.provider], models: c.provider === 'claude' ? ['opus', 'sonnet', 'haiku'] : [], handlers: {
+      const panel = new ChatPanel(root, { id: c.id, name: name(c.provider), provider: c.provider, modes: MODES[c.provider], models: models()[c.provider] || [], handlers: {
         send: (text, attachments) => command(c, 'send', { text, attachments }), stop: () => command(c, 'stop'),
         mode: (mode) => command(c, 'mode', { mode }), model: (model) => command(c, 'model', { model }), effort: (effort) => command(c, 'effort', { effort }),
         approve: (requestId, allow, answers) => command(c, 'approve', { requestId, allow, answers }), newChat() {}, focus() {},
@@ -120,24 +145,15 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     if (active && records.has(active)) markSeen(records.get(active));
     drawer.hidden = true; active = null; document.body.classList.remove('child-open'); renderParents();
   }
-  /** Fill the model and effort pickers for the chosen CLI, preselecting what was used last time. */
-  function fillChoices() {
-    const provider = $('.child-form [name="provider"]').value, last = lastChoice(provider);
-    const options = (list) => list.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
-    const model = $('.child-form [name="model"]'), effort = $('.child-form [name="effort"]');
-    model.innerHTML = options([['', 'CLI default'], ...models(provider).map((m) => [m, m])]);
-    effort.innerHTML = options([...EFFORTS, ...(provider === 'claude' ? [['max', 'Max']] : [])]);
-    model.value = [...model.options].some((o) => o.value === last.model) ? last.model : '';
-    effort.value = [...effort.options].some((o) => o.value === last.effort) ? last.effort : '';
-  }
   function newTask(id) {
     parentId = id; selectParent(id); active = null; show();
     $('.child-views').hidden = true;
     for (const v of views.values()) v.panel.root.hidden = true;
     $('.child-form').hidden = false; $('.child-picker-row').hidden = true; $('.child-context').hidden = true;
     setTitle(id, 'New task'); $('.child-state').textContent = 'new task';
-    $('.child-form [name="provider"]').value = panels[id]?.name === 'Claude' ? 'codex' : 'claude';
-    fillChoices();
+    const provider = $('.child-form [name="provider"]');
+    provider.value = panels[id]?.name === 'Claude' ? 'codex' : 'claude';
+    renderModelOptions(provider.value);
     $('.child-form textarea').focus();
   }
   function upsert(c) {
@@ -150,28 +166,36 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     const ids = new Set(items.map((c) => c.id));
     for (const id of records.keys()) if (!ids.has(id)) { records.delete(id); views.get(id)?.panel.root.remove(); views.delete(id); if (active === id) close(); }
     items.forEach(upsert); mountParents();
+    for (const [id, view] of views) {
+      const child = records.get(id);
+      if (child) view.panel.setModels(models()[child.provider] || []);
+    }
     for (const id of Object.keys(panels)) onChange(id);
   }
   $('.child-close').addEventListener('click', close);
   $('[data-view="main"]').addEventListener('click', () => { close(); if (parentId) selectParent(parentId); });
   $('[data-view="child"]').addEventListener('click', () => active && views.get(active)?.panel.focusInput());
   $('.child-picker').addEventListener('change', (e) => open(e.target.value));
+  $('.child-form [name="provider"]').addEventListener('change', (e) => renderModelOptions(e.target.value));
   $('.child-new').addEventListener('click', () => newTask(parentId));
-  $('.child-form [name="provider"]').addEventListener('change', fillChoices);
   drawer.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); panels[parentId]?.focusInput(); } });
   $('.child-form').addEventListener('submit', (e) => {
     e.preventDefault();
     if (offline || isDemo()) { notice(isDemo() ? 'Turn off Demo to start a real child task.' : 'Reconnect to start a task.'); return; }
     const form = new FormData(e.target);
-    const provider = form.get('provider'), model = form.get('model') || null, effort = form.get('effort') || null;
-    try { localStorage.setItem(`tandem:child-choice:${provider}`, JSON.stringify({ model, effort })); } catch {}
-    send({ t: 'child-create', agent: parentId, provider, text: form.get('task'), model, effort });
+    const provider = form.get('provider');
+    let model = form.get('model');
+    if (model === '__custom__') model = (prompt(`Model name for ${name(provider)}`, '') || '').trim();
+    const effort = form.get('effort');
+    try { localStorage.setItem(`tandem:child-effort:${provider}`, effort || ''); } catch {}
+    send({ t: 'child-create', agent: parentId, provider, text: form.get('task'), ...(model ? { model } : {}), ...(effort ? { effort } : {}) });
   });
   mountParents();
   return {
     mountParents, close, replace, activity,
     parentSelected(id) { if (!drawer.hidden && id !== parentId) close(); },
     setOffline(value) { offline = value; for (const c of records.values()) if (views.has(c.id)) view(c); },
+    setDefaults() { if (!$('.child-form').hidden) renderModelOptions($('.child-form [name="provider"]').value); },
     receive(m) {
       if (m.t === 'children') { replace(m.children); return true; }
       if (m.t === 'child') { upsert(m.child); return true; }

@@ -13,6 +13,7 @@ import { createNet } from './net.js';
 import { createDemo } from './demo.js';
 import { createLocalTools } from './local.js';
 import { createChildChats } from './children.js';
+import { createChatHistory } from './history.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const AGENTS = ['claude', 'codex'];
@@ -32,6 +33,7 @@ const MODES = {
 };
 // Claude accepts these aliases; Codex model names change often, so it offers its default plus a custom name.
 const MODEL_PRESETS = { claude: ['opus', 'sonnet', 'haiku'], codex: [] };
+const CHILD_MODEL_DEFAULTS = {};
 const configs = {};
 let repoPath = '';
 let cloneParent = '';
@@ -68,6 +70,7 @@ let demo = null;
 let localTools = null;
 let folderPicker = null;
 let childChats = null;
+const chatHistory = createChatHistory({ send: (msg) => net?.send(msg), connected: () => !!net?.open && !ui.demo, getRepo: () => repoPath, getName: (id) => NAMES[id], notify: (text) => showNotice(text) });
 
 // ---------------------------------------------------------------- panels
 const info = new InfoPanel($('#right'), { onSelect: (id) => select(id) });
@@ -93,6 +96,7 @@ function createPanel(id, provider = id) {
       stop: () => net.send({ t: 'stop', agent: id }),
       mode: (mode) => (ui.demo ? onMeta(id, { mode }) : net.send({ t: 'mode', agent: id, mode })),
       newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : net.send({ t: 'newchat', agent: id })),
+      history: () => chatHistory.open(id),
       approve: (requestId, allow, answers) => net.send({ t: 'approve', agent: id, requestId, allow, answers }),
       forward: (text) => forward(id, text),
       focus: () => select(ui.sel === id ? null : id),
@@ -101,7 +105,7 @@ function createPanel(id, provider = id) {
 }
 
 for (const id of AGENTS) createPanel(id);
-childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, models: (provider) => MODEL_PRESETS[provider] || [], onChange: childActivity });
+childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, models: () => MODEL_PRESETS, defaults: () => CHILD_MODEL_DEFAULTS, onChange: childActivity });
 
 function reconcile(next) {
   for (const id of [...AGENTS]) if (!next.some((a) => a.id === id)) {
@@ -120,6 +124,7 @@ function reconcile(next) {
       const el = document.createElement('div'); el.className = 'pl'; el.dataset.agent = c.id; el.innerHTML = '<b></b><small>idle</small>'; $('b', el).textContent = c.name; $('#plabels').append(el); labelEls[c.id] = el;
     }
     panels[c.id].root.style.setProperty('--c', AGENT_LOOK[c.id].hex);
+    panels[c.id].setConversation(c.conversationId);
     onMeta(c.id, { available: c.available ?? true });
   });
   info.setAgents(next, AGENT_LOOK);
@@ -478,8 +483,10 @@ function setOffline(off) {
 net = createNet({
   onStatus(kind, data) {
     if (kind === 'session') {
+      if (!localStorage.getItem('tandem:setup-complete')) setTimeout(() => { if (!document.querySelector('dialog[open]')) $('#setup-dialog').showModal(); }, 250);
       setGit(data.git);
       if (data.local) localTools?.receive({ t: 'localstate', ...data.local });
+      if (data.local?.childModelDefaults) { Object.assign(CHILD_MODEL_DEFAULTS, data.local.childModelDefaults); childChats?.setDefaults(); }
       cloneParent = data.cloneParent || '';
       if (data.clone) setCloneStatus(data.clone);
       reconcile(data.agents);
@@ -504,11 +511,21 @@ net = createNet({
   },
   onMessage(msg) {
     if (ui.demo) return;
+    if (chatHistory.receive(msg)) return;
     if (childChats?.receive(msg)) return;
     if (folderPicker?.receive(msg)) return;
     if (localTools?.receive(msg)) return;
     if (msg.t === 'notice') { showNotice(msg.text); return; }
     if (msg.t === 'githubrepos') { receiveGithubRepos(msg); return; }
+    if (msg.t === 'apimodels') {
+      const status = $('#api-model-status');
+      if (msg.error) { status.textContent = msg.error; return; }
+      const list = $('#api-model-options'); list.replaceChildren();
+      for (const model of msg.models || []) { const option = document.createElement('option'); option.value = model; list.append(option); }
+      status.textContent = `${msg.models.length} model${msg.models.length === 1 ? '' : 's'} found`;
+      if (!$('#agent-form [name="model"]').value && msg.models[0]) $('#agent-form [name="model"]').value = msg.models[0];
+      return;
+    }
     if (msg.t === 'clone') { setCloneStatus(msg); return; }
     if (msg.t === 'snapshot') {
       if (msg.configs) reconcile(msg.configs);
@@ -598,6 +615,10 @@ function openWorkspace() {
   localTools.openWorkspace();
   $('#workspace-dialog').showModal();
 }
+function openWorkspaceTab(tab) {
+  openWorkspace();
+  document.querySelector(`[data-workspace-tab="${tab}"]`)?.click();
+}
 function setCloneStatus(state) {
   cloneBusy = !!state.busy;
   $('#clone-status').textContent = state.text || '';
@@ -683,6 +704,22 @@ function renderAgentList() {
   }
 }
 $('#btn-workspace').addEventListener('click', openWorkspace);
+$('#btn-setup').addEventListener('click', () => $('#setup-dialog').showModal());
+$('#close-setup').addEventListener('click', () => $('#setup-dialog').close());
+$('#finish-setup').addEventListener('click', () => { localStorage.setItem('tandem:setup-complete', '1'); $('#setup-dialog').close(); showNotice('Setup saved. You can reopen it anytime from Set up.'); });
+document.querySelectorAll('[data-setup]').forEach((button) => button.addEventListener('click', () => {
+  const action = button.dataset.setup;
+  $('#setup-dialog').close();
+  if (action === 'folder') return openWorkspaceTab('local');
+  if (action === 'clone' || action === 'github') {
+    openWorkspaceTab('clone');
+    if (action === 'github') { $('#clone-source').value = 'account'; $('#clone-source').dispatchEvent(new Event('change')); }
+    return;
+  }
+  if (action === 'agents') return openWorkspaceTab('agents');
+  if (action === 'profile') return $('#btn-profile').click();
+  showNotice('New project setup is the next Tandem step. For now, choose a new empty folder with Open a folder.');
+}));
 $('#close-workspace').addEventListener('click', () => $('#workspace-dialog').close());
 $('.sl').style.pointerEvents = 'auto';
 $('.sl').style.cursor = 'pointer';
@@ -698,6 +735,11 @@ $('#agent-provider').addEventListener('change', () => {
   $('#api-fields').hidden = !api;
   $('#agent-form [name="model"]').required = api;
   $('#agent-form [name="endpoint"]').required = api;
+});
+$('#detect-api-models').addEventListener('click', () => {
+  if (!net.open) return showNotice('Connect to the server first.');
+  $('#api-model-status').textContent = 'Checking…';
+  net.send({ t: 'apimodels', endpoint: $('#agent-form [name="endpoint"]').value.trim(), keyEnv: $('#agent-form [name="keyEnv"]').value.trim() });
 });
 $('#agent-form').addEventListener('submit', (e) => {
   e.preventDefault();

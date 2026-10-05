@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import { createAgents, validModel } from './agents.mjs';
 import { createChildren } from './children.mjs';
 import { createImageStore, imageMetadata, apiContent } from './images.mjs';
+import { createWorktrees } from './worktrees.mjs';
+import { ensureProjectContext } from './project-context.mjs';
 
 const MAX_PROMPT = 8000;
 
@@ -11,10 +13,12 @@ const MAX_PROMPT = 8000;
 export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch, getAgentContext = () => ({}), pluginRoots, childPollMs }) {
   const dir = path.join(root, '.tandem');
   const images = createImageStore(root);
+  const worktrees = createWorktrees({ root });
   const file = path.join(dir, 'workspace.json');
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
   let workingDir = fs.existsSync(saved.cwd || '') ? saved.cwd : cwd;
+  let projectContext = ensureProjectContext(workingDir);
   const entries = new Map();
   let children;
   let timer;
@@ -22,9 +26,21 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   let closed = false;
   let repoChanging = false;
   let globalPrompt = { text: typeof saved.globalPrompt?.text === 'string' ? saved.globalPrompt.text.slice(0, MAX_PROMPT) : '', on: saved.globalPrompt?.on !== false };
+  let learnerProfile = {
+    familiar: String(saved.learnerProfile?.familiar || '').slice(0, 2000),
+    learning: String(saved.learnerProfile?.learning || '').slice(0, 2000),
+    observed: Array.isArray(saved.learnerProfile?.observed) ? saved.learnerProfile.observed.filter((x) => typeof x === 'string').slice(0, 40) : [],
+    level: ['new', 'familiar', 'confident'].includes(saved.learnerProfile?.level) ? saved.learnerProfile.level : 'familiar',
+    style: ['plain', 'examples', 'diagrams', 'questions'].includes(saved.learnerProfile?.style) ? saved.learnerProfile.style : 'plain',
+    checkpoints: ['light', 'normal', 'frequent'].includes(saved.learnerProfile?.checkpoints) ? saved.learnerProfile.checkpoints : 'normal',
+  };
+  const childModelDefaults = saved.childModelDefaults && typeof saved.childModelDefaults === 'object' ? { ...saved.childModelDefaults } : {};
   // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
-  const renderPrompt = (name) => (!globalPrompt.on ? '' : globalPrompt.text.trim()
-    .replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name));
+  const renderPrompt = (name) => {
+    const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name);
+    const profile = [learnerProfile.familiar && `Familiar stack: ${learnerProfile.familiar}`, learnerProfile.learning && `Learning goals: ${learnerProfile.learning}`, learnerProfile.observed.length && `Observed in their work: ${learnerProfile.observed.join(', ')}`, `Experience: ${learnerProfile.level}; teaching preference: ${learnerProfile.style}; checkpoint frequency: ${learnerProfile.checkpoints}.`, 'For material design choices, show viable options with complexity and tradeoffs. Recommend, but let the user choose before implementing.'].filter(Boolean).join('\n');
+    return [prompt, projectContext.text && `[Shared project context: ${projectContext.file}]\n${projectContext.text}`, profile && `[Learner profile]\n${profile}`].filter(Boolean).join('\n\n');
+  };
   // Chats of every repository other than the open one, keyed by its real path, so switching back (or
   // restarting tomorrow) finds them where they were. The open repo's chats live in `entries`.
   const repoChats = saved.repoChats && typeof saved.repoChats === 'object' && !Array.isArray(saved.repoChats) ? saved.repoChats : {};
@@ -32,11 +48,60 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   let recent = Array.isArray(saved.recent) ? saved.recent.filter((p) => typeof p === 'string').slice(0, 12) : [];
   const remember = () => { recent = [workingDir, ...recent.filter((p) => p !== workingDir)].slice(0, 12); };
   remember();
+  const historyDir = path.join(dir, 'conversations');
+  const validConversationId = (id) => typeof id === 'string' && /^[a-f0-9-]{36}$/.test(id);
+  const conversationState = (a) => a.cli ? a.cli.save() : { events: a.events, effort: a.effort };
+  function saveConversation(a) {
+    if (!validConversationId(a.config.conversationId)) return;
+    fs.mkdirSync(historyDir, { recursive: true });
+    const target = path.join(historyDir, `${a.config.conversationId}.json`);
+    fs.writeFileSync(target + '.tmp', JSON.stringify({ cwd: workingDir, config: { ...a.config }, state: conversationState(a), updatedAt: Date.now() }));
+    fs.renameSync(target + '.tmp', target);
+  }
+  function readConversation(id) {
+    if (!validConversationId(id)) throw new Error('Invalid conversation ID.');
+    try { return JSON.parse(fs.readFileSync(path.join(historyDir, `${id}.json`), 'utf8')); }
+    catch { throw new Error('That conversation could not be loaded.'); }
+  }
+  function chatHistory(agent) {
+    const a = entries.get(agent);
+    if (!a) throw new Error('Unknown agent.');
+    const rows = [];
+    for (const filename of fs.existsSync(historyDir) ? fs.readdirSync(historyDir) : []) {
+      if (!filename.endsWith('.json')) continue;
+      try {
+        const row = readConversation(filename.slice(0, -5));
+        if (row.cwd === workingDir && row.config.id === agent && row.config.provider === a.config.provider && row.config.conversationId !== a.config.conversationId) rows.push(row);
+      } catch { /* Leave damaged records intact, but omit them from the picker. */ }
+    }
+    rows.push({ cwd: workingDir, config: a.config, state: conversationState(a), updatedAt: Date.now() });
+    return rows.map((row) => {
+      const events = row.config.provider === 'api' ? row.state.events : row.state[row.config.provider]?.events;
+      const messages = (events || []).filter((event) => event.k === 'user');
+      return { id: row.config.conversationId, title: String(messages[0]?.text || 'New conversation').replace(/\s+/g, ' ').slice(0, 120), updatedAt: row.updatedAt, messages: messages.length, active: row.config.conversationId === a.config.conversationId };
+    }).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  function reopenChat(agent, id, cwd) {
+    if (repoChanging) throw new Error('Wait for the repository clone to finish.');
+    if (cwd !== workingDir) throw new Error('Repository changed. Reopen chat history.');
+    const a = entries.get(agent);
+    if (!a) throw new Error('Unknown agent.');
+    if (snapshot()[agent].meta.busy || children.snapshot().some((c) => c.parentId === agent && c.meta.busy)) throw new Error('Stop this agent and its child tasks before switching conversations.');
+    if (id === a.config.conversationId) return;
+    const row = readConversation(id);
+    if (row.cwd !== workingDir || row.config.id !== agent || row.config.provider !== a.config.provider) throw new Error('That conversation belongs to a different project or agent.');
+    saveConversation(a);
+    a.cli?.closeAll();
+    entries.delete(agent);
+    add(row.config, row.state);
+    save();
+  }
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: workingDir, notes, recent, globalPrompt, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
+    const data = { cwd: workingDir, notes, recent, globalPrompt, learnerProfile, childModelDefaults, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
+    for (const a of entries.values()) saveConversation(a);
   }
   function schedule() {
     if (loading || closed) return;
@@ -44,6 +109,14 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     timer = setTimeout(() => { try { save(); } catch (e) { console.error('Could not save workspace:', e.message); } }, 500);
   }
   const emit = (msg) => { if (closed) return; broadcast(msg); schedule(); };
+  function observeLearning(text) {
+    const matches = String(text || '').toLowerCase().match(/\b(javascript|typescript|react|next\.js|node\.js|python|java|sql|postgres(?:ql)?|supabase|docker|git|testing|css|html|api|authentication|security)\b/g) || [];
+    const found = [...new Set(matches.map((x) => x === 'postgresql' ? 'Postgres' : x === 'next.js' ? 'Next.js' : x === 'node.js' ? 'Node.js' : x.toUpperCase() === x ? x : x[0].toUpperCase() + x.slice(1)))];
+    const add = found.filter((x) => !learnerProfile.observed.includes(x));
+    if (!add.length) return;
+    learnerProfile.observed = [...learnerProfile.observed, ...add].slice(-40);
+    emit({ t: 'learnerprofile', learnerProfile });
+  }
   function apiMeta(a) {
     return { available: !a.config.keyEnv || !!process.env[a.config.keyEnv], busy: !!a.controller,
       model: a.config.model, modelPref: a.config.model, effort: a.effort || null,
@@ -68,10 +141,11 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       config.keyEnv = String(input.keyEnv || '');
       if (config.keyEnv && !/^[A-Z][A-Z0-9_]{0,79}$/.test(config.keyEnv)) throw new Error('Enter an environment variable name, not an API key.');
     }
-    const a = { config, events: state?.events || [], effort: state?.effort || null, controller: null };
+    const agentCwd = provider === 'api' ? workingDir : worktrees.ensure(workingDir, `agent-${config.id}`);
+    const a = { config, cwd: agentCwd, events: state?.events || [], effort: state?.effort || null, controller: null };
     entries.set(config.id, a);
     if (provider !== 'api') {
-      a.cli = createAgents({ cwd: workingDir, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name), broadcast: (msg) => {
+      a.cli = createAgents({ cwd: a.cwd, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name), broadcast: (msg) => {
         if (entries.get(config.id) !== a) return;
         emit({ ...msg, agent: config.id });
       } });
@@ -119,8 +193,8 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (a.controller === controller) { a.controller = null; emit({ t: 'meta', agent: a.config.id, meta: apiMeta(a) }); }
     }
   }
-  children = createChildren({ root, specs, getCwd: () => workingDir, broadcast: emit, pluginRoots, pollMs: childPollMs, getInstructions: (provider) => renderPrompt(provider === 'claude' ? 'Claude' : 'Codex'),
-    getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, provider: a.config.provider,
+  children = createChildren({ root, specs, getCwd: () => workingDir, getWorktree: (repo, id) => worktrees.ensure(repo, id), broadcast: emit, pluginRoots, pollMs: childPollMs, getInstructions: (provider) => renderPrompt(provider === 'claude' ? 'Claude' : 'Codex'),
+    getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, cwd: a.cwd, provider: a.config.provider,
       sessionId: a.cli?.save()[a.config.provider]?.sessionId })) });
   const busy = () => Object.values(snapshot()).some((s) => s.meta.busy) || children.busy();
   function remove(id) {
@@ -130,6 +204,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     if (snapshot()[id].meta.busy || children.snapshot().some((c) => c.parentId === id && c.meta.busy)) throw new Error('Stop this agent and its child tasks before removing it.');
     fs.mkdirSync(path.join(dir, 'archives'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'archives', `${Date.now()}-${id}.json`), JSON.stringify({ cwd: workingDir, config: a.config, conversation: snapshot()[id] }));
+    saveConversation(a);
     entries.delete(id); a.cli?.closeAll(); a.controller?.abort(); schedule();
   }
   function switchRepo(next, reserved = false) {
@@ -142,11 +217,12 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     // Archive old chats before resetting their repo-bound CLI sessions.
     fs.mkdirSync(path.join(dir, 'archives'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'archives', `${Date.now()}.json`), JSON.stringify({ cwd: workingDir, agents: snapshot() }));
-    const configs = [...entries.values()].map((a) => ({ config: a.config, settings: a.cli ? a.cli.save() : { effort: a.effort } }));
+    for (const a of entries.values()) saveConversation(a);
+    const configs = [...entries.values()].map((a) => ({ config: { ...a.config }, settings: a.cli ? a.cli.save() : { effort: a.effort } }));
     // Keep this repo's chats (full state, same session ids) for when it is opened again.
-    repoChats[workingDir] = [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } }));
+    repoChats[workingDir] = [...entries.values()].map((a) => ({ config: { ...a.config }, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } }));
     for (const a of entries.values()) a.cli?.closeAll();
-    entries.clear(); workingDir = next;
+    entries.clear(); workingDir = next; projectContext = ensureProjectContext(workingDir);
     remember();
     const returning = repoChats[next];
     delete repoChats[next];
@@ -165,18 +241,31 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   return {
     get cwd() { return workingDir; },
     configs: () => [...entries.values()].map((a) => ({ ...a.config, available: !!snapshot()[a.config.id].meta.available })),
-    snapshot, add, remove, switchRepo,
+    snapshot, add, remove, switchRepo, chatHistory, reopenChat,
     children: () => children.snapshot(),
     pollChildren: () => children.poll(),
     childAction(m) {
       if (repoChanging) throw new Error('Wait for the repository clone to finish.');
-      return m.t === 'child-create' ? children.create(m.agent, m) : children.action(m);
+      if (m.t !== 'child-create') return children.action(m);
+      const provider = m.provider;
+      if (m.model) childModelDefaults[provider] = m.model;
+      else if (childModelDefaults[provider]) m = { ...m, model: childModelDefaults[provider] };
+      const child = children.create(m.agent, m); save(); return child;
     },
-    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt }),
+    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt, learnerProfile, childModelDefaults }),
     savePrompt(text, on) {
       if (typeof text !== 'string' || text.length > MAX_PROMPT) throw new Error(`The prompt can contain up to ${MAX_PROMPT.toLocaleString()} characters.`);
       globalPrompt = { text, on: on !== false }; save();
       return { prompt: globalPrompt };
+    },
+    saveLearnerProfile(profile) {
+      if (!profile || typeof profile !== 'object') throw new Error('Invalid learner profile.');
+      learnerProfile = {
+        familiar: String(profile.familiar || '').slice(0, 2000), learning: String(profile.learning || '').slice(0, 2000),
+        observed: Array.isArray(profile.observed) ? profile.observed.filter((x) => typeof x === 'string').slice(0, 40) : learnerProfile.observed,
+        level: ['new', 'familiar', 'confident'].includes(profile.level) ? profile.level : 'familiar', style: ['plain', 'examples', 'diagrams', 'questions'].includes(profile.style) ? profile.style : 'plain', checkpoints: ['light', 'normal', 'frequent'].includes(profile.checkpoints) ? profile.checkpoints : 'normal',
+      };
+      save(); return { learnerProfile };
     },
     saveNotes(cwd, text) {
       if (cwd !== workingDir) throw new Error('Repository changed. Reopen Notes before saving.');
@@ -207,15 +296,19 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (repoChanging && m.t === 'send') throw new Error('Wait for the repository clone to finish before sending a task.');
       const a = entries.get(m.agent);
       if (!a) throw new Error('Unknown agent.');
+      if (m.t === 'send') observeLearning(m.text);
       const attachments = m.t === 'send' ? images.resolve(m.attachments) : [];
       if (m.t === 'send' && !String(m.text || '').trim() && attachments.length) m = { ...m, text: 'Describe these images.' };
       if (m.t === 'newchat') {
+        if (repoChanging) throw new Error('Wait for the repository clone to finish.');
+        if (snapshot()[m.agent].meta.busy) throw new Error('Stop this agent before starting a new chat.');
         if (children.snapshot().some((c) => c.parentId === m.agent && c.meta.busy)) throw new Error('Finish or stop this conversation’s child tasks before starting a new chat.');
+        saveConversation(a);
         a.config.conversationId = crypto.randomUUID();
         // Refresh the delegation token and instructions for the new conversation.
         if (a.cli) {
           const saved = a.cli.save(); a.cli.closeAll();
-          a.cli = createAgents({ cwd: workingDir, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
+          a.cli = createAgents({ cwd: a.cwd, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
           a.cli.restore(saved);
         }
         emit({ t: 'children', children: children.snapshot() });
@@ -235,6 +328,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         emit({ t: 'meta', agent: m.agent, meta: apiMeta(a) });
       }
       schedule();
+      if (m.t === 'newchat') save();
     },
     closeAll() { clearTimeout(timer); if (!closed) { children.close(); try { save(); } catch {} } closed = true; for (const a of entries.values()) { a.cli?.closeAll(); a.controller?.abort(); } },
   };
