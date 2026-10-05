@@ -1789,3 +1789,54 @@ body.lite { background: #0b0f17; }
 .image-viewer { max-width: min(96vw, 1400px); max-height: 94vh; padding: 10px; background: #050914; border: 1px solid var(--faint); }
 .image-viewer::backdrop { background: #000c; }
 .image-viewer img { display: block; max-width: min(94vw, 1360px); max-height: 90vh; object-fit: contain; cursor: zoom-out; }
+
+.learn-switch {
+  margin-left: 14px;
+  padding: 1px 8px;
+  border: 1px solid var(--faint);
+  border-radius: 10px;
+  font: 500 9px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.learn-switch b {
+  font-weight: 600;
+}
+.learn-switch:hover {
+  color: var(--ink);
+}
+.learn-switch[aria-pressed='true'] {
+  color: var(--warn);
+  border-color: var(--warn);
+  box-shadow: 0 0 14px -6px var(--warn);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  font: 12px/1.5 var(--mono);
+  color: var(--ink);
+}
+.check input {
+  accent-color: var(--warn);
+}
+.agent.learning .c-compose {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--faint));
+}
+.implement {
+  padding: 3px 10px;
+  border-radius: 5px;
+  background: var(--warn);
+  color: #1a1204;
+  font: 600 10px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: 0 0 16px -4px var(--warn);
+}
+.implement:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+}

@@ -48,7 +48,7 @@
     </header>
 
     <aside id="left">
-      <div class="kicker"><span>Agents</span><span id="cwd" title="Folder the agents work in"></span></div>
+      <div class="kicker"><span>Agents</span><button id="btn-learning" class="learn-switch" type="button" aria-pressed="false" title="Learning mode: main agents stay read-only until you approve each step">Learning <b>off</b></button><span id="cwd" title="Folder the agents work in"></span></div>
       <p class="roster-help">Select a planet or a row to open its chat.<br />Click the sun to change repositories.</p>
       <section id="chat-claude"></section>
       <section id="chat-codex"></section>
@@ -146,8 +146,9 @@
       <label>Stack you know<textarea id="profile-familiar" maxlength="2000" rows="3" placeholder="React, JavaScript, basic HTML/CSS…"></textarea></label>
       <label>What you want to learn<textarea id="profile-learning" maxlength="2000" rows="3" placeholder="Backend design, databases, testing…"></textarea></label>
       <div class="form-row"><label>Experience<select id="profile-level"><option value="new">New</option><option value="familiar">Familiar</option><option value="confident">Confident</option></select></label><label>Teaching<select id="profile-style"><option value="plain">Plain language</option><option value="examples">Examples</option><option value="diagrams">Diagrams</option><option value="questions">Guiding questions</option></select></label><label>Checkpoints<select id="profile-checkpoints"><option value="light">Light</option><option value="normal">Normal</option><option value="frequent">Frequent</option></select></label></div>
-      <p id="profile-observed"></p><div class="form-row"><button id="save-profile">Save profile</button><span id="profile-status" role="status"></span></div>
-      <p>Used by every agent and child task. Tandem updates observed technologies from your work; you can always edit this profile.</p>
+      <label class="check"><input type="checkbox" id="profile-learning-mode"> Learning mode: main agents work with you, one approved step at a time</label>
+      <p id="profile-stack"></p><p id="profile-observed"></p><div class="form-row"><button id="save-profile">Save profile</button><span id="profile-status" role="status"></span></div>
+      <p>Learning mode applies to main agents only. When it is on, they stay read-only and walk you through the approach, design and plan; nothing changes until you press <b>Approve &amp; implement</b>. The profile and repository stack are sent only while it is on. Subagent chats are not affected.</p>
     </dialog>
     <dialog id="setup-dialog" class="setup-dialog">
       <header><div><span class="eyebrow">TANDEM SETUP</span><h2>Make this your dev space</h2></div><button id="close-setup">Close ×</button></header>

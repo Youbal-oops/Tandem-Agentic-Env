@@ -21,6 +21,8 @@ export class ChatPanel {
     this.id = id;
     this.storageId = id;
     this.name = name;
+    this.provider = provider;
+    this.learning = false;
     this.otherName = otherName;
     this.h = handlers;
     this.modes = modes;
@@ -87,6 +89,7 @@ export class ChatPanel {
             <button class="attach" type="button" title="Attach images (or paste or drop them here)" aria-label="Attach images">+ image</button>
             <input class="image-picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
             <span class="c-hint"></span>
+            <button class="implement" type="button" hidden title="Learning mode: let this agent change files for the step you agreed">Approve &amp; implement</button>
             <button class="send" title="Send (Enter)" aria-label="Send">send ⏎</button>
             <button class="stop" title="Stop" aria-label="Stop">■ stop</button>
           </div>
@@ -136,6 +139,7 @@ export class ChatPanel {
     this.$('.c-compose').addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); });
     this.$('.c-compose').addEventListener('drop', (e) => { e.preventDefault(); this.addImages([...e.dataTransfer.files]); });
     this.$('.stop').addEventListener('click', () => this.h.stop());
+    this.$('.implement').addEventListener('click', () => this.h.implement?.());
     this.$('.c-new').addEventListener('click', () => {
       this.h.newChat();
     });
@@ -249,6 +253,11 @@ export class ChatPanel {
     this.offline = v;
     this.refresh();
   }
+  /** Learning mode: main CLI agents are read-only until the user approves implementation. */
+  setLearning(on) {
+    this.learning = !!on && (this.provider === 'claude' || this.provider === 'codex');
+    this.refresh();
+  }
   setWorkspaceBusy(v) {
     this.workspaceBusy = v;
     this.refresh();
@@ -297,8 +306,12 @@ export class ChatPanel {
     this.effortSel.disabled = !!m.busy || this.offline;
     this.root.querySelectorAll('[data-mode]').forEach((b) => {
       b.classList.toggle('on', b.dataset.mode === m.mode);
-      b.disabled = !!m.busy;
+      b.disabled = !!m.busy || (this.learning && b.dataset.mode !== (this.provider === 'claude' ? 'plan' : 'read'));
     });
+    this.root.classList.toggle('learning', this.learning);
+    const implement = this.$('.implement');
+    implement.hidden = !this.learning;
+    implement.disabled = this.offline || !m.available || !!m.busy || this.workspaceBusy;
     this.root.classList.toggle('busy', !!m.busy);
     this.working.hidden = !m.busy || m.awaiting > 0;
     this.working.querySelector('span').textContent = this.running.size ? `running ${this.running.size} step${this.running.size > 1 ? 's' : ''}` : 'thinking';

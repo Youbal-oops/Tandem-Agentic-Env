@@ -253,7 +253,7 @@ const server = http.createServer((req, res) => {
       try {
         const m = JSON.parse(body);
         let result;
-        if (m.action === 'start') result = agents.childAction({ t: 'child-create', agent: parent.id, provider: m.provider, text: m.text, model: m.model, effort: m.effort });
+        if (m.action === 'start') result = agents.childAction({ t: 'child-create', agent: parent.id, provider: m.provider, text: m.text, model: m.model, effort: m.effort, viaAgent: true });
         else {
           const child = agents.children().find((c) => c.id === m.id && c.parentId === parent.id);
           if (!child) throw new Error('Unknown child job for this conversation.');
@@ -277,6 +277,7 @@ const server = http.createServer((req, res) => {
         git,
         modes: MODES,
         models: modelChoices(),
+        learningMode: agents.localState().learningMode,
         agents: agents.configs(),
         clone: cloneState,
         cloneParent: path.dirname(ROOT),
@@ -362,6 +363,8 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ t: 'localstate', ...(m.t === 'savenotes' ? agents.saveNotes(m.cwd, m.text) : agents.localState()), saved: m.t === 'savenotes' }));
       } else if (m.t === 'saveprompt') {
         ws.send(JSON.stringify({ t: 'prompt', ...agents.savePrompt(m.text, m.on) }));
+      } else if (m.t === 'learningmode') {
+        broadcast({ t: 'learnerprofile', ...agents.setLearningMode(m.on === true) });
       } else if (m.t === 'savelearnerprofile') {
         ws.send(JSON.stringify({ t: 'learnerprofile', ...agents.saveLearnerProfile(m.profile) }));
       } else if (m.t === 'folders') {

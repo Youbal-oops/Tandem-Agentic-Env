@@ -1,5 +1,5 @@
 // Local tools are read-only until the user saves notes or sends a prepared draft.
-export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify }) {
+export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify, onLearning = () => {} }) {
   const $ = (s) => document.querySelector(s);
   let request = 0;
   let folder = '';
@@ -70,6 +70,13 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
     $('#profile-observed').textContent = profile.observed?.length ? `Observed in your work: ${profile.observed.join(', ')}` : 'No technologies observed yet.';
     $('#profile-status').textContent = 'Saved locally';
   }
+  function showLearning(msg) {
+    if (typeof msg.learningMode === 'boolean') { $('#profile-learning-mode').checked = msg.learningMode; onLearning(msg.learningMode); }
+    if (Array.isArray(msg.stack)) $('#profile-stack').textContent = msg.stack.length ? `Detected in this repository: ${msg.stack.join(', ')}` : 'No technologies detected in this repository yet.';
+  }
+  const setLearningMode = (on) => { if (!ask({ t: 'learningmode', on })) { $('#profile-learning-mode').checked = !on; } };
+  $('#profile-learning-mode').addEventListener('change', (e) => setLearningMode(e.target.checked));
+  $('#btn-learning').addEventListener('click', () => setLearningMode($('#btn-learning').getAttribute('aria-pressed') !== 'true'));
   $('#btn-profile').addEventListener('click', () => { if (!connected()) return notify('Connect to the local server first.'); $('#profile-dialog').showModal(); ask({ t: 'localstate' }); });
   $('#close-profile').addEventListener('click', () => $('#profile-dialog').close());
   $('#save-profile').addEventListener('click', () => {
@@ -87,10 +94,11 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
     repoChanged() { folder = ''; preview = null; request++; $('#inspect-dialog').close(); },
     receive(msg) {
       if (msg.t === 'prompt') { showPrompt(msg.prompt, true); return true; }
-      if (msg.t === 'learnerprofile') { showProfile(msg.learnerProfile); return true; }
+      if (msg.t === 'learnerprofile') { showProfile(msg.learnerProfile); showLearning(msg); return true; }
       if (msg.t === 'localstate') {
         showPrompt(msg.prompt, false);
         showProfile(msg.learnerProfile);
+        showLearning(msg);
         const list = $('#recent-repos'); list.replaceChildren();
         for (const cwd of msg.recent || []) {
           const button = document.createElement('button'); button.type = 'button'; button.className = 'recent-repo';

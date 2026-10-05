@@ -151,7 +151,7 @@ function lastTokenCount(file) {
   return null;
 }
 
-export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex'], environment = {}, taskInstructions = '', getInstructions = () => '' }) {
+export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex'], environment = {}, taskInstructions = '', getInstructions = () => '', denyTool = () => null }) {
   const rel = (p) => {
     p = String(p ?? '');
     const base = cwd.replace(/[\\/]+$/, '');
@@ -592,6 +592,11 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
 
   function claudeControl(a, m) {
     const r = m.request || {};
+    if (r.subtype === 'can_use_tool' && denyTool(r.tool_name)) {
+      // The app, not the model, decides when a locked agent may leave read-only work.
+      if (a.proc?.stdin?.writable) a.proc.stdin.write(JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: m.request_id, response: { behavior: 'deny', message: String(denyTool(r.tool_name)) } } }) + '\n');
+      return;
+    }
     if (r.subtype === 'can_use_tool') {
       a.approvals.set(m.request_id, { input: r.input, toolUseId: r.tool_use_id });
       put(a, {

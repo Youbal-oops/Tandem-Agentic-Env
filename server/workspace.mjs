@@ -7,6 +7,7 @@ import { createImageStore, imageMetadata, apiContent } from './images.mjs';
 import { createWorktrees } from './worktrees.mjs';
 import { ensureProjectContext } from './project-context.mjs';
 import { workflowPrompt } from './workflow.mjs';
+import { detectStack } from './stack.mjs';
 
 const MAX_PROMPT = 8000;
 
@@ -35,13 +36,22 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     style: ['plain', 'examples', 'diagrams', 'questions'].includes(saved.learnerProfile?.style) ? saved.learnerProfile.style : 'plain',
     checkpoints: ['light', 'normal', 'frequent'].includes(saved.learnerProfile?.checkpoints) ? saved.learnerProfile.checkpoints : 'normal',
   };
+  // Learning mode: main agents work read-only until the user presses Approve & implement.
+  let learningMode = saved.learningMode === true;
+  const READ_ONLY = { claude: 'plan', codex: 'read' };
+  const IMPLEMENT_TEXT = 'Approved in Tandem: the user pressed "Approve & implement". Implement the agreed step now, staying within the agreed scope, then write the report (what changed, why, how you checked it, what comes next).';
+  let stackCache = { cwd: '', at: 0, list: [] };
+  const detectedStack = () => {
+    if (stackCache.cwd !== workingDir || Date.now() - stackCache.at > 60000) stackCache = { cwd: workingDir, at: Date.now(), list: detectStack(workingDir) };
+    return stackCache.list;
+  };
   const childModelDefaults = saved.childModelDefaults && typeof saved.childModelDefaults === 'object' ? { ...saved.childModelDefaults } : {};
   // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
   // Subagent chats get the standing prompt and project context only; the learner profile and working method are for main agents.
   const renderPrompt = (name, { provider = 'codex', child = false } = {}) => {
     const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name);
-    const profile = [learnerProfile.familiar && `Familiar stack: ${learnerProfile.familiar}`, learnerProfile.learning && `Learning goals: ${learnerProfile.learning}`, learnerProfile.observed.length && `Observed in their work: ${learnerProfile.observed.join(', ')}`, `Experience: ${learnerProfile.level}; teaching preference: ${learnerProfile.style}; checkpoint frequency: ${learnerProfile.checkpoints}.`].filter(Boolean).join('\n');
-    return [prompt, projectContext.text && `[Shared project context: ${projectContext.file}]\n${projectContext.text}`, !child && profile && `[Learner profile]\n${profile}`, !child && workflowPrompt(provider, learnerProfile.checkpoints)].filter(Boolean).join('\n\n');
+    const profile = [learnerProfile.familiar && `Familiar stack: ${learnerProfile.familiar}`, learnerProfile.learning && `Learning goals: ${learnerProfile.learning}`, detectedStack().length && `Repo stack (detected from the repository): ${detectedStack().join(', ')}`, learnerProfile.observed.length && `Observed in their work: ${learnerProfile.observed.join(', ')}`, `Experience: ${learnerProfile.level}; teaching preference: ${learnerProfile.style}; checkpoint frequency: ${learnerProfile.checkpoints}.`].filter(Boolean).join('\n');
+    return [prompt, projectContext.text && `[Shared project context: ${projectContext.file}]\n${projectContext.text}`, !child && learningMode && profile && `[Learner profile]\n${profile}`, !child && learningMode && workflowPrompt(provider, learnerProfile.checkpoints)].filter(Boolean).join('\n\n');
   };
   // Chats of every repository other than the open one, keyed by its real path, so switching back (or
   // restarting tomorrow) finds them where they were. The open repo's chats live in `entries`.
@@ -100,7 +110,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   }
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: workingDir, notes, recent, globalPrompt, learnerProfile, childModelDefaults, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
+    const data = { cwd: workingDir, notes, recent, globalPrompt, learnerProfile, learningMode, childModelDefaults, repoChats, agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
     for (const a of entries.values()) saveConversation(a);
@@ -126,6 +136,36 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       capability: 'API chat · no local file tools', awaiting: 0 };
   }
   function put(a, ev) { a.events.push(ev); emit({ t: 'ev', agent: a.config.id, ev }); }
+  /** One CLI wrapper per main agent. The app, not the model, enforces learning mode. */
+  function makeCli(a) {
+    const { config } = a;
+    return createAgents({ cwd: a.cwd, specs, providers: [config.provider], ...getAgentContext(config),
+      getInstructions: () => renderPrompt(config.name, { provider: config.provider }),
+      denyTool: (name) => (learningMode && !a.unlocked && name === 'ExitPlanMode' ? 'Tandem learning mode: the user must press "Approve & implement" before you leave read-only mode.' : null),
+      broadcast: (msg) => {
+        if (entries.get(config.id) !== a) return;
+        emit({ ...msg, agent: config.id });
+        if (msg.t !== 'meta') return;
+        if (msg.meta?.busy) a.sawBusy = true;
+        else if (a.unlocked && a.sawBusy) { a.unlocked = false; a.sawBusy = false; }
+        if (msg.meta && !msg.meta.busy) relock(a);
+      } });
+  }
+  /** Put an idle main agent back into read-only mode unless the user just approved implementation. */
+  function relock(a) {
+    const mode = READ_ONLY[a.config.provider];
+    if (!learningMode || a.unlocked || !a.cli || !mode) return;
+    if (a.cli.snapshot()[a.config.provider].meta.mode !== mode) a.cli.setMode(a.config.provider, mode);
+  }
+  function implement(a) {
+    if (!learningMode) throw new Error('Turn on learning mode first.');
+    if (!a.cli) throw new Error('Only Claude and Codex chats can implement changes.');
+    const provider = a.config.provider;
+    if (a.cli.snapshot()[provider].meta.busy) throw new Error('Wait for the agent to finish its current reply.');
+    a.unlocked = true; a.sawBusy = false;
+    a.cli.setMode(provider, 'edit');
+    a.cli.send(provider, IMPLEMENT_TEXT);
+  }
   function add(input, state) {
     if (entries.size >= 8) throw new Error('Up to eight planets per workspace.');
     const provider = input.provider;
@@ -147,10 +187,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     const a = { config, cwd: agentCwd, events: state?.events || [], effort: state?.effort || null, controller: null };
     entries.set(config.id, a);
     if (provider !== 'api') {
-      a.cli = createAgents({ cwd: a.cwd, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name, { provider: config.provider }), broadcast: (msg) => {
-        if (entries.get(config.id) !== a) return;
-        emit({ ...msg, agent: config.id });
-      } });
+      a.cli = makeCli(a);
       if (state) a.cli.restore(state);
       if (!state && config.model) a.cli.setModel(provider, config.model);
     }
@@ -163,6 +200,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   }
   if (!entries.size) for (const c of defaults) add(c);
   loading = false;
+  for (const a of entries.values()) relock(a);
   function snapshot() {
     return Object.fromEntries([...entries].map(([id, a]) => [id, a.cli ? a.cli.snapshot()[a.config.provider] : { events: a.events, meta: apiMeta(a) }]));
   }
@@ -249,12 +287,16 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     childAction(m) {
       if (repoChanging) throw new Error('Wait for the repository clone to finish.');
       if (m.t !== 'child-create') return children.action(m);
+      if (m.viaAgent && learningMode) {
+        const parent = entries.get(m.agent);
+        if (parent?.cli && !parent.unlocked) throw new Error('Learning mode: the user must press Approve & implement before this agent delegates work.');
+      }
       const provider = m.provider;
       if (m.model) childModelDefaults[provider] = m.model;
       else if (childModelDefaults[provider]) m = { ...m, model: childModelDefaults[provider] };
       const child = children.create(m.agent, m); save(); return child;
     },
-    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt, learnerProfile, childModelDefaults }),
+    localState: () => ({ cwd: workingDir, notes: typeof notes[workingDir] === 'string' ? notes[workingDir] : '', recent, prompt: globalPrompt, learnerProfile, learningMode, stack: detectedStack(), childModelDefaults }),
     savePrompt(text, on) {
       if (typeof text !== 'string' || text.length > MAX_PROMPT) throw new Error(`The prompt can contain up to ${MAX_PROMPT.toLocaleString()} characters.`);
       globalPrompt = { text, on: on !== false }; save();
@@ -267,7 +309,12 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         observed: Array.isArray(profile.observed) ? profile.observed.filter((x) => typeof x === 'string').slice(0, 40) : learnerProfile.observed,
         level: ['new', 'familiar', 'confident'].includes(profile.level) ? profile.level : 'familiar', style: ['plain', 'examples', 'diagrams', 'questions'].includes(profile.style) ? profile.style : 'plain', checkpoints: ['light', 'normal', 'frequent'].includes(profile.checkpoints) ? profile.checkpoints : 'normal',
       };
-      save(); return { learnerProfile };
+      save(); return { learnerProfile, learningMode, stack: detectedStack() };
+    },
+    setLearningMode(on) {
+      learningMode = on === true;
+      for (const a of entries.values()) { if (!learningMode) a.unlocked = false; else relock(a); }
+      save(); return { learnerProfile, learningMode, stack: detectedStack() };
     },
     saveNotes(cwd, text) {
       if (cwd !== workingDir) throw new Error('Repository changed. Reopen Notes before saving.');
@@ -298,7 +345,9 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (repoChanging && m.t === 'send') throw new Error('Wait for the repository clone to finish before sending a task.');
       const a = entries.get(m.agent);
       if (!a) throw new Error('Unknown agent.');
-      if (m.t === 'send') observeLearning(m.text);
+      if (m.t === 'implement') return implement(a);
+      if (m.t === 'mode' && learningMode && a.cli && !a.unlocked && m.mode !== READ_ONLY[a.config.provider]) throw new Error('Learning mode keeps this agent read-only until you press Approve & implement.');
+      if (m.t === 'send') { observeLearning(m.text); if (learningMode && a.cli && !a.unlocked) relock(a); }
       const attachments = m.t === 'send' ? images.resolve(m.attachments) : [];
       if (m.t === 'send' && !String(m.text || '').trim() && attachments.length) m = { ...m, text: 'Describe these images.' };
       if (m.t === 'newchat') {
@@ -310,7 +359,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         // Refresh the delegation token and instructions for the new conversation.
         if (a.cli) {
           const saved = a.cli.save(); a.cli.closeAll();
-          a.cli = createAgents({ cwd: a.cwd, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name, { provider: a.config.provider }), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
+          a.cli = makeCli(a);
           a.cli.restore(saved);
         }
         emit({ t: 'children', children: children.snapshot() });

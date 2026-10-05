@@ -46,7 +46,7 @@ const warned = {};
 const other = (id) => AGENTS.find((a) => a !== id);
 const clamp = (lo, v, hi) => Math.max(lo, Math.min(hi, v));
 
-const ui = { sel: null, hidden: false, demo: false, connected: false };
+const ui = { sel: null, hidden: false, demo: false, connected: false, learning: false };
 const awaiting = { claude: new Set(), codex: new Set() };
 const bootAt = Date.now();
 
@@ -98,10 +98,12 @@ function createPanel(id, provider = id) {
       newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : net.send({ t: 'newchat', agent: id })),
       history: () => chatHistory.open(id),
       approve: (requestId, allow, answers) => net.send({ t: 'approve', agent: id, requestId, allow, answers }),
+      implement: () => (ui.demo ? showNotice('Turn off Demo to use learning mode.') : net.send({ t: 'implement', agent: id })),
       forward: (text) => forward(id, text),
       focus: () => select(ui.sel === id ? null : id),
     },
   });
+  panels[id].setLearning(ui.learning);
 }
 
 for (const id of AGENTS) createPanel(id);
@@ -819,6 +821,12 @@ document.addEventListener('click', e => { const menu = document.querySelector('.
 localTools = createLocalTools({
   send: (msg) => net.send(msg), connected: () => net.open && !ui.demo, getRepo: () => repoPath,
   getAgents: () => AGENTS.map((id) => ({ id, name: NAMES[id] })), notify: showNotice,
+  onLearning(on) {
+    ui.learning = on;
+    for (const id of AGENTS) panels[id]?.setLearning(on);
+    $('#btn-learning').setAttribute('aria-pressed', String(on));
+    $('#btn-learning').firstElementChild.textContent = on ? 'on' : 'off';
+  },
   setDraft(id, text) {
     if (!panels[id]) return false;
     const draft = [panels[id].ta.value, text].filter(Boolean).join('\n\n');
