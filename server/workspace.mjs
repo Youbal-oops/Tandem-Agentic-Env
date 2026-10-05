@@ -6,6 +6,7 @@ import { createChildren } from './children.mjs';
 import { createImageStore, imageMetadata, apiContent } from './images.mjs';
 import { createWorktrees } from './worktrees.mjs';
 import { ensureProjectContext } from './project-context.mjs';
+import { workflowPrompt } from './workflow.mjs';
 
 const MAX_PROMPT = 8000;
 
@@ -36,10 +37,11 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   };
   const childModelDefaults = saved.childModelDefaults && typeof saved.childModelDefaults === 'object' ? { ...saved.childModelDefaults } : {};
   // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
-  const renderPrompt = (name) => {
+  // Subagent chats get the standing prompt and project context only; the learner profile and working method are for main agents.
+  const renderPrompt = (name, { provider = 'codex', child = false } = {}) => {
     const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(workingDir)).replaceAll('{{path}}', workingDir).replaceAll('{{agent}}', name);
-    const profile = [learnerProfile.familiar && `Familiar stack: ${learnerProfile.familiar}`, learnerProfile.learning && `Learning goals: ${learnerProfile.learning}`, learnerProfile.observed.length && `Observed in their work: ${learnerProfile.observed.join(', ')}`, `Experience: ${learnerProfile.level}; teaching preference: ${learnerProfile.style}; checkpoint frequency: ${learnerProfile.checkpoints}.`, 'For material design choices, show viable options with complexity and tradeoffs. Recommend, but let the user choose before implementing.'].filter(Boolean).join('\n');
-    return [prompt, projectContext.text && `[Shared project context: ${projectContext.file}]\n${projectContext.text}`, profile && `[Learner profile]\n${profile}`].filter(Boolean).join('\n\n');
+    const profile = [learnerProfile.familiar && `Familiar stack: ${learnerProfile.familiar}`, learnerProfile.learning && `Learning goals: ${learnerProfile.learning}`, learnerProfile.observed.length && `Observed in their work: ${learnerProfile.observed.join(', ')}`, `Experience: ${learnerProfile.level}; teaching preference: ${learnerProfile.style}; checkpoint frequency: ${learnerProfile.checkpoints}.`].filter(Boolean).join('\n');
+    return [prompt, projectContext.text && `[Shared project context: ${projectContext.file}]\n${projectContext.text}`, !child && profile && `[Learner profile]\n${profile}`, !child && workflowPrompt(provider, learnerProfile.checkpoints)].filter(Boolean).join('\n\n');
   };
   // Chats of every repository other than the open one, keyed by its real path, so switching back (or
   // restarting tomorrow) finds them where they were. The open repo's chats live in `entries`.
@@ -145,7 +147,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     const a = { config, cwd: agentCwd, events: state?.events || [], effort: state?.effort || null, controller: null };
     entries.set(config.id, a);
     if (provider !== 'api') {
-      a.cli = createAgents({ cwd: a.cwd, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name), broadcast: (msg) => {
+      a.cli = createAgents({ cwd: a.cwd, specs, providers: [provider], ...getAgentContext(config), getInstructions: () => renderPrompt(config.name, { provider: config.provider }), broadcast: (msg) => {
         if (entries.get(config.id) !== a) return;
         emit({ ...msg, agent: config.id });
       } });
@@ -193,7 +195,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (a.controller === controller) { a.controller = null; emit({ t: 'meta', agent: a.config.id, meta: apiMeta(a) }); }
     }
   }
-  children = createChildren({ root, specs, getCwd: () => workingDir, getWorktree: (repo, id) => worktrees.ensure(repo, id), broadcast: emit, pluginRoots, pollMs: childPollMs, getInstructions: (provider) => renderPrompt(provider === 'claude' ? 'Claude' : 'Codex'),
+  children = createChildren({ root, specs, getCwd: () => workingDir, getWorktree: (repo, id) => worktrees.ensure(repo, id), broadcast: emit, pluginRoots, pollMs: childPollMs, getInstructions: (provider) => renderPrompt(provider === 'claude' ? 'Claude' : 'Codex', { provider, child: true }),
     getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, cwd: a.cwd, provider: a.config.provider,
       sessionId: a.cli?.save()[a.config.provider]?.sessionId })) });
   const busy = () => Object.values(snapshot()).some((s) => s.meta.busy) || children.busy();
@@ -308,7 +310,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         // Refresh the delegation token and instructions for the new conversation.
         if (a.cli) {
           const saved = a.cli.save(); a.cli.closeAll();
-          a.cli = createAgents({ cwd: a.cwd, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
+          a.cli = createAgents({ cwd: a.cwd, specs, providers: [a.config.provider], ...getAgentContext(a.config), getInstructions: () => renderPrompt(a.config.name, { provider: a.config.provider }), broadcast: (msg) => emit({ ...msg, agent: a.config.id }) });
           a.cli.restore(saved);
         }
         emit({ t: 'children', children: children.snapshot() });
