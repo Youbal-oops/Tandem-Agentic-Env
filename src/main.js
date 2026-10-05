@@ -93,7 +93,7 @@ function createPanel(id, provider = id) {
       stop: () => net.send({ t: 'stop', agent: id }),
       mode: (mode) => (ui.demo ? onMeta(id, { mode }) : net.send({ t: 'mode', agent: id, mode })),
       newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : net.send({ t: 'newchat', agent: id })),
-      approve: (requestId, allow) => net.send({ t: 'approve', agent: id, requestId, allow }),
+      approve: (requestId, allow, answers) => net.send({ t: 'approve', agent: id, requestId, allow, answers }),
       forward: (text) => forward(id, text),
       focus: () => select(ui.sel === id ? null : id),
     },
@@ -101,7 +101,7 @@ function createPanel(id, provider = id) {
 }
 
 for (const id of AGENTS) createPanel(id);
-childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, onChange: childActivity });
+childChats = createChildChats({ panels, send: (m) => net?.send(m), selectParent: (id) => select(id), notice: (text) => showNotice(text), isDemo: () => ui.demo, models: (provider) => MODEL_PRESETS[provider] || [], onChange: childActivity });
 
 function reconcile(next) {
   for (const id of [...AGENTS]) if (!next.some((a) => a.id === id)) {
@@ -375,7 +375,8 @@ function select(id) {
 
 function layout() {
   const vw = window.innerWidth;
-  const lw = vw < 700 ? vw : clamp(340, vw * 0.30, 470);
+  const saved = Number(localStorage.getItem('tandem:left-width')) || 0;
+  const lw = vw < 700 ? vw : saved ? clamp(340, saved, Math.min(820, vw * 0.55)) : clamp(380, vw * 0.34, 600);
   const rw = vw > 1280 ? clamp(360, vw * 0.22, 460) : 0;
   const root = document.documentElement.style;
   root.setProperty('--lw', lw + 'px');
@@ -383,6 +384,13 @@ function layout() {
   scene.setInsets(ui.hidden ? 0 : lw - 40, ui.hidden ? 0 : Math.max(0, rw - 40));
 }
 window.addEventListener('resize', layout);
+$('#left-resize').addEventListener('pointerdown', (e) => {
+  e.preventDefault(); e.target.setPointerCapture(e.pointerId);
+  const move = (ev) => { try { localStorage.setItem('tandem:left-width', String(Math.round(ev.clientX + 20))); } catch {} layout(); };
+  const stop = () => { e.target.removeEventListener('pointermove', move); e.target.removeEventListener('pointerup', stop); };
+  e.target.addEventListener('pointermove', move); e.target.addEventListener('pointerup', stop);
+});
+$('#left-resize').addEventListener('dblclick', () => { try { localStorage.removeItem('tandem:left-width'); } catch {} layout(); });
 
 function setHidden(on) {
   ui.hidden = on;
@@ -696,6 +704,10 @@ $('#agent-form').addEventListener('submit', (e) => {
   if (!net.open) return showNotice('Connect to the server first.');
   const config = Object.fromEntries(new FormData(e.target));
   net.send({ t: 'addagent', config });
+});
+$('#btn-push').addEventListener('click', () => {
+  if (ui.demo) { showNotice('Turn off Demo to push.'); return; }
+  showNotice('Pushing…'); net?.send({ t: 'push' });
 });
 $('#btn-export').addEventListener('click', () => {
   const lines = [`# Tandem session`, ``, `Repository: ${repoPath}`, `Exported: ${new Date().toISOString()}`, ``];

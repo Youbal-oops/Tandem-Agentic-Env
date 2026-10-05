@@ -99,17 +99,18 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
     }
     children.set(c.id, c);
   }
-  function create(parentId, { provider, text, model = null, title } = {}) {
+  function create(parentId, { provider, text, model = null, effort = null, title } = {}) {
     const parent = getParents().find((p) => p.id === parentId);
     if (!parent) throw new Error('Select a main chat first.');
     if (!['claude', 'codex'].includes(provider) || !specs[provider]) throw new Error('That CLI is not installed.');
     if (typeof text !== 'string' || !text.trim() || text.length > 40000) throw new Error('Enter a task of up to 40,000 characters.');
     if (model && !validModel(model)) throw new Error('Invalid model name.');
+    if (effort && !['low', 'medium', 'high', 'xhigh', ...(provider === 'claude' ? ['max'] : [])].includes(effort)) throw new Error('Invalid reasoning effort.');
     if ([...children.values()].filter((c) => visible(c)).length >= 40) throw new Error('This conversation has reached its 40 child chat limit. Start a new main chat.');
     const id = `child-${crypto.randomBytes(8).toString('hex')}`;
     const c = { id, parentId, parentKey: parent.key, cwd: getCwd(), provider, source: 'tandem',
       title: String(title || text).replace(/\s+/g, ' ').slice(0, 100), status: 'running', updatedAt: Date.now(),
-      state: { events: [], mode: 'edit', modelPref: model } };
+      state: { events: [], mode: 'edit', modelPref: model || null, effort: effort || null } };
     children.set(id, c); attach(c); publish(c);
     c.cli.send(provider, text); return snapshot(c);
   }
@@ -125,7 +126,7 @@ export function createChildren({ root, specs, getCwd, getParents, broadcast, plu
     const method = { send: 'send', stop: 'stop', mode: 'setMode', model: 'setModel', effort: 'setEffort', approve: 'approve' }[m.action];
     if (!method) throw new Error('Unknown child chat action.');
     if (m.action === 'stop') c.status = 'interrupted';
-    c.cli[method](c.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.action === 'send' ? attachments : m.allow === true);
+    c.cli[method](c.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.action === 'send' ? attachments : m.allow === true, m.answers);
     publish(c); return snapshot(c);
   }
   function poll() {

@@ -222,7 +222,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       }
       if (a.cli) {
         const method = { send: 'send', stop: 'stop', mode: 'setMode', model: 'setModel', effort: 'setEffort', newchat: 'newChat', approve: 'approve' }[m.t];
-        if (method) a.cli[method](a.config.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.t === 'send' ? attachments : m.allow === true);
+        if (method) a.cli[method](a.config.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.t === 'send' ? attachments : m.allow === true, m.answers);
       } else {
         if (m.t === 'send') return sendApi(a, m.text, attachments);
         if (m.t === 'stop' || m.t === 'newchat') {

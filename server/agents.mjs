@@ -631,11 +631,23 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
     pushMeta(a);
   }
 
-  function decide(a, requestId, allow) {
+  /** Keep only string answers keyed by question text, so a client cannot inject other tool input. */
+  function cleanAnswers(input, answers) {
+    if (!Array.isArray(input?.questions) || !answers || typeof answers !== 'object') return null;
+    const out = {};
+    for (const q of input.questions) {
+      const v = answers[q.question];
+      if (typeof v === 'string' && v.trim()) out[q.question] = v.slice(0, 2000);
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
+  function decide(a, requestId, allow, answers) {
     const ap = a.approvals.get(requestId);
     if (!ap || !a.proc?.stdin?.writable) return;
+    const picked = allow ? cleanAnswers(ap.input, answers) : null;
     const response = allow
-      ? { behavior: 'allow', updatedInput: ap.input }
+      ? { behavior: 'allow', updatedInput: picked ? { ...ap.input, answers: picked } : ap.input }
       : { behavior: 'deny', message: 'The user declined this action in Tandem.' };
     a.proc.stdin.write(JSON.stringify({ type: 'control_response', response: { subtype: 'success', request_id: requestId, response } }) + '\n');
     a.approvals.delete(requestId);
@@ -961,7 +973,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
       }
     },
     newChat,
-    approve: (id, requestId, allow) => agents[id] && decide(agents[id], String(requestId), !!allow),
+    approve: (id, requestId, allow, answers) => agents[id] && decide(agents[id], String(requestId), !!allow, answers),
     snapshot: () => Object.fromEntries(Object.values(agents).map((a) => [a.id, { meta: meta(a), events: a.events }])),
     closeAll() {
       clearTimeout(initialPoll);

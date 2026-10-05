@@ -19,6 +19,7 @@ import { createWorkspace } from './workspace.mjs';
 import { createRepoService } from './repos.mjs';
 import { listRepoFiles, readRepoFile, readRepoDiff } from './inspect.mjs';
 import { listFolders } from './folders.mjs';
+import { pushBranch } from './gitpush.mjs';
 import { createImageStore, MAX_IMAGE_BYTES } from './images.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -246,7 +247,7 @@ const server = http.createServer((req, res) => {
       try {
         const m = JSON.parse(body);
         let result;
-        if (m.action === 'start') result = agents.childAction({ t: 'child-create', agent: parent.id, provider: m.provider, text: m.text, model: m.model });
+        if (m.action === 'start') result = agents.childAction({ t: 'child-create', agent: parent.id, provider: m.provider, text: m.text, model: m.model, effort: m.effort });
         else {
           const child = agents.children().find((c) => c.id === m.id && c.parentId === parent.id);
           if (!child) throw new Error('Unknown child job for this conversation.');
@@ -358,6 +359,11 @@ wss.on('connection', (ws) => {
       } else if (m.t === 'folders') {
         try { ws.send(JSON.stringify({ t: 'folders', request: m.request, ...await listFolders(m.path || os.homedir()) })); }
         catch (e) { ws.send(JSON.stringify({ t: 'folders', request: m.request, error: e.message })); }
+      } else if (m.t === 'push') {
+        try {
+          const { branch, dirty } = await pushBranch(agents.cwd);
+          ws.send(JSON.stringify({ t: 'notice', text: `Pushed to origin/${branch}.${dirty ? ` ${dirty} uncommitted change${dirty === 1 ? ' was' : 's were'} not included.` : ''}` }));
+        } catch (e) { ws.send(JSON.stringify({ t: 'notice', text: `Push failed: ${e.message}` })); }
       } else if (m.t === 'stopall') {
         agents.stopAll(); broadcast({ t: 'notice', text: 'Stopped all agent sessions. Conversations are kept.' });
       } else if (['files', 'file', 'diff'].includes(m.t)) {

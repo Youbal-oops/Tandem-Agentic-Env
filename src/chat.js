@@ -79,12 +79,15 @@ export class ChatPanel {
         <div class="c-attachments" aria-label="Attached images" hidden></div>
         <div class="c-upload-status" role="status" aria-live="polite"></div>
         <div class="c-compose">
-          <button class="attach" type="button" title="Attach images (or paste or drop them here)" aria-label="Attach images">+ image</button>
-          <input class="image-picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
           <span class="pr">›</span>
-          <textarea rows="1" placeholder="Message ${esc(name)}…" spellcheck="true"></textarea>
-          <button class="send" title="Send (Enter)" aria-label="Send">send ⏎</button>
-          <button class="stop" title="Stop" aria-label="Stop">■ stop</button>
+          <textarea rows="2" placeholder="Message ${esc(name)}…  (Enter to send · Shift+Enter for a new line)" spellcheck="true"></textarea>
+          <div class="c-actions">
+            <button class="attach" type="button" title="Attach images (or paste or drop them here)" aria-label="Attach images">+ image</button>
+            <input class="image-picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
+            <span class="c-hint"></span>
+            <button class="send" title="Send (Enter)" aria-label="Send">send ⏎</button>
+            <button class="stop" title="Stop" aria-label="Stop">■ stop</button>
+          </div>
         </div>
       </div>`;
 
@@ -145,6 +148,7 @@ export class ChatPanel {
     this.ta.value = sessionStorage.getItem(`tandem:draft:${id}`) || '';
     this.empty.querySelectorAll('.chips button').forEach((b) => b.addEventListener('click', () => ((this.ta.value = b.textContent), this.submit())));
     this.feed.addEventListener('click', (e) => this.onFeedClick(e));
+    this.feed.addEventListener('focusin', (e) => { if (e.target.matches?.('.ask-text')) e.target.closest('.ask-opt').querySelector('input[type=radio],input[type=checkbox]').checked = true; });
     this.renderAttachments();
     this.refresh();
   }
@@ -152,7 +156,7 @@ export class ChatPanel {
   // ------------------------------------------------------------ input
   autosize() {
     this.ta.style.height = 'auto';
-    this.ta.style.height = Math.min(this.ta.scrollHeight, 190) + 'px';
+    this.ta.style.height = Math.min(this.ta.scrollHeight, 260) + 'px';
   }
   submit() {
     const text = this.ta.value.trim();
@@ -457,6 +461,7 @@ export class ChatPanel {
     const d = en.data;
     const status = d.status || 'running';
     en.el.dataset.status = status;
+    en.el.classList.toggle('asking', d.name === 'AskUserQuestion' && Array.isArray(d.detail?.questions));
     if (d.cls) en.el.dataset.cls = d.cls;
     en.el.querySelector('.tn').textContent = TOOL_LABEL[d.name] || d.name || 'Tool';
     en.el.querySelector('.ts').textContent = d.summary || '';
@@ -470,9 +475,30 @@ export class ChatPanel {
     else this.running.delete(ev.id);
   }
 
+  /** Selection questions from Claude's AskUserQuestion tool: one radio or checkbox group per question. */
+  askForm(d) {
+    const qs = d.detail.questions.slice(0, 4);
+    const body = qs.map((q, i) => {
+      const type = q.multiSelect ? 'checkbox' : 'radio';
+      const opts = (Array.isArray(q.options) ? q.options : []).map((o) => `<label class="ask-opt"><input type="${type}" name="q${i}" value="${esc(o.label)}"><span><b>${esc(o.label)}</b>${o.description ? `<small>${esc(o.description)}</small>` : ''}</span></label>`).join('');
+      return `<fieldset class="ask-q" data-q="${i}"><legend>${q.header ? `<i>${esc(q.header)}</i>` : ''}${esc(q.question)}</legend>${opts}<label class="ask-opt ask-other"><input type="${type}" name="q${i}" value="__other__"><span><input type="text" class="ask-text" placeholder="Other…" maxlength="500"></span></label></fieldset>`;
+    }).join('');
+    return `<div class="ask">${body}<button class="ask-send" data-act="answer">Send answer</button></div>`;
+  }
+
+  collectAnswers(card, d) {
+    const answers = {};
+    d.detail.questions.slice(0, 4).forEach((q, i) => {
+      const picked = [...card.querySelectorAll(`[name="q${i}"]:checked`)].map((x) => (x.value === '__other__' ? card.querySelector(`[data-q="${i}"] .ask-text`).value.trim() : x.value)).filter(Boolean);
+      if (picked.length) answers[q.question] = picked.join(', ');
+    });
+    return answers;
+  }
+
   detail(d) {
     const inp = d.detail || {};
     let html = '';
+    if (d.name === 'AskUserQuestion' && d.status === 'awaiting' && Array.isArray(inp.questions) && inp.questions.length) return this.askForm(d);
     if (d.name === 'Edit' && inp.old_string !== undefined) {
       html += `<pre class="diff del">${esc(inp.old_string)}</pre><pre class="diff add">${esc(inp.new_string)}</pre>`;
     } else if (d.name === 'Write' && inp.content !== undefined) {
@@ -536,6 +562,11 @@ export class ChatPanel {
     } else if (act === 'fwd') {
       const en = [...this.entries.values()].find((x) => x.el === card);
       if (en?.text) this.h.forward(en.text);
+    } else if (act === 'answer') {
+      const en = [...this.entries.values()].find((x) => x.el === card);
+      const answers = en?.data?.requestId ? this.collectAnswers(card, en.data) : {};
+      if (!Object.keys(answers).length) { this.flash(b, 'Pick an option first'); return; }
+      this.h.approve(en.data.requestId, true, answers);
     } else if (act === 'allow' || act === 'deny') {
       const en = [...this.entries.values()].find((x) => x.el === card);
       if (en?.data?.requestId) this.h.approve(en.data.requestId, act === 'allow');
