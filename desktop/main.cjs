@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { choosePort } = require('./port.cjs');
 
 let window;
 const smokeTest = process.argv.includes('--tandem-smoke-test');
@@ -18,6 +19,11 @@ async function start() {
   process.env.TANDEM_DATA_ROOT ||= app.getPath('userData');
   process.env.TANDEM_JOB_SCRIPT_ROOT = appRoot;
   process.env.TANDEM_CWD ||= workspace;
+  // Use the usual port when it is free, and another one when something else already holds it. The server reads
+  // TANDEM_PORT when it loads, so this has to be settled first.
+  const port = await choosePort(Number(process.env.TANDEM_PORT || 4317));
+  if (port !== Number(process.env.TANDEM_PORT || 4317)) console.log(`Port ${process.env.TANDEM_PORT || 4317} is in use; Tandem is using ${port} instead.`);
+  process.env.TANDEM_PORT = String(port);
 
   // Dynamic ESM imports need a file URL on Windows; a raw C:\\ path is treated
   // as an unsupported URL scheme by Electron's loader.
@@ -48,7 +54,19 @@ async function start() {
   if (!loaded) throw new Error('Tandem’s local server did not start.');
 }
 
-app.whenReady().then(start).catch((error) => {
+// One Tandem per data folder. A second launch (a double click on the shortcut, or a newer download while the old
+// one is open) brings the running window forward and exits, rather than fighting it over the port and the saved chats.
+// Instances with their own data folder (tests, TANDEM_DATA_ROOT) are separate and unaffected.
+const haveLock = app.requestSingleInstanceLock();
+if (!haveLock) app.quit();
+app.on('second-instance', () => {
+  if (!window) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+});
+
+(haveLock ? app.whenReady().then(start) : Promise.resolve()).catch((error) => {
   console.error(error);
   const detail = String(error?.stack || error).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
   const failed = new BrowserWindow({ show: !smokeTest, width: 620, height: 360, backgroundColor: '#07111f', webPreferences: { contextIsolation: true, nodeIntegration: false } });
