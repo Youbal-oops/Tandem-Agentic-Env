@@ -50,7 +50,7 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     efforts.value = [...efforts.options].some((o) => o.value === lastEffort(provider)) ? lastEffort(provider) : '';
   }
   function childrenFor(id) { return [...records.values()].filter((c) => c.parentId === id); }
-  function activity(id) { return childrenFor(id).map((c) => ({ id: c.id, provider: c.provider, title: c.title, busy: !!c.meta.busy, awaiting: !!c.meta.awaiting, status: c.meta.status, thinking: !!c.meta.stats?.thinking, moons: c.meta.stats?.tools?.running || [] })); }
+  function activity(id) { return childrenFor(id).map((c) => ({ id: c.id, provider: c.provider, title: c.title, busy: !!c.meta.busy, awaiting: !!c.meta.awaiting, status: c.meta.status, ctx: c.meta.stats?.ctx || null, cache: c.meta.stats?.cache || 0, thinking: !!c.meta.stats?.thinking, moons: c.meta.stats?.tools?.running || [] })); }
   function label(c) { return c.meta.external ? 'Working with Claude' : c.meta.busy ? c.meta.awaiting ? 'Needs approval' : 'Working' : c.meta.status === 'failed' ? 'Failed' : c.meta.status === 'interrupted' ? 'Interrupted' : 'Ready'; }
   function markSeen(c) { seen.set(c.id, c.updatedAt); try { sessionStorage.setItem(`tandem:child-seen:${c.id}`, String(c.updatedAt)); } catch {} }
   function renderParents() {

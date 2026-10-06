@@ -135,7 +135,8 @@ function gaugeRing(inner, outer, baseColor, warn = true) {
 
 export function createScene(host) {
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  let pixelRatio = Math.min(window.devicePixelRatio || 1, 1.75);
+  // Full quality as before. Only a GPU that cannot keep up gets a lower step (see the watchdog), and that is remembered.
+  let pixelRatio = Math.min(window.devicePixelRatio || 1, 1.75, Number((() => { try { return localStorage.getItem('tandem:scene-dpr'); } catch { return 0; } })()) || 1.75);
   renderer.setPixelRatio(pixelRatio);
   renderer.setClearColor(0x02030a, 1);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -240,14 +241,16 @@ export function createScene(host) {
 
   function emit(x, y, z, vx, vy, vz, color, size, life) {
     const i = P.next;
+    const k = i * 3;
     P.next = (P.next + 1) % MAXP;
-    P.pos.set([x, y, z], i * 3);
-    P.vel.set([vx, vy, vz], i * 3);
-    P.col.set([color.r, color.g, color.b], i * 3);
+    P.pos[k] = x; P.pos[k + 1] = y; P.pos[k + 2] = z;
+    P.vel[k] = vx; P.vel[k + 1] = vy; P.vel[k + 2] = vz;
+    P.col[k] = color.r; P.col[k + 1] = color.g; P.col[k + 2] = color.b;
     P.base[i] = size;
     P.size[i] = size;
     P.max[i] = P.life[i] = life;
     P.alpha[i] = 1;
+    P.colDirty = true;
   }
 
   // ---------------------------------------------------------------- planets
@@ -317,7 +320,9 @@ export function createScene(host) {
             float lam = max(dot(N,L),0.);
             float fres = pow(1.-max(dot(N,V),0.), 3.0);
             vec3 col = surf*(0.03 + 0.72*lam) + uRim*fres*(0.10 + lam*0.38);
-            float pat = fbm(p*vec3(3.,9.,3.) + uTime*0.25)*0.5+0.5;
+            // the activity pattern only shows while the planet is busy; at rest its contribution is a fraction of a percent
+            float pat = 0.5;
+            if (uHeat > 0.1) pat = fbm(p*vec3(3.,9.,3.) + uTime*0.25)*0.5+0.5;
             // activity glow shows as light in the bands, strongest on the night side
             col += surf*uHeat*(0.12+0.5*pat)*(1.0-lam*0.7)*0.9 + uRim*uHeat*fres*0.55;
             col += uRim*uHover*(0.10+fres*0.5);
@@ -677,18 +682,43 @@ export function createScene(host) {
     sky.push({ type: 'rock', mesh, a, b, t: 0, dur: rnd(22, 34), spin: new THREE.Vector3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)) });
   }
 
+  // Sky events are rare treats, not background noise: on average a shooting star every quarter hour or so, and a
+  // ship, asteroid or comet roughly once an hour. Due times are wall-clock and remembered across restarts, so closing
+  // and reopening the app neither resets the wait nor stacks up a pile of events. Alt+K still shows one on demand.
   const SPAWN = { ship: spawnShip, meteor: spawnMeteor, comet: spawnComet, asteroid: spawnAsteroid };
-  const timers = { ship: rnd(5, 9), meteor: rnd(1.5, 3), comet: rnd(35, 60), asteroid: rnd(12, 22) };
-  const EVERY = { ship: [28, 65], meteor: [3.5, 8], comet: [90, 170], asteroid: [24, 48] };
+  const EVERY_MIN = { meteor: [8, 22], ship: [35, 75], asteroid: [50, 95], comet: [70, 150] }; // minutes between events of one kind
+  const MIN_GAP_MS = 4 * 60 * 1000; // never two events within four minutes of each other
+  const SKY_KEY = 'tandem:sky-due';
+  const SOON_MS = [2 * 60 * 1000, 9 * 60 * 1000]; // an event that came due while the app was closed shows up a few minutes into the next session
+  const loadDue = () => { try { const d = JSON.parse(localStorage.getItem(SKY_KEY) || '{}'); return d && typeof d === 'object' ? d : {}; } catch { return {}; } };
+  const due = loadDue();
+  const nowMs = Date.now();
+  const stored = Object.fromEntries(Object.keys(SPAWN).map((k) => [k, Number(due[k])]));
+  const overdue = Object.keys(SPAWN).filter((k) => Number.isFinite(stored[k]) && stored[k] > 0 && stored[k] <= nowMs).sort((a, b) => stored[a] - stored[b]);
+  for (const k of Object.keys(SPAWN)) {
+    const upcoming = Number.isFinite(stored[k]) && stored[k] > nowMs;
+    // Kept as stored; or, if it came due while the app was closed, only the longest-overdue kind returns soon and
+    // the rest wait a normal interval, so reopening never brings a burst of events.
+    due[k] = upcoming ? stored[k] : k === overdue[0] ? nowMs + rnd(...SOON_MS) : nowMs + rnd(...EVERY_MIN[k]) * 60000;
+  }
+  const saveDue = () => { try { localStorage.setItem(SKY_KEY, JSON.stringify(due)); } catch { /* storage full or blocked: events just restart their wait */ } };
+  saveDue();
+  let lastSkyEvent = 0;
+  let skyCheck = 0;
   let eventsOn = true;
 
   function updateSky(dt) {
-    if (eventsOn) {
-      for (const k of Object.keys(timers)) {
-        timers[k] -= dt;
-        if (timers[k] <= 0) {
+    skyCheck -= dt;
+    if (eventsOn && skyCheck <= 0) {
+      skyCheck = 5; // a clock check every few seconds is plenty
+      const now = Date.now();
+      if (now - lastSkyEvent >= MIN_GAP_MS) {
+        const k = Object.keys(due).filter((x) => due[x] <= now).sort((a, b) => due[a] - due[b])[0];
+        if (k) {
           SPAWN[k]();
-          timers[k] = rnd(...EVERY[k]);
+          lastSkyEvent = now;
+          due[k] = now + rnd(...EVERY_MIN[k]) * 60000;
+          saveDue();
         }
       }
     }
@@ -699,14 +729,13 @@ export function createScene(host) {
         const f = Math.min(1, e.t / e.dur);
         bezier(tmpV, e.a, e.ctrl, e.b, f);
         e.ship.position.copy(tmpV);
-        const ahead = bezier(new THREE.Vector3(), e.a, e.ctrl, e.b, Math.min(1, f + 0.02));
+        const ahead = bezier(tmpA, e.a, e.ctrl, e.b, Math.min(1, f + 0.02));
         e.ship.lookAt(ahead);
         const blink = Math.sin(e.t * 7) > 0.2 ? 1 : 0.15;
         e.ship.userData.navR.material.opacity = blink;
         e.ship.userData.navG.material.opacity = 1.15 - blink;
-        const back = new THREE.Vector3(0, 0, -1).applyQuaternion(e.ship.quaternion);
-        const eng = new THREE.Color('#7fd8ff');
-        emit(tmpV.x + back.x * 8, tmpV.y + back.y * 8, tmpV.z + back.z * 8, back.x * 18, back.y * 18, back.z * 18, eng, 6, 0.9);
+        const back = tmpB.set(0, 0, -1).applyQuaternion(e.ship.quaternion);
+        emit(tmpV.x + back.x * 8, tmpV.y + back.y * 8, tmpV.z + back.z * 8, back.x * 18, back.y * 18, back.z * 18, ENGINE, 6, 0.9);
         if (f >= 1) {
           scene.remove(e.ship);
           sky.splice(i, 1);
@@ -718,8 +747,8 @@ export function createScene(host) {
       } else if (e.type === 'comet') {
         const f = Math.min(1, e.t / e.dur);
         bezier(tmpV, e.a, e.ctrl, e.b, f);
-        const away = tmpV.clone().normalize();
-        emit(tmpV.x, tmpV.y, tmpV.z, 0, 0, 0, new THREE.Color('#ffffff'), 16, 0.4);
+        const away = tmpA.copy(tmpV).normalize();
+        emit(tmpV.x, tmpV.y, tmpV.z, 0, 0, 0, WHITE, 16, 0.4);
         for (let k = 0; k < 5; k++) {
           const spread = 6;
           emit(tmpV.x, tmpV.y, tmpV.z, away.x * rnd(25, 60) + rnd(-spread, spread), away.y * rnd(25, 60) + rnd(-spread, spread), away.z * rnd(25, 60) + rnd(-spread, spread), e.color, rnd(4, 9), rnd(1.2, 2.4));
@@ -755,31 +784,45 @@ export function createScene(host) {
   const hooks = new Set();
   let running = true;
   let pulse = 0;
+  let lastRaf = performance.now();
   document.addEventListener('visibilitychange', () => {
     running = !document.hidden;
-    if (running) loop();
+    if (running) { lastRaf = performance.now(); loop(); }
   });
 
-  // frame-time watchdog: shed effects on weak GPUs instead of stuttering
+  // ---- frame pacing. While you are using Tandem it draws every frame exactly as before (at most 60 a second, so a
+  // 120/144 Hz display is not driven twice as hard for nothing). Only when the window is not focused (it is on a
+  // second screen, or you are working in another app) does it slow to 24 fps, which is the one place nobody is watching closely.
+  const FPS = { focused: 60, away: 24 };
+  let lastFrame = 0;
+  let liveParticles = 0;
+  const frameInterval = () => 1000 / (document.hasFocus() ? FPS.focused : FPS.away);
+
+  // ---- frame-time watchdog: on a slow GPU, lower the resolution a step at a time (the picture is soft and bloomy,
+  // so this is barely visible) and only drop the bloom as a last resort. The chosen step is remembered for next time.
+  const DPR_STEPS = [1.5, 1.25, 1];
   let slow = 0;
   let sampleT = 0;
   let sampleN = 0;
   function watchdog(dt) {
+    if (dt > 0.25) return; // a tab switch or a pause, not a slow GPU
     sampleT += dt;
     sampleN += 1;
-    if (sampleT < 2.5) return;
+    if (sampleT < 2) return;
     const avg = sampleT / sampleN;
     sampleT = 0;
     sampleN = 0;
-    if (avg > 0.045) slow += 1;
+    if (avg > 0.026) slow += 1;
     else slow = Math.max(0, slow - 1);
     if (slow >= 2) {
       slow = 0;
-      if (pixelRatio > 1) {
-        pixelRatio = 1;
+      const next = DPR_STEPS.find((s) => s < pixelRatio - 0.01);
+      if (next) {
+        pixelRatio = next;
         quality = 'medium';
+        try { localStorage.setItem('tandem:scene-dpr', String(next)); } catch { /* not remembered */ }
         resize();
-      } else if (bloomOn) {
+      } else if (bloomOn && avg > 0.04) {
         bloomOn = false;
         composer.passes.splice(composer.passes.indexOf(bloom), 1);
         quality = 'low';
@@ -789,14 +832,22 @@ export function createScene(host) {
 
   const offset = new THREE.Vector3();
   const goal = new THREE.Vector3();
+  const prevTarget = new THREE.Vector3();
+  const tmpA = new THREE.Vector3();
+  const tmpB = new THREE.Vector3();
+  const ENGINE = new THREE.Color('#7fd8ff');
+  const WHITE = new THREE.Color('#ffffff');
   const camQ = new THREE.Quaternion();
   function loop() {
     if (!running) return;
     requestAnimationFrame(loop);
+    const now = performance.now();
+    watchdog((now - lastRaf) / 1000);
+    lastRaf = now;
+    if (now - lastFrame < frameInterval() - 3) return; // skip this tick: nothing here needs every frame
+    lastFrame = now;
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
-    const now = performance.now();
-    watchdog(dt);
 
     sunU.uTime.value = t;
     pulse = Math.max(0, pulse - dt * 1.4);
@@ -945,15 +996,19 @@ export function createScene(host) {
         }
       }
 
-      // trail
+      // trail: the path moves every frame, but its colours only follow the planet's heat, so recolour only when that changes
       p.trailPos.copyWithin(3, 0, (p.TRAIL - 1) * 3);
-      p.trailPos.set([p.pos.x, p.pos.y, p.pos.z], 0);
-      for (let i = 0; i < p.TRAIL; i++) {
-        const f = (1 - i / p.TRAIL) ** 2 * (0.35 + p.heat * 0.9);
-        p.trailCol.set([p.color.r * f, p.color.g * f, p.color.b * f], i * 3);
+      p.trailPos[0] = p.pos.x; p.trailPos[1] = p.pos.y; p.trailPos[2] = p.pos.z;
+      const heatKey = Math.round(p.heat * 60);
+      if (heatKey !== p.trailHeatKey) {
+        p.trailHeatKey = heatKey;
+        for (let i = 0; i < p.TRAIL; i++) {
+          const f = (1 - i / p.TRAIL) ** 2 * (0.35 + p.heat * 0.9);
+          p.trailCol[i * 3] = p.color.r * f; p.trailCol[i * 3 + 1] = p.color.g * f; p.trailCol[i * 3 + 2] = p.color.b * f;
+        }
+        p.trail.geometry.attributes.color.needsUpdate = true;
       }
       p.trail.geometry.attributes.position.needsUpdate = true;
-      p.trail.geometry.attributes.color.needsUpdate = true;
       p.orbitLine.material.opacity = 0.12 + (isSel ? 0.18 : 0) + p.heat * 0.12;
     }
 
@@ -990,11 +1045,13 @@ export function createScene(host) {
     updateSky(dt);
 
     // particles
+    let alive = 0;
     for (let i = 0; i < MAXP; i++) {
       if (P.life[i] <= 0) {
         P.alpha[i] = 0;
         continue;
       }
+      alive++;
       P.life[i] -= dt;
       const f = Math.max(0, P.life[i] / P.max[i]);
       P.pos[i * 3] += P.vel[i * 3] * dt;
@@ -1003,16 +1060,21 @@ export function createScene(host) {
       P.alpha[i] = f;
       P.size[i] = P.base[i] * (0.4 + f * 0.6);
     }
-    pg.attributes.position.needsUpdate = true;
-    pg.attributes.aAlpha.needsUpdate = true;
-    pg.attributes.aSize.needsUpdate = true;
-    pg.attributes.aColor.needsUpdate = true;
+    // Upload only what changed: nothing at all while no particle lives (one last time after the final one fades),
+    // and colours only when a particle was added.
+    if (alive || liveParticles) {
+      pg.attributes.position.needsUpdate = true;
+      pg.attributes.aAlpha.needsUpdate = true;
+      pg.attributes.aSize.needsUpdate = true;
+    }
+    if (P.colDirty) { pg.attributes.aColor.needsUpdate = true; P.colDirty = false; }
+    liveParticles = alive;
 
     // camera: follow the chosen planet (or the star), keeping the current viewing offset
     goal.copy(selected ? planets[selected].pos : tmpV.set(0, 0, 0));
-    const prev = controls.target.clone();
+    prevTarget.copy(controls.target);
     controls.target.lerp(goal, Math.min(1, dt * (selected ? 5 : 3)));
-    camera.position.add(controls.target.clone().sub(prev));
+    camera.position.add(tmpB.subVectors(controls.target, prevTarget));
     // slowly circle whatever is in focus
     controls.autoRotateSpeed += ((selected ? 1.1 : 0.25) - controls.autoRotateSpeed) * Math.min(1, dt * 2);
     if (tween) {

@@ -29,11 +29,13 @@
           <button id="btn-workspace">Workspace</button>
           <button id="btn-setup" title="Set up projects, Git and agents">Set up</button>
           <button id="btn-inspect">Files / Diff</button>
-          <button id="btn-push" title="Push this worktree to its tandem/&lt;repo&gt; branch on origin">Push</button>
-          <button id="btn-notes">Notes</button>
-          <button id="btn-prompt" title="Instructions every agent receives at the start of each session">Prompt</button>
-          <button id="btn-profile" title="What you know and what you want to learn">Learn profile</button>
+          <button id="btn-terminal" title="Open a terminal in this project (Ctrl+`)">Terminal <kbd>Ctrl+`</kbd></button>
+          <button id="btn-push" title="Review changes and push to a tandem/&lt;repo&gt; branch on origin">Push</button>
           <details class="toolbar-more"><summary>More <span>⌄</span></summary><div class="toolbar-menu">
+          <button id="btn-profile" title="What you know and what you want to learn">Learn profile</button>
+          <button id="btn-journal" title="Steps finished in learning mode, kept for the next session">Learning journal</button>
+          <button id="btn-prompt" title="Instructions every agent receives at the start of each session">Prompt</button>
+          <button id="btn-notes">Notes</button>
           <button id="btn-export">Export conversations</button>
           <button id="btn-stop-all" title="Stop all running agent sessions">Stop all</button>
           <button id="btn-theme" title="Switch the ambient background">Theme: Sunset cats</button>
@@ -56,6 +58,21 @@
     </aside>
 
     <aside id="right"></aside>
+    <div id="right-resize" role="separator" aria-orientation="vertical" aria-label="Resize side panel" tabindex="0" title="Drag to resize · double-click to reset · arrow keys nudge"></div>
+
+    <section id="term" aria-label="Terminal" hidden>
+      <div id="term-resize" role="separator" aria-orientation="horizontal" aria-label="Resize terminal" title="Drag to resize · double-click to reset"></div>
+      <header>
+        <span class="eyebrow">Terminal</span>
+        <select id="term-dir" aria-label="Folder to work in" title="Open this terminal in a different worktree"></select>
+        <span id="term-cwd"></span>
+        <button id="term-stop" type="button" title="Stop the running command (Ctrl+C)" disabled>■ Stop</button>
+        <button id="term-clear" type="button" title="Clear the screen (Ctrl+L)">Clear</button>
+        <button id="term-close" type="button" aria-label="Close terminal" title="Close (Ctrl+`)">×</button>
+      </header>
+      <pre id="term-out" tabindex="0" aria-live="off"></pre>
+      <form id="term-form" autocomplete="off"><span id="term-prompt">›</span><input id="term-input" aria-label="Command" spellcheck="false" autocapitalize="off" placeholder="Type a command and press Enter" /></form>
+    </section>
 
     <footer id="ticker">
       <span class="lbl">Work board</span>
@@ -148,7 +165,27 @@
       <div class="form-row"><label>Experience<select id="profile-level"><option value="new">New</option><option value="familiar">Familiar</option><option value="confident">Confident</option></select></label><label>Teaching<select id="profile-style"><option value="plain">Plain language</option><option value="examples">Examples</option><option value="diagrams">Diagrams</option><option value="questions">Guiding questions</option></select></label><label>Checkpoints<select id="profile-checkpoints"><option value="light">Light</option><option value="normal">Normal</option><option value="frequent">Frequent</option></select></label></div>
       <label class="check"><input type="checkbox" id="profile-learning-mode"> Learning mode: main agents work with you, one approved step at a time</label>
       <p id="profile-stack"></p><p id="profile-observed"></p><div class="form-row"><button id="save-profile">Save profile</button><span id="profile-status" role="status"></span></div>
-      <p>Learning mode applies to main agents only. When it is on, they stay read-only and walk you through the approach, design and plan; nothing changes until you press <b>Approve &amp; implement</b>. The profile and repository stack are sent only while it is on. Subagent chats are not affected.</p>
+      <p>Learning mode applies to main agents only. When it is on they stay read-only and work through four checkpoints with you: <b>Build</b> (you reason first), <b>Design</b> (you confirm it), <b>Implement</b> (nothing changes until you press <b>Approve &amp; implement</b>) and <b>Report</b>. Each finished step is saved to the learning journal. Teaching is tuned to your experience level and style. The profile, repository stack and journal are sent only while learning mode is on. Subagent chats are not affected.</p>
+    </dialog>
+    <dialog id="push-dialog" class="push-dialog">
+      <header><div><span class="eyebrow">ORIGIN · TANDEM BRANCH</span><h2>Push your work</h2></div><button id="close-push">Close ×</button></header>
+      <div class="form-row push-target">
+        <label>From<select id="push-source"></select></label>
+        <label>To branch<span class="branch-input"><b id="push-prefix">tandem/</b><input id="push-branch" maxlength="80" spellcheck="false" aria-label="Branch name after tandem/" /></span></label>
+      </div>
+      <p id="push-head" class="push-note"></p>
+      <div class="push-files-head"><label class="check"><input type="checkbox" id="push-all" checked /> Commit these changes first</label><span id="push-count"></span></div>
+      <div id="push-files" role="group" aria-label="Changed files"></div>
+      <label>Commit message<textarea id="push-message" rows="3" maxlength="2000" placeholder="What changed and why"></textarea></label>
+      <p id="push-summary" class="push-note" role="status"></p>
+      <div class="form-row"><button id="push-go" class="primary" disabled>Push</button><span id="push-status" role="status"></span></div>
+      <p class="push-note">Only <b>tandem/…</b> branches can be pushed to, and never by force. If another agent pushed to the same branch first, git will refuse and you merge before trying again.</p>
+    </dialog>
+    <dialog id="journal-dialog" class="journal-dialog">
+      <header><div><span class="eyebrow">THIS PROJECT · .tandem/LEARNING.md</span><h2>Learning journal</h2></div><button id="close-journal">Close ×</button></header>
+      <p>What you decided and learned, step by step. Agents in learning mode are reminded of the latest entries, so each session builds on the last. It is a plain Markdown file in the project's <b>.tandem</b> folder, kept out of Git by default.</p>
+      <div id="journal-list"></div>
+      <div class="form-row"><button id="journal-clear">Clear journal</button></div>
     </dialog>
     <dialog id="setup-dialog" class="setup-dialog">
       <header><div><span class="eyebrow">TANDEM SETUP</span><h2>Make this your dev space</h2></div><button id="close-setup">Close ×</button></header>

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
-import { detectStack } from '../server/stack.mjs';
+import { detectStack } from '../server/learning/stack.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
 const specs = Object.fromEntries(['claude', 'codex'].map((p) => [p, { file: process.execPath, args: [fixture, p] }]));
@@ -68,14 +68,17 @@ test('learning mode holds main agents read-only until the user approves, then lo
   assert.throws(() => w.action({ t: 'mode', agent: 'codex', mode: 'edit' }), /Approve & implement/);
   assert.equal(mode(w, 'claude'), 'plan');
 
+  assert.throws(() => w.action({ t: 'implement', agent: 'codex' }), /Confirm the design first/);
+  assert.equal(mode(w, 'codex'), 'read');
+  w.action({ t: 'confirm-design', agent: 'codex' });
   w.action({ t: 'implement', agent: 'codex' });
   assert.equal(mode(w, 'codex'), 'edit');
   await waitFor(() => replies(w, 'codex').some((r) => r.includes('Approved in Tandem')) && idle(w, 'codex'));
   await waitFor(() => mode(w, 'codex') === 'read');
   assert.throws(() => w.action({ t: 'mode', agent: 'codex', mode: 'edit' }), /Approve & implement/);
 
-  w.action({ t: 'implement', agent: 'claude' });
-  await waitFor(() => replies(w, 'claude').some((r) => r.includes('acceptEdits') && r.includes('Approved in Tandem')) && idle(w, 'claude'));
+  w.action({ t: 'implement', agent: 'claude', skipDesign: true }); // a small change: the user skips the design checkpoint
+  await waitFor(() => replies(w, 'claude').some((r) => r.includes('acceptEdits') && r.includes('Approved in Tandem') && r.includes('skip the design checkpoint')) && idle(w, 'claude'));
   await waitFor(() => mode(w, 'claude') === 'plan');
 });
 

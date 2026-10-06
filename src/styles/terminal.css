@@ -1,0 +1,25 @@
+/* ---- Terminal drawer ---- */
+#term { position: fixed; z-index: 6; left: var(--lw); right: var(--rw); bottom: var(--bot); height: var(--term-h, 300px); display: flex; flex-direction: column; background: rgba(3, 4, 10, .94); border: 1px solid var(--faint); border-bottom: 0; border-radius: 8px 8px 0 0; backdrop-filter: blur(6px); }
+#term[hidden] { display: none; }
+body.hide-ui #term { display: none; }
+#term-resize { position: absolute; top: -5px; left: 0; right: 0; height: 10px; cursor: row-resize; touch-action: none; z-index: 1; }
+#term-resize::after { content: ''; position: absolute; left: 50%; top: 3px; width: 44px; height: 2px; margin-left: -22px; border-radius: 2px; background: var(--faint); transition: background .2s; }
+#term-resize:hover::after { background: var(--warn); }
+#term > header { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--faint); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+#term-dir { max-width: 150px; height: 24px; padding: 1px 6px; font-size: 10px; }
+#term-cwd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+#term > header button { padding: 3px 4px; font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); transition: color .2s; }
+#term > header button:hover:not(:disabled) { color: var(--warn); }
+#term > header button:disabled { opacity: .35; }
+#term-stop:not(:disabled) { color: var(--bad); }
+#term-close { font-size: 16px; line-height: 1; }
+#term-out { flex: 1; min-height: 0; margin: 0; padding: 8px 14px; overflow: auto; font: 12px/1.55 var(--mono); color: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere; outline: none; user-select: text; }
+#term-out .t-echo { color: var(--ink); }
+#term-out .t-err { color: #ff9a9a; }
+#term-out .t-note { color: var(--mute); }
+#term-form { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 14px 8px; border-top: 1px solid var(--faint); }
+#term-prompt { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warn); font: 500 12px var(--mono); }
+#term.running #term-prompt { color: var(--codex); }
+#term-input { flex: 1; min-width: 0; padding: 4px 0; border: 0; background: transparent; font: 12.5px var(--mono); color: var(--ink); outline: none; }
+@media (max-width: 699px) { #term { left: 0; right: 0; } }
+

@@ -1,0 +1,191 @@
+/* ------------------------------------------------------------------ work board */
+#ticker {
+  position: fixed;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--bot);
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 26px;
+  background: linear-gradient(0deg, rgba(3, 4, 10, 0.97), rgba(3, 4, 10, 0.55));
+  border-top: 1px solid var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: opacity 0.4s;
+}
+#ticker .lbl {
+  flex: none;
+  color: var(--mute);
+  font-size: 10px;
+  white-space: nowrap;
+}
+#ticker-items {
+  display: flex;
+  gap: 30px;
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+}
+#ticker .idle {
+  color: var(--mute);
+  font: italic 400 13px var(--serif);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.brow {
+  --c: var(--claude);
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+  white-space: nowrap;
+  animation: rise 0.45s var(--ease);
+  cursor: pointer;
+}
+.brow .route {
+  color: var(--soft);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flap {
+  display: inline-flex;
+  gap: 2px;
+}
+.flap span {
+  display: inline-block;
+  min-width: 1.15em;
+  text-align: center;
+  padding: 5px 2px;
+  background: linear-gradient(180deg, #151822 0%, #151822 49%, #0b0d14 51%, #0b0d14 100%);
+  border-radius: 2px;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.flap.hot span {
+  color: var(--c);
+  text-shadow: 0 0 10px var(--c);
+}
+.flap.flip span {
+  animation: flip 0.5s ease;
+}
+@keyframes flip {
+  0% {
+    transform: rotateX(0);
+  }
+  50% {
+    transform: rotateX(90deg);
+    opacity: 0.4;
+  }
+  100% {
+    transform: rotateX(0);
+  }
+}
+#ticker .keys {
+  flex: none;
+  font-size: 10px;
+  color: var(--mute);
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+#ticker .keys b {
+  color: var(--ink);
+  font-weight: 500;
+  margin: 0 3px 0 10px;
+}
+
+body.hide-ui #left {
+  transform: translateX(-102%);
+}
+body.hide-ui #right {
+  transform: translateX(102%);
+}
+body.hide-ui #ticker {
+  opacity: 0;
+  pointer-events: none;
+}
+.boot #left,
+.boot #right,
+.boot .agent,
+.boot .pl,
+.boot .sl {
+  transition: none !important;
+}
+@media (max-width: 1280px) {
+  #right {
+    display: none;
+  }
+  #ticker .keys,
+  .brand p,
+  .clock {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Lite mode: text only. The scene is a no-op (scene-lite.js); hide its leftovers and drop motion and blur. */
+body.lite #stage, body.lite #vignette, body.lite #plabels { display: none; }
+body.lite *, body.lite *::before, body.lite *::after { animation: none !important; transition: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body.lite { background: #0b0f17; }
+.image-viewer { max-width: min(96vw, 1400px); max-height: 94vh; padding: 10px; background: #050914; border: 1px solid var(--faint); }
+.image-viewer::backdrop { background: #000c; }
+.image-viewer img { display: block; max-width: min(94vw, 1360px); max-height: 90vh; object-fit: contain; cursor: zoom-out; }
+
+.learn-switch {
+  margin-left: 14px;
+  padding: 1px 8px;
+  border: 1px solid var(--faint);
+  border-radius: 10px;
+  font: 500 9px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.learn-switch b {
+  font-weight: 600;
+}
+.learn-switch:hover {
+  color: var(--ink);
+}
+.learn-switch[aria-pressed='true'] {
+  color: var(--warn);
+  border-color: var(--warn);
+  box-shadow: 0 0 14px -6px var(--warn);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  font: 12px/1.5 var(--mono);
+  color: var(--ink);
+}
+.check input {
+  accent-color: var(--warn);
+}
+.agent.learning .c-compose {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--faint));
+}
+.implement {
+  padding: 3px 10px;
+  border-radius: 5px;
+  background: var(--warn);
+  color: #1a1204;
+  font: 600 10px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: 0 0 16px -4px var(--warn);
+}
+.implement:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+}

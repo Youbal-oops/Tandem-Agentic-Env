@@ -15,6 +15,15 @@ const fmtMs = (ms) => (ms == null ? '' : ms < 1000 ? `${Math.round(ms)}ms` : `${
 const TOOL_LABEL = { Bash: 'Shell', PowerShell: 'Shell', Shell: 'Shell', Read: 'Read', Write: 'Write', Edit: 'Edit', MultiEdit: 'Edit', Glob: 'Find', Grep: 'Search', WebFetch: 'Fetch', WebSearch: 'Web', Task: 'Agent', Agent: 'Agent' };
 export const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
+const STAGES = ['build', 'design', 'implement', 'report'];
+const STEP_NOTE = {
+  build: () => 'Say how you would approach it. The agent reasons with you before any design.',
+  design: (cp) => (cp.designConfirmed ? 'Design confirmed. Approve when you are ready.' : 'Confirm the design, or keep discussing.'),
+  implement: (cp) => (cp.skipped ? 'Implementing (design checkpoint skipped).' : 'Implementing the step you approved.'),
+  report: () => 'Step done and saved to the journal. Your next message starts a new one.',
+};
+const loadSent = (id) => { try { const list = JSON.parse(localStorage.getItem(`tandem:sent:${id}`) || '[]'); return Array.isArray(list) ? list.filter((s) => typeof s === 'string').slice(-100) : []; } catch { return []; } };
+
 export class ChatPanel {
   constructor(root, { id, name, otherName, modes, models = [], provider = id, number = 1, handlers }) {
     this.root = root;
@@ -23,6 +32,8 @@ export class ChatPanel {
     this.name = name;
     this.provider = provider;
     this.learning = false;
+    this.cp = { stage: 'build', designConfirmed: false, skipped: false };
+    this.armed = false;
     this.otherName = otherName;
     this.h = handlers;
     this.modes = modes;
@@ -63,11 +74,12 @@ export class ChatPanel {
             <option value="">Default effort</option><option value="low">Light</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option>${provider === 'claude' ? '<option value="max">Max</option>' : ''}
           </select></label></div>
           <div class="chat-meta"><span class="a-info"></span>
-          <button class="c-new" title="Start a fresh conversation">new chat</button>
+          <button class="c-find" title="Search this chat (Ctrl+F)" aria-label="Search this chat" aria-expanded="false">find</button>
+          <button class="c-new" title="Start a fresh conversation">new</button>
           ${handlers.history ? '<button class="c-history" title="Reopen a saved conversation">history</button>' : ''}
           </div>
         </div>
-        <div class="feed-controls"><input class="chat-search" type="search" placeholder="Search this chat" aria-label="Search chat" /><select class="chat-filter" aria-label="Chat filter"><option value="all">Everything</option><option value="messages">Messages</option><option value="tools">Tools</option><option value="thinking">Thinking</option></select></div>
+        <div class="feed-controls off"><input class="chat-search" type="search" placeholder="Search this chat" aria-label="Search chat" /><select class="chat-filter" aria-label="Chat filter"><option value="all">Everything</option><option value="messages">Messages</option><option value="tools">Tools</option><option value="thinking">Thinking</option></select></div>
         <div class="c-feed" tabindex="-1">
           <div class="c-empty">
             <p class="big">Ask ${esc(name)}</p>
@@ -80,6 +92,15 @@ export class ChatPanel {
           </div>
           <div class="c-working" hidden><i></i><i></i><i></i><span>working</span></div>
         </div>
+        <div class="c-steps" hidden>
+          <ol aria-label="Learning checkpoints">
+            <li data-step="build" title="Reason about the problem together: your approach first"><b>1</b>Build</li>
+            <li data-step="design" title="A design is put to you; confirm it or discuss it"><b>2</b>Design</li>
+            <li data-step="implement" title="You approved: the agent may change files for this step"><b>3</b>Implement</li>
+            <li data-step="report" title="What changed, how it was checked, what to understand now"><b>4</b>Report</li>
+          </ol>
+          <span class="c-step-note" role="status"></span>
+        </div>
         <div class="c-attachments" aria-label="Attached images" hidden></div>
         <div class="c-upload-status" role="status" aria-live="polite"></div>
         <div class="c-compose">
@@ -89,6 +110,7 @@ export class ChatPanel {
             <button class="attach" type="button" title="Attach images (or paste or drop them here)" aria-label="Attach images">+ image</button>
             <input class="image-picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
             <span class="c-hint"></span>
+            <button class="confirm" type="button" hidden title="Learning mode: the design is settled; implementation can be approved next">Confirm design</button>
             <button class="implement" type="button" hidden title="Learning mode: let this agent change files for the step you agreed">Approve &amp; implement</button>
             <button class="send" title="Send (Enter)" aria-label="Send">send ⏎</button>
             <button class="stop" title="Stop" aria-label="Stop">■ stop</button>
@@ -116,6 +138,16 @@ export class ChatPanel {
     this.effortSel.addEventListener('change', () => this.h.effort(this.effortSel.value));
     this.$('.chat-filter').addEventListener('change', () => this.filterFeed());
     this.$('.chat-search').addEventListener('input', () => this.filterFeed());
+    // Search and the filter stay out of the way until asked for (the find button or Ctrl+F).
+    const find = (open) => {
+      this.$('.feed-controls').classList.toggle('off', !open);
+      this.$('.c-find').setAttribute('aria-expanded', String(open));
+      this.$('.c-find').classList.toggle('on', open);
+      if (open) this.$('.chat-search').focus();
+    };
+    this.$('.c-find').addEventListener('click', () => find(this.$('.feed-controls').classList.contains('off')));
+    this.$('.chat-search').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.$('.chat-search').value = ''; this.$('.chat-filter').value = 'all'; this.filterFeed(); find(false); this.ta.focus(); } });
+    root.addEventListener('keydown', (e) => { if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f' && root.offsetParent) { e.preventDefault(); find(true); } });
     this.modelSel.addEventListener('change', () => {
       let v = this.modelSel.value;
       if (v === '__custom') {
@@ -139,19 +171,22 @@ export class ChatPanel {
     this.$('.c-compose').addEventListener('dragover', (e) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); });
     this.$('.c-compose').addEventListener('drop', (e) => { e.preventDefault(); this.addImages([...e.dataTransfer.files]); });
     this.$('.stop').addEventListener('click', () => this.h.stop());
-    this.$('.implement').addEventListener('click', () => this.h.implement?.());
+    this.$('.implement').addEventListener('click', () => this.onImplement());
+    this.$('.confirm').addEventListener('click', () => this.h.confirmDesign?.());
     this.$('.c-new').addEventListener('click', () => {
       this.h.newChat();
     });
     this.$('.c-history')?.addEventListener('click', () => this.h.history());
     root.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => this.h.mode(b.dataset.mode)));
-    this.ta.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        this.submit();
-      }
+    this.sent = loadSent(id);
+    this.hIndex = this.sent.length; // where we are while browsing earlier messages; length means "not browsing"
+    this.recallDraft = '';
+    this.$('.c-hint').textContent = '↑ earlier messages · Ctrl+C stops · Esc clears';
+    this.ta.addEventListener('keydown', (e) => this.onKey(e));
+    this.ta.addEventListener('input', () => {
+      if (this.hIndex < this.sent.length && this.ta.value !== this.sent[this.hIndex]) { this.hIndex = this.sent.length; this.recallDraft = ''; } // edited: no longer browsing
+      this.autosize(); sessionStorage.setItem(`tandem:draft:${this.storageId}`, this.ta.value);
     });
-    this.ta.addEventListener('input', () => { this.autosize(); sessionStorage.setItem(`tandem:draft:${this.storageId}`, this.ta.value); });
     this.ta.value = sessionStorage.getItem(`tandem:draft:${id}`) || '';
     this.empty.querySelectorAll('.chips button').forEach((b) => b.addEventListener('click', () => ((this.ta.value = b.textContent), this.submit())));
     this.feed.addEventListener('click', (e) => this.onFeedClick(e));
@@ -181,10 +216,48 @@ export class ChatPanel {
     this.ta.style.height = 'auto';
     this.ta.style.height = Math.min(this.ta.scrollHeight, 260) + 'px';
   }
+  /** Shell-like keys in the message box: Up/Down walk through what you sent before, Ctrl+C stops, Esc clears. */
+  onKey(e) {
+    const ta = this.ta;
+    const plain = !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.isComposing;
+    const noSelection = ta.selectionStart === ta.selectionEnd;
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.submit(); return; }
+    if (e.key === 'ArrowUp' && plain && noSelection && !ta.value.slice(0, ta.selectionStart).includes('\n')) {
+      if (this.hIndex > 0) {
+        if (this.hIndex === this.sent.length) this.recallDraft = ta.value;
+        this.recall(--this.hIndex);
+        e.preventDefault();
+      }
+    } else if (e.key === 'ArrowDown' && plain && noSelection && this.hIndex < this.sent.length && !ta.value.slice(ta.selectionEnd).includes('\n')) {
+      this.hIndex++;
+      this.recall(this.hIndex, this.hIndex === this.sent.length ? this.recallDraft : undefined);
+      e.preventDefault();
+    } else if (e.key === 'Escape' && plain) {
+      if (ta.value) { e.preventDefault(); e.stopPropagation(); this.setDraft(''); this.hIndex = this.sent.length; }
+      else if (this.meta.busy) { e.preventDefault(); e.stopPropagation(); this.h.stop(); }
+    } else if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'c' && noSelection && this.meta.busy) { e.preventDefault(); this.h.stop(); }
+      else if (k === 'u') { e.preventDefault(); ta.setRangeText('', 0, ta.selectionStart, 'end'); ta.dispatchEvent(new Event('input')); }
+      else if (k === 'l') { e.preventDefault(); this.feed.scrollTop = this.feed.scrollHeight; }
+    }
+  }
+  recall(index, text = this.sent[index]) {
+    this.ta.value = text ?? '';
+    this.ta.setSelectionRange(this.ta.value.length, this.ta.value.length);
+    this.autosize();
+  }
+  remember(text) {
+    if (this.sent.at(-1) !== text) this.sent.push(text);
+    this.sent = this.sent.slice(-100);
+    this.hIndex = this.sent.length; this.recallDraft = '';
+    try { localStorage.setItem(`tandem:sent:${this.id}`, JSON.stringify(this.sent)); } catch {}
+  }
   submit() {
     const text = this.ta.value.trim();
     if ((!text && !this.attachments.length) || this.uploading || this.meta.busy || this.workspaceBusy || this.offline || !this.meta.available) return;
     if (text.length > 40000) { this.$('.c-upload-status').textContent = 'Shorten your message to 40,000 characters.'; return; }
+    if (text) this.remember(text);
     this.h.send(text, this.attachments);
     this.clearAttachments();
     this.ta.value = '';
@@ -258,6 +331,25 @@ export class ChatPanel {
     this.learning = !!on && (this.provider === 'claude' || this.provider === 'codex');
     this.refresh();
   }
+  /** Where this agent is in the checkpoint cycle: { stage, designConfirmed, skipped }. */
+  setCheckpoint(cp) {
+    this.cp = { stage: 'build', designConfirmed: false, skipped: false, ...cp };
+    this.disarm();
+    this.refresh();
+  }
+  /** Approve & implement. With no confirmed design it takes a second click: skipping a checkpoint should be deliberate. */
+  onImplement() {
+    if (this.cp.designConfirmed) { this.h.implement?.(false); return; }
+    if (!this.armed) {
+      this.armed = true;
+      this.armTimer = setTimeout(() => this.disarm(), 4000);
+      this.refresh();
+      return;
+    }
+    this.disarm();
+    this.h.implement?.(true);
+  }
+  disarm() { this.armed = false; clearTimeout(this.armTimer); this.refresh?.(); }
   setWorkspaceBusy(v) {
     this.workspaceBusy = v;
     this.refresh();
@@ -292,6 +384,7 @@ export class ChatPanel {
     if (m.cost) bits.push('$' + m.cost.toFixed(m.cost < 1 ? 3 : 2));
     if (m.turns) bits.push(`${m.turns} turn${m.turns > 1 ? 's' : ''}`);
     this.$('.a-info').textContent = bits.join(' · ');
+    this.$('.model-controls').title = bits.join(' · '); // the header is compact; the same line is on hover and in the right-hand panel
     // keep the dropdown in step with the server, adding a row for a custom name
     const pref = m.modelPref || '';
     if (pref && ![...this.modelSel.options].some((o) => o.value === pref)) {
@@ -309,9 +402,7 @@ export class ChatPanel {
       b.disabled = !!m.busy || (this.learning && b.dataset.mode !== (this.provider === 'claude' ? 'plan' : 'read'));
     });
     this.root.classList.toggle('learning', this.learning);
-    const implement = this.$('.implement');
-    implement.hidden = !this.learning;
-    implement.disabled = this.offline || !m.available || !!m.busy || this.workspaceBusy;
+    this.renderCheckpoint();
     this.root.classList.toggle('busy', !!m.busy);
     this.working.hidden = !m.busy || m.awaiting > 0;
     this.working.querySelector('span').textContent = this.running.size ? `running ${this.running.size} step${this.running.size > 1 ? 's' : ''}` : 'thinking';
@@ -322,7 +413,33 @@ export class ChatPanel {
     this.$('.attach').disabled = this.offline || !m.available || this.workspaceBusy || this.uploading;
     if (this.workspaceBusy) this.ta.placeholder = 'Cloning repository… your draft is kept until it opens';
     this.$('.c-new').disabled = !!m.busy;
-    this.filterFeed();
+    // Walking every message on each update is wasted work unless a search or filter is in use.
+    if (this.$('.chat-search').value || this.$('.chat-filter').value !== 'all') this.filterFeed();
+  }
+  /** The four-step strip and the Confirm design / Approve & implement buttons. */
+  renderCheckpoint() {
+    const m = this.meta;
+    const cp = this.cp || { stage: 'build', designConfirmed: false, skipped: false };
+    const steps = this.$('.c-steps');
+    steps.hidden = !this.learning;
+    const now = STAGES.indexOf(cp.stage);
+    steps.querySelectorAll('li').forEach((li) => {
+      const i = STAGES.indexOf(li.dataset.step);
+      li.classList.toggle('on', i === now);
+      li.classList.toggle('done', i < now || (li.dataset.step === 'design' && cp.designConfirmed));
+    });
+    this.$('.c-step-note').textContent = STEP_NOTE[cp.stage](cp);
+    const busy = this.offline || !m.available || !!m.busy || this.workspaceBusy;
+    const confirm = this.$('.confirm');
+    confirm.hidden = !this.learning || cp.designConfirmed || cp.stage === 'implement' || cp.stage === 'report';
+    confirm.disabled = busy;
+    const implement = this.$('.implement');
+    implement.hidden = !this.learning;
+    implement.disabled = busy || cp.stage === 'implement';
+    implement.classList.toggle('armed', !!this.armed);
+    implement.classList.toggle('skip', !cp.designConfirmed);
+    implement.textContent = this.armed ? 'Skip the design checkpoint?' : cp.designConfirmed ? 'Approve & implement' : 'Implement without design';
+    implement.title = cp.designConfirmed ? 'Let this agent change files for the step you agreed' : 'The design is not confirmed yet. This is for small changes: click twice to skip the design checkpoint.';
   }
   filterFeed() {
     const query = this.$('.chat-search').value.toLowerCase();

@@ -1,0 +1,5 @@
+/* ---- Subagent graph under its main agent ---- */
+.grow.kid { margin-left: 12px; padding: 2px 0 2px 10px; border-left: 1px solid var(--faint); }
+.grow.kid .gh b { font-size: 14px; }
+.gh small { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--mute); }
+.grow.kid .gh span { margin-left: 0; }

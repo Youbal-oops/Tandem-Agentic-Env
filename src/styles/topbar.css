@@ -1,0 +1,107 @@
+/* ------------------------------------------------------------------ top bar */
+#top {
+  position: fixed;
+  z-index: 7;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--top);
+  padding: 20px 26px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+}
+#top > * {
+  pointer-events: auto;
+}
+.brand h1 {
+  margin: 0;
+  font: 500 14px var(--mono);
+  letter-spacing: 0.36em;
+}
+.brand p {
+  margin: 5px 0 0;
+  font: italic 400 16px var(--serif);
+  color: #bdb6a6;
+}
+.topright {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+.clock {
+  font: 500 10px var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.clock .k {
+  margin-right: 8px;
+}
+.clock span:not(.k) {
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  margin-right: 18px;
+}
+.clock span:last-child {
+  margin-right: 0;
+}
+.topbtns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.topbtns button {
+  font: 500 9.5px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  border: 1px solid var(--faint);
+  border-radius: 7px;
+  background: rgba(8, 10, 18, 0.5);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.topbtns button kbd {
+  margin-left: 5px;
+  color: var(--mute);
+  font: inherit;
+  letter-spacing: 0.04em;
+}
+.topbtns button:hover,
+.topbtns button.on {
+  border-color: var(--warn);
+  color: var(--warn);
+  box-shadow: 0 0 16px -4px rgba(255, 210, 122, 0.6);
+}
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  font: 500 9.5px var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.conn i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #555c6e;
+}
+.conn.ok i {
+  background: var(--good);
+  box-shadow: 0 0 10px var(--good);
+}
+.conn.bad i {
+  background: var(--bad);
+  box-shadow: 0 0 10px var(--bad);
+}
+.conn em {
+  font-style: normal;
+}
+

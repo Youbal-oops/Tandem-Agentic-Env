@@ -1,0 +1,52 @@
+/* ------------------------------------------------------------------ labels on the scene */
+#plabels {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.pl,
+.sl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  text-align: center;
+  will-change: transform;
+  transition: opacity 0.4s;
+}
+.pl b {
+  display: block;
+  font: italic 400 28px/1 var(--serif);
+  text-shadow: 0 0 22px color-mix(in srgb, currentColor 60%, transparent), 0 2px 14px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
+}
+.pl[data-agent='claude'] {
+  color: var(--claude);
+}
+.pl[data-agent='codex'] {
+  color: var(--codex);
+}
+.pl small,
+.sl small {
+  display: block;
+  margin-top: 5px;
+  font: 500 9.5px var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--mute);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95);
+}
+.pl[data-state='work'] small,
+.pl[data-state='think'] small {
+  color: currentColor;
+}
+.pl[data-state='wait'] small {
+  color: var(--warn);
+}
+.sl b {
+  display: block;
+  font: italic 400 19px/1 var(--serif);
+  color: #ffe9bd;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.9);
+}
+

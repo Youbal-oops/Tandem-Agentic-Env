@@ -1,0 +1,22 @@
+/* ---- Push dialog ---- */
+.push-dialog { width: min(720px, 94vw); }
+.push-target { align-items: flex-end; }
+.branch-input { display: flex; align-items: center; border: 1px solid var(--faint); border-radius: 5px; background: rgba(8, 10, 18, .5); overflow: hidden; }
+.branch-input b { padding-left: 9px; font: 500 11px var(--mono); color: var(--warn); }
+.branch-input input { flex: 1; border: 0; background: transparent; padding: 8px 9px 8px 1px; outline: none; }
+.push-note { margin: 4px 0 10px; }
+.push-files-head { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.push-files-head span { font: 10px var(--mono); color: var(--mute); }
+#push-files { max-height: 230px; overflow: auto; margin-bottom: 12px; padding: 4px 8px; border: 1px solid var(--faint); border-radius: 8px; }
+dialog label.push-file { display: flex; flex-direction: row; align-items: center; gap: 10px; flex: none; margin: 0; padding: 5px 2px; font: 11px var(--mono); }
+.push-file input { accent-color: var(--warn); }
+.push-file b { width: 20px; font-weight: 500; color: var(--mute); }
+.push-file b.st-M, .push-file b.st-R { color: var(--warn); }
+.push-file b.st-A, .push-file b.st-\? { color: var(--good); }
+.push-file b.st-D { color: var(--bad); }
+.push-file span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.push-file em { font-style: normal; font-size: 10px; }
+#push-message { width: 100%; resize: vertical; padding: 10px 12px; font: 12px/1.6 var(--mono); color: var(--ink); background: #050a14; border: 1px solid #ffffff30; border-radius: 8px; }
+#push-status { overflow-wrap: anywhere; font-size: 11px; color: var(--mute); }
+#push-status.bad { color: #ff9a9a; }
+
