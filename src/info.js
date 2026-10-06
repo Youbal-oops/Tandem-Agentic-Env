@@ -78,6 +78,14 @@ export class InfoPanel {
   }
   setChildren(id, kids) {
     this.kids[id] = kids;
+    // A subagent's context graph is built the same way as a main agent's, from each change in its usage.
+    for (const k of kids) {
+      const c = k.ctx;
+      const h = (this.hist[`kid:${k.id}`] ||= []);
+      if (c?.window && Math.min(1, c.used / c.window) !== h.at(-1)) { h.push(Math.min(1, c.used / c.window)); if (h.length > 60) h.shift(); }
+    }
+    const live = new Set(Object.values(this.kids).flat().map((k) => `kid:${k.id}`));
+    for (const key of Object.keys(this.hist)) if (key.startsWith('kid:') && !live.has(key)) delete this.hist[key];
     this.queue();
   }
   setGit(git) {
@@ -90,13 +98,15 @@ export class InfoPanel {
     for (const id of Object.keys(this.m)) if (!this.ids.includes(id)) delete this.m[id];
     this.queue();
   }
+  /** Redraw soon, but at most four times a second: meta updates arrive many times a second while an agent streams. */
   queue() {
     if (this.queued) return;
     this.queued = true;
-    requestAnimationFrame(() => {
+    const wait = Math.max(0, 250 - (performance.now() - (this.lastRender || 0)));
+    setTimeout(() => requestAnimationFrame(() => {
       this.queued = false;
       this.render();
-    });
+    }), wait);
   }
 
   // ------------------------------------------------------------ log
@@ -123,13 +133,30 @@ export class InfoPanel {
     return `<div class="bar ${level(pct)}"><u style="width:${(pct * 100).toFixed(1)}%"></u><s></s>${extra}</div>`;
   }
 
-  spark(id) {
+  spark(id, hex = HEX[id]) {
     const h = this.hist[id];
-    if (h.length < 2) return '';
+    if (!h || h.length < 2) return '';
     const w = 90;
     const ht = 20;
     const pts = h.map((v, i) => `${((i / (h.length - 1)) * w).toFixed(1)},${(ht - 2 - v * (ht - 4)).toFixed(1)}`).join(' ');
-    return `<svg class="hs" viewBox="0 0 ${w} ${ht}" width="${w}" height="${ht}"><polyline points="${pts}" fill="none" stroke="${HEX[id]}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+    return `<svg class="hs" viewBox="0 0 ${w} ${ht}" width="${w}" height="${ht}"><polyline points="${pts}" fill="none" stroke="${hex}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+  }
+
+  /** One context graph per running subagent, shown under its main agent in the same style. */
+  kidGauges(id) {
+    return (this.kids[id] || [])
+      .filter((k) => k.busy)
+      .map((k) => {
+        const hex = HEX[k.provider] || HEX[id];
+        const c = k.ctx;
+        const f = c?.window ? c.used / c.window : 0;
+        return `<div class="grow kid ${this.sel === id ? 'sel' : ''}" data-pick="${id}" style="--c:${hex}" title="${esc(`${NAME[k.provider] || k.provider} subagent · ${k.title}`)}">
+          <div class="gh"><i></i><b>${esc(NAME[k.provider] || k.provider)}</b><small>${esc(k.title)}</small><span>${c ? `${fmtK(c.used)} / ${fmtK(c.window)}` : 'starting…'}</span><em class="${level(f)}">${c ? Math.round(f * 100) + '%' : ''}</em></div>
+          ${this.bar(f)}
+          <div class="gf"><span>subagent${k.cache ? ' · cache hit ' + Math.round(k.cache * 100) + '%' : ''}</span>${this.spark(`kid:${k.id}`, hex)}</div>
+        </div>`;
+      })
+      .join('');
   }
 
   gauges() {
@@ -143,7 +170,7 @@ export class InfoPanel {
           <div class="gh"><i></i><b>${esc(NAME[id])}</b><span>${c ? `${fmtK(c.used)} / ${fmtK(c.window)}` : '—'}</span><em class="${level(f)}">${c ? Math.round(f * 100) + '%' : ''}</em></div>
           ${this.bar(f)}
           <div class="gf"><span>${cache ? 'cache hit ' + Math.round(cache * 100) + '%' : ''}</span>${this.spark(id)}</div>
-        </div>`;
+        </div>${this.kidGauges(id)}`;
       })
       .join('');
     return `<div class="kicker">Context window</div>${rows}`;
@@ -241,6 +268,10 @@ export class InfoPanel {
       ? `${busy.join(' and ')} ${busy.length > 1 ? 'are' : 'is'} working right now.`
       : 'do fish live in space?.';
     const detail = sel ? this.agentDetail(sel) : (this.ids || ['claude', 'codex']).map((a) => this.agentDetail(a)).join('');
-    this.body.innerHTML = this.gauges() + this.limits() + detail + `<section class="project">${this.project()}</section>`;
+    const html = this.gauges() + this.limits() + detail + `<section class="project">${this.project()}</section>`;
+    this.lastRender = performance.now();
+    if (html === this.lastHtml) return; // nothing changed: leave the DOM (and the scroll position) alone
+    this.lastHtml = html;
+    this.body.innerHTML = html;
   }
 }

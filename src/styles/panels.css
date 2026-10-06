@@ -1,0 +1,13 @@
+/* ---- Resizable side panels. Everything in the middle reads --lw and --rw, so it follows the panels. ---- */
+#right-resize { position: fixed; z-index: 7; top: var(--top); bottom: var(--bot); right: calc(var(--rw) - 7px); width: 14px; cursor: col-resize; touch-action: none; outline: none; }
+#right-resize::after { content: ''; position: absolute; top: 50%; left: 5px; width: 2px; height: 44px; margin-top: -22px; border-radius: 2px; background: var(--faint); transition: background .2s; }
+#right-resize:hover::after, #right-resize:focus-visible::after, body.resizing #right-resize::after { background: var(--warn); }
+body.no-right #right-resize, body.hide-ui #right-resize, body.child-open #right-resize { display: none; }
+#left-resize:focus-visible::after { background: var(--warn); }
+@media (max-width: 900px) { #right-resize { display: none; } }
+
+/* while dragging: keep the cursor, do not select text, and let the pointer reach the handle */
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing #stage, body.resizing iframe { pointer-events: none; }
+/* a running child drawer is at least as wide as the side panel it replaces */
+#child-drawer { width: max(var(--rw), min(600px, 45vw)); }

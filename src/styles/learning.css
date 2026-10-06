@@ -1,0 +1,31 @@
+/* ---- Learning mode: the checkpoint strip, Confirm design / Approve & implement, and the journal ---- */
+.c-steps { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 0 2px; }
+.c-steps[hidden] { display: none; }
+.c-steps ol { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.c-steps li { display: flex; align-items: center; gap: 5px; padding: 2px 8px 2px 3px; border: 1px solid var(--faint); border-radius: 10px; font: 500 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); transition: color .25s, border-color .25s, box-shadow .25s; cursor: help; }
+.c-steps li b { width: 14px; height: 14px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font: 600 8px var(--mono); letter-spacing: 0; }
+.c-steps li.done { color: var(--soft); }
+.c-steps li.done b { font-size: 0; color: var(--good); border-color: var(--good); background: color-mix(in srgb, var(--good) 22%, transparent); }
+.c-steps li.done b::after { content: '\2713'; font-size: 8px; }
+.c-steps li.on { color: var(--warn); border-color: var(--warn); box-shadow: 0 0 14px -6px var(--warn); }
+.c-steps li.on b { color: #1a1204; background: var(--warn); border-color: var(--warn); font-size: 8px; }
+.c-steps li.on.done b::after { content: none; }
+.c-steps li.on.done b { font-size: 8px; color: #1a1204; }
+.c-step-note { flex: 1 1 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--mono); color: var(--mute); }
+
+.confirm { flex: none; padding: 3px 10px; border: 1px solid var(--warn); border-radius: 5px; color: var(--warn); font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; transition: background .2s; }
+.confirm:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.confirm:disabled { opacity: .4; }
+.implement { flex: none; transition: background .2s, color .2s, box-shadow .2s; }
+.implement.skip { color: var(--warn); background: transparent; border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); box-shadow: none; }
+.implement.armed { color: #1a0606; background: var(--bad); border-color: var(--bad); box-shadow: 0 0 16px -4px var(--bad); }
+
+/* journal */
+.journal-dialog { width: min(760px, 94vw); }
+#journal-list { max-height: 54vh; overflow: auto; display: grid; gap: 10px; margin: 12px 0; padding-right: 4px; }
+.journal-entry { padding: 12px 14px; border: 1px solid var(--faint); border-radius: 8px; background: rgba(8, 10, 18, .5); }
+.journal-entry header { gap: 12px; margin-bottom: 6px; }
+.journal-entry b { font: italic 400 17px var(--serif); color: var(--warn); }
+.journal-entry time { font: 10px var(--mono); color: var(--mute); white-space: nowrap; }
+.journal-entry p { margin: 4px 0; font: 11.5px/1.6 var(--mono); color: var(--soft); overflow-wrap: anywhere; }
+.journal-entry p i { display: inline-block; min-width: 64px; margin-right: 8px; font-style: normal; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }

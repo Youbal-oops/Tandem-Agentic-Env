@@ -10,7 +10,10 @@ It is built around local agent tools first, but it is not tied to one provider. 
 
 - Run multiple coding agents around one selected project.
 - Keep a learning profile: your familiar stack, what you want to learn, experience level, and preferred explanation style.
-- Notice technologies mentioned in your work so the profile can stay useful. You can correct it any time.
+- Pick up the stack you actually work with. A technology counts as known once it has come up a few times in your messages or in files the agents edit for you, most frequent first. You can still edit the profile yourself.
+- Open a **Terminal** drawer (Ctrl+`) in the repository or any agent's worktree. It runs one command line at a time in your system shell and keeps `cd` between commands; it is not a full terminal, so vim-style programs do not work.
+- **Push** opens a review dialog: choose which changed files to commit, write the commit message, and edit the branch name. Pushes only go to `tandem/...` branches (default `tandem/<repo>`), never by force. Files that look private (`.env`, keys) start unselected.
+- Show a context graph for each running subagent under its main agent in the right-hand panel.
 - Let you choose a model for a main agent or subagent; Tandem remembers the last model used for each provider.
 - Detect available models from compatible API providers when they expose a `/models` endpoint.
 - Give each CLI agent and Tandem-created subagent an isolated Git worktree and branch where Git is available.

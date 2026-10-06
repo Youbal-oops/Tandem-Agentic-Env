@@ -1,5 +1,5 @@
 // Local tools are read-only until the user saves notes or sends a prepared draft.
-export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify, onLearning = () => {} }) {
+export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify, onLearning = () => {}, onCheckpoints = () => {} }) {
   const $ = (s) => document.querySelector(s);
   let request = 0;
   let folder = '';
@@ -67,11 +67,12 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
     learnerProfile = profile;
     $('#profile-familiar').value = profile.familiar || ''; $('#profile-learning').value = profile.learning || '';
     $('#profile-level').value = profile.level || 'familiar'; $('#profile-style').value = profile.style || 'plain'; $('#profile-checkpoints').value = profile.checkpoints || 'normal';
-    $('#profile-observed').textContent = profile.observed?.length ? `Observed in your work: ${profile.observed.join(', ')}` : 'No technologies observed yet.';
+    $('#profile-observed').textContent = profile.known?.length ? `Picked up from your work (most often first): ${profile.known.map((k) => `${k.name} ×${k.n}`).join(', ')}` : 'Nothing picked up yet. A technology shows here once it has come up in your messages or edits a few times.';
     $('#profile-status').textContent = 'Saved locally';
   }
   function showLearning(msg) {
     if (typeof msg.learningMode === 'boolean') { $('#profile-learning-mode').checked = msg.learningMode; onLearning(msg.learningMode); }
+    if (msg.checkpoints) onCheckpoints(msg.checkpoints);
     if (Array.isArray(msg.stack)) $('#profile-stack').textContent = msg.stack.length ? `Detected in this repository: ${msg.stack.join(', ')}` : 'No technologies detected in this repository yet.';
   }
   const setLearningMode = (on) => { if (!ask({ t: 'learningmode', on })) { $('#profile-learning-mode').checked = !on; } };
@@ -80,7 +81,7 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
   $('#btn-profile').addEventListener('click', () => { if (!connected()) return notify('Connect to the local server first.'); $('#profile-dialog').showModal(); ask({ t: 'localstate' }); });
   $('#close-profile').addEventListener('click', () => $('#profile-dialog').close());
   $('#save-profile').addEventListener('click', () => {
-    const profile = { familiar: $('#profile-familiar').value, learning: $('#profile-learning').value, level: $('#profile-level').value, style: $('#profile-style').value, checkpoints: $('#profile-checkpoints').value, observed: learnerProfile?.observed || [] };
+    const profile = { familiar: $('#profile-familiar').value, learning: $('#profile-learning').value, level: $('#profile-level').value, style: $('#profile-style').value, checkpoints: $('#profile-checkpoints').value };
     if (ask({ t: 'savelearnerprofile', profile })) $('#profile-status').textContent = 'Saving…';
   });
   function showPrompt(p, force) {

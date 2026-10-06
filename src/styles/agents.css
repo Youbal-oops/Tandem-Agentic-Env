@@ -1,0 +1,265 @@
+/* ------------------------------------------------------------------ left column: the agents */
+#left {
+  position: fixed;
+  z-index: 5;
+  left: 0;
+  top: var(--top);
+  bottom: var(--bot);
+  width: var(--lw);
+  padding: 0 44px 6px 28px;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(90deg, rgba(3, 4, 10, 0.96) 0%, rgba(3, 4, 10, 0.9) 82%, rgba(3, 4, 10, 0) 100%);
+  transition: transform 0.55s var(--ease), opacity 0.4s;
+}
+#left-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 14px;
+  cursor: col-resize;
+  touch-action: none;
+}
+#left-resize::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  width: 2px;
+  height: 44px;
+  margin-top: -22px;
+  border-radius: 2px;
+  background: var(--faint);
+  transition: background 0.2s;
+}
+#left-resize:hover::after {
+  background: var(--warn);
+}
+@media (max-width: 699px) {
+  #left-resize {
+    display: none;
+  }
+}
+#left .kicker {
+  margin-top: 6px;
+  flex: none;
+}
+.agent {
+  --c: var(--claude);
+  --row: 82px;
+  flex: 1 1 0;
+  min-height: var(--row);
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--faint);
+  position: relative;
+  transition: flex-grow 0.65s var(--ease);
+}
+.agent[data-agent='codex'] {
+  --c: var(--codex);
+}
+.agent.collapsed {
+  flex-grow: 0.0001;
+}
+.agent::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -1px;
+  height: 1px;
+  width: 0;
+  background: linear-gradient(90deg, var(--c), transparent 90%);
+  box-shadow: 0 0 14px var(--c);
+  transition: width 0.7s var(--ease);
+}
+.agent.on::after {
+  width: 100%;
+}
+.agent[data-state='work']::after,
+.agent[data-state='think']::after {
+  width: 100%;
+  animation: scan 2.4s linear infinite;
+  background-size: 220% 100%;
+  background-image: linear-gradient(90deg, transparent 0%, var(--c) 30%, #fff 50%, var(--c) 70%, transparent 100%);
+}
+@keyframes scan {
+  from {
+    background-position: 220% 0;
+  }
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.a-row {
+  flex: none;
+  height: var(--row);
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px 1fr 112px 104px;
+  grid-template-areas: 'num name spark stat';
+  align-items: center;
+  gap: 0 10px;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.62;
+  transition: opacity 0.3s;
+  outline: none;
+}
+.a-row:hover,
+.agent.on .a-row,
+.agent[data-state='work'] .a-row,
+.agent[data-state='think'] .a-row,
+.agent[data-state='wait'] .a-row {
+  opacity: 1;
+}
+.a-row .num {
+  grid-area: num;
+  font-size: 10px;
+  color: var(--mute);
+}
+.a-row .name {
+  grid-area: name;
+  font: italic 400 40px/1 var(--serif);
+  color: var(--ink);
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.agent.on .a-row .name,
+.agent[data-state='work'] .a-row .name {
+  color: var(--c);
+  text-shadow: 0 0 26px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.a-row .tag {
+  position: absolute;
+  left: 40px;
+  top: 12px;
+  font: 500 8.5px var(--mono);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--c);
+}
+.a-row .spark {
+  grid-area: spark;
+  width: 112px;
+  height: 28px;
+}
+.a-row .stat {
+  grid-area: stat;
+  text-align: right;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.a-row .stat b {
+  display: block;
+  font-weight: 500;
+  color: var(--c);
+  letter-spacing: 0.08em;
+}
+.agent[data-state='wait'] .stat b {
+  color: var(--warn);
+}
+.agent[data-state='offline'] .stat b,
+.agent[data-state='missing'] .stat b {
+  color: var(--bad);
+}
+.a-row .stat i {
+  font-style: normal;
+  color: var(--mute);
+  font-size: 10px;
+}
+
+.a-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.35s 0.2s;
+}
+.agent.collapsed .a-body {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s, visibility 0s 0.3s;
+}
+.a-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 2px 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.modes {
+  display: flex;
+  gap: 12px;
+}
+.modes button {
+  padding: 3px 0;
+  font: 500 10px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  border-bottom: 1px solid transparent;
+  transition: color 0.2s, border-color 0.2s, text-shadow 0.2s;
+}
+.modes button:hover:not(:disabled) {
+  color: var(--ink);
+}
+.modes button.on {
+  color: var(--c);
+  border-bottom-color: var(--c);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.modes button:disabled:not(.on) {
+  opacity: 0.4;
+}
+.model {
+  max-width: 150px;
+  padding: 2px 4px;
+  font: 500 10px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--soft);
+  background: rgba(8, 10, 18, 0.85);
+  border: 1px solid var(--faint);
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+}
+.model:hover:not(:disabled),
+.model:focus {
+  border-color: var(--c);
+  color: var(--c);
+}
+.model:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.model option {
+  background: #0b0d14;
+  color: var(--ink);
+}
+.a-info {
+  flex: 1;
+  text-align: right;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.c-new {
+  font: 500 10px var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.c-new:hover {
+  color: var(--c);
+}
+

@@ -1,0 +1,22 @@
+/* ---- Compact chat header: the conversation gets the room. Same fonts, colours and mood. ---- */
+body[data-sel]:not([data-sel='']) .agent:not(.collapsed) { --row: 52px; }
+body[data-sel]:not([data-sel='']) .agent:not(.collapsed) .a-row .name { font-size: 32px; }
+body[data-sel]:not([data-sel='']) .agent:not(.collapsed) .a-row .tag { top: 2px; }
+.a-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'modes meta' 'models models'; gap: 6px 12px; align-items: center; padding: 0 0 6px; }
+.a-bar .modes { grid-area: modes; gap: 14px; }
+.a-bar .model-controls { grid-area: models; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 8px; }
+.model-controls label { display: flex; align-items: center; gap: 6px; margin: 0; }
+.model-controls select { height: 26px; padding: 2px 6px; font-size: 10.5px; flex: 1; }
+.a-bar .chat-meta { grid-area: meta; gap: 10px; }
+.a-info { display: none; }
+.c-history { flex: none; font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.c-history:hover { color: var(--c); }
+.c-find { flex: none; font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.c-find:hover, .c-find.on { color: var(--c); }
+.feed-controls.off { display: none; }
+#child-drawer .feed-controls.off { display: grid; }
+.child-links { padding-bottom: 6px; }
+
+/* the shortcut hint stays on one line and gives way to the learning buttons */
+.c-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 9.5px var(--mono); letter-spacing: .04em; color: var(--mute); }
+.agent.learning .c-hint { display: none; }
