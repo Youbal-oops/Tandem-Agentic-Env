@@ -66,6 +66,13 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) {
   });
 }
 
+server.on('error', (error) => {
+  if (error.code !== 'EADDRINUSE') throw error;
+  // The desktop app picks a free port before it gets here, so this is the standalone server meeting a busy port.
+  console.error(`Port ${PORT} is already in use. Tandem may already be running; otherwise start this one on another port with TANDEM_PORT=<number>.`);
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
   console.log(`Tandem API  http://${HOST}:${PORT}   (agents work in: ${agents.cwd})`);
   for (const id of AGENT_IDS) console.log(`  ${id.padEnd(7)} ${specs[id] ? 'found' : 'NOT FOUND (npm install -g the CLI)'}`);
