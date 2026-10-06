@@ -6,7 +6,8 @@ import path from 'node:path';
 import { createTerminal } from '../server/terminal.mjs';
 
 function setup(t) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-term-')));
+  // .native expands Windows 8.3 short names (RUNNER~1), which a child process's own cwd never shows
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-term-')));
   fs.mkdirSync(path.join(root, 'sub dir'));
   const log = [];
   const term = createTerminal({ cwd: root, emit: (m) => log.push(m) });
@@ -36,7 +37,7 @@ test('cd sticks between commands and a missing folder changes nothing', async (t
   assert.equal(term.state().cwd, path.join(root, 'sub dir'));
   term.run('node -e "console.log(process.cwd())"');
   await waitFor(() => dones() === 2);
-  assert.ok(text().includes(path.join(root, 'sub dir')), text());
+  assert.ok(text().toLowerCase().includes(path.join(root, 'sub dir').toLowerCase()), text()); // Windows paths are case-insensitive
   term.run('cd nowhere');
   assert.equal(term.state().cwd, path.join(root, 'sub dir'));
   assert.ok(log.some((m) => m.kind === 'err' && /no such folder/.test(m.text)));
