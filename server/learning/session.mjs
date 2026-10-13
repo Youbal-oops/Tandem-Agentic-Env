@@ -12,7 +12,7 @@ import { bump, knownStack, loadCounts, techFromPath, techFromText } from './know
 import { detectStack } from './stack.mjs';
 import { workflowPrompt } from './workflow.mjs';
 
-const READ_ONLY = { claude: 'plan', codex: 'read' };
+const READ_ONLY = { claude: 'plan', codex: 'read', gemini: 'plan' };
 const LEVELS = ['new', 'familiar', 'confident'];
 const STYLES = ['plain', 'examples', 'diagrams', 'questions'];
 const PACES = ['light', 'normal', 'frequent'];

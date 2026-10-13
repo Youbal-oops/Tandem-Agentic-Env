@@ -16,6 +16,7 @@ import { InfoPanel } from './info.js';
 import { createLocalTools } from './local.js';
 import { createJournalDialog } from './journal.js';
 import { createSettingsDialog } from './settings.js';
+import { createConnectDialog } from './connect.js';
 import { createPushDialog } from './push.js';
 import { createTerminalPanel } from './terminal.js';
 import { initAgents } from './app/agents.js';
@@ -61,6 +62,7 @@ app.terminal = createTerminalPanel({ send: (msg) => app.net.send(msg), connected
 app.journal = createJournalDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice });
 app.folderPicker = createFolderPicker({ send: (msg) => app.net.send(msg), connected, getRepo: () => app.repoPath, notify: app.showNotice });
 app.settingsDialog = createSettingsDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, getAgent: () => (app.ui.sel && app.AGENTS.includes(app.ui.sel) ? app.ui.sel : app.AGENTS[0]) });
+app.connectDialog = createConnectDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice });
 app.localTools = createLocalTools({
   onSettings: (settings) => app.settingsDialog.local(settings),
   send: (msg) => app.net.send(msg), connected, getRepo: () => app.repoPath,

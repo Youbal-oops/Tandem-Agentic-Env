@@ -33,21 +33,37 @@ function nativeBinary(name) {
   try { return execFileSync('which', [name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
 }
 
-const roots = npmRoots();
-const nativeClaude = nativeBinary('claude');
-const claudeExe = nativeClaude && fs.existsSync(nativeClaude) ? nativeClaude : firstExisting(roots, ['@anthropic-ai', 'claude-code', 'bin', 'claude.exe']);
-const codexJs = firstExisting(roots, ['@openai', 'codex', 'bin', 'codex.js']);
-const nativeCodex = nativeBinary('codex');
+/** Where each CLI lives right now. Called again after an install so a new CLI works without restarting Tandem. */
+function detect() {
+  const roots = npmRoots();
+  const nativeClaude = nativeBinary('claude');
+  const claudeExe = nativeClaude && fs.existsSync(nativeClaude) ? nativeClaude : firstExisting(roots, ['@anthropic-ai', 'claude-code', 'bin', 'claude.exe']);
+  const codexJs = firstExisting(roots, ['@openai', 'codex', 'bin', 'codex.js']);
+  const nativeCodex = nativeBinary('codex');
+  const geminiJs = firstExisting(roots, ['@google', 'gemini-cli', 'bundle', 'gemini.js']);
+  const nativeGemini = nativeBinary('gemini');
+  // Electron can execute Node scripts when this child-only flag is set.
+  const nodeEnv = process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {};
+  return {
+    claude: claudeExe ? { file: claudeExe, args: [] } : null,
+    codex: codexJs ? { file: process.execPath, args: [codexJs], environment: nodeEnv } : nativeCodex ? { file: nativeCodex, args: [] } : null,
+    gemini: geminiJs ? { file: process.execPath, args: [geminiJs], environment: nodeEnv } : nativeGemini ? { file: nativeGemini, args: [] } : null,
+  };
+}
 
-/** How to start each CLI, or null when it is not installed. */
-export const specs = {
-  claude: claudeExe ? { file: claudeExe, args: [] } : null,
-  codex: codexJs ? {
-    file: process.execPath,
-    args: [codexJs],
-    // Electron can execute Node scripts when this child-only flag is set.
-    environment: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
-  } : nativeCodex ? { file: nativeCodex, args: [] } : null,
+/** How to start each CLI, or null when it is not installed. The object is updated in place by refreshSpecs(). */
+export const specs = detect();
+
+export function refreshSpecs() {
+  Object.assign(specs, detect());
+  return specs;
+}
+
+/** The CLIs Tandem can install and connect, with the npm package and the command that signs in. */
+export const CLIS = {
+  claude: { name: 'Claude Code', pkg: '@anthropic-ai/claude-code', login: ['auth', 'login'], status: ['auth', 'status'] },
+  codex: { name: 'Codex CLI', pkg: '@openai/codex', login: ['login'], status: ['login', 'status'] },
+  gemini: { name: 'Gemini CLI', pkg: '@google/gemini-cli', login: [], status: null },
 };
 
 export function modelChoices() {
@@ -56,5 +72,5 @@ export function modelChoices() {
     const cache = JSON.parse(fs.readFileSync(path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'models_cache.json'), 'utf8'));
     codex = (cache.models || []).map((m) => m.slug).filter((m) => typeof m === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,79}$/.test(m));
   } catch {}
-  return { claude: ['opus', 'sonnet', 'haiku'], codex: [...new Set(codex)] };
+  return { claude: ['opus', 'sonnet', 'haiku'], codex: [...new Set(codex)], gemini: [] };
 }

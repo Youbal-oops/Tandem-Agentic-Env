@@ -33,6 +33,7 @@
           <button id="btn-terminal" title="Open a terminal in this project (Ctrl+`)">Terminal <kbd>Ctrl+`</kbd></button>
           <button id="btn-push" title="Review changes and push to a tandem/&lt;repo&gt; branch on origin">Push</button>
           <details class="toolbar-more"><summary>More <span>⌄</span></summary><div class="toolbar-menu">
+          <button id="btn-connect" title="Install and sign in to Claude Code, Codex or Gemini without a terminal">Connect agents</button>
           <button id="btn-settings" title="Review limits, learning, appearance and saved text">Settings</button>
           <button id="btn-profile" title="What you know and what you want to learn">Learn profile</button>
           <button id="btn-journal" title="Steps finished in learning mode, kept for the next session">Learning journal</button>
@@ -113,9 +114,10 @@
       </section><section data-workspace-page="agents" hidden>
       <div class="settings-heading"><h3>Planets</h3><span>Up to eight independent agents</span></div>
       <div id="agent-list"></div>
+      <div class="form-row"><button id="open-connect" type="button">Install or sign in to agents…</button><span>Claude Code, Codex and Gemini, without a terminal</span></div>
       <form id="agent-form">
         <h3>Add a planet</h3>
-        <div class="form-row"><label>Name<input name="name" required maxlength="32" placeholder="Reviewer" /></label><label>Connection<select name="provider" id="agent-provider"><option value="codex">Codex CLI</option><option value="claude">Claude Code CLI</option><option value="api">Compatible API chat</option></select></label></div>
+        <div class="form-row"><label>Name<input name="name" required maxlength="32" placeholder="Reviewer" /></label><label>Connection<select name="provider" id="agent-provider"><option value="codex">Codex CLI</option><option value="claude">Claude Code CLI</option><option value="gemini">Gemini CLI</option><option value="api">Compatible API chat</option></select></label></div>
         <label>Model<input name="model" list="api-model-options" placeholder="Default for CLI; required for API" /></label>
         <datalist id="api-model-options"></datalist>
         <div id="api-fields" hidden>
@@ -144,6 +146,15 @@
       <div class="inspector-layout"><nav id="file-list" aria-label="Repository files"></nav><div class="file-preview"><p id="inspect-status" role="status"></p><pre id="inspect-content"></pre></div></div>
       <div class="inspector-toolbar"><select id="context-agent" aria-label="Agent for file context"></select><button id="attach-context" disabled>Add to chat draft</button></div>
       <p>Preview is read-only. Add a file or diff to a draft to discuss it with an agent; send it when ready.</p>
+    </dialog>
+    <dialog id="connect-dialog" class="connect-dialog">
+      <header><div><span class="eyebrow">NO TERMINAL NEEDED</span><h2>Connect agents</h2></div><button id="close-connect">Close ×</button></header>
+      <p>Install an agent CLI with one click, then sign in. Sign-in opens a normal terminal window already running the right command; finish it there and press Refresh. Installing runs <b>npm install -g</b> for the official package, which can take a minute.</p>
+      <p id="connect-npm" class="connect-warn" hidden>npm was not found, so Tandem cannot install anything. Install Node.js from nodejs.org, restart Tandem, and come back.</p>
+      <div id="connect-list"></div>
+      <pre id="connect-log" hidden></pre>
+      <div class="form-row"><button id="connect-refresh" type="button">Refresh</button><span id="connect-status" role="status"></span></div>
+      <p>Gemini can also be added without its CLI as a chat-only planet (Add a planet → Compatible API chat) using Google's OpenAI-compatible endpoint and a GEMINI_API_KEY in the server environment.</p>
     </dialog>
     <dialog id="settings-dialog" class="settings-dialog">
       <header><div><span class="eyebrow">SAVED ON THIS COMPUTER</span><h2>Settings</h2></div><button id="close-settings">Close ×</button></header>
@@ -177,7 +188,8 @@
             <h3>Subagents</h3>
             <label class="check"><input type="checkbox" id="set-child-window"> Open each subagent in its own window, on the right of the screen</label>
             <label class="check"><input type="checkbox" id="set-ping-main"> Tell the main agent when a subagent finishes</label>
-            <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself.</p>
+            <label class="check"><input type="checkbox" id="set-allow-full"> Allow full access mode for Codex and Gemini (no sandbox)</label>
+            <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself. Full access lets an agent use the internet and change anything on this computer, not only the project: it is off until you allow it here, then chosen per agent with a warning. Subagents never get it.</p>
           </section>
           <section data-panel="saved" hidden>
             <h3>Saved text</h3>

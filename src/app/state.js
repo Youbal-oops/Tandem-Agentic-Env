@@ -15,6 +15,12 @@ export const MODES = {
   codex: [
     { id: 'read', label: 'Read-only', hint: 'Can look around, cannot change files' },
     { id: 'edit', label: 'Edit', hint: 'Can edit files in this folder, sandboxed' },
+    { id: 'full', label: 'Full access', hint: 'No sandbox: its shell can use the internet and reach anything on this computer. Needs switching on in Settings.' },
+  ],
+  gemini: [
+    { id: 'plan', label: 'Plan', hint: 'Read-only: explores and proposes, changes nothing' },
+    { id: 'edit', label: 'Edit', hint: 'Edits files freely, asks before other actions' },
+    { id: 'full', label: 'Full access', hint: 'Approves every action itself, including shell commands. Needs switching on in Settings.' },
   ],
 };
 
@@ -25,7 +31,7 @@ export function createApp() {
     CODES: { claude: 'CLD', codex: 'CDX' },
     MODES,
     // Claude accepts these aliases; Codex model names change often, so it offers its default plus a custom name.
-    MODEL_PRESETS: { claude: ['opus', 'sonnet', 'haiku'], codex: [] },
+    MODEL_PRESETS: { claude: ['opus', 'sonnet', 'haiku'], codex: [], gemini: [] },
     CHILD_MODEL_DEFAULTS: {},
     configs: {},
     panels: {},

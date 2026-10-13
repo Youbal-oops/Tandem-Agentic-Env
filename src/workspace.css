@@ -148,3 +148,14 @@ label.check input { accent-color: var(--warn); }
 .settings-panels input[type=number]{width:110px}
 #btn-review.attention{border-color:#f0b35a;color:#f0b35a}
 @media (max-width:620px){.settings-body{grid-template-columns:1fr}.settings-nav{flex-direction:row;flex-wrap:wrap}}
+
+/* Connect agents */
+.connect-dialog{width:min(640px,calc(100vw - 32px))}
+.connect-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:12px 0;border-bottom:1px solid var(--faint)}
+.connect-head{display:flex;align-items:center;gap:8px;margin-right:auto;flex-wrap:wrap}
+.connect-actions{display:flex;gap:8px;flex-wrap:wrap}
+.connect-badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--faint);color:var(--mute)}
+.connect-badge.ok{color:var(--good);border-color:currentColor}
+.connect-badge.warn{color:var(--warn);border-color:currentColor}
+#connect-log{max-height:200px;overflow:auto;white-space:pre-wrap;font-size:12px;padding:8px;border:1px solid var(--faint);border-radius:6px}
+.connect-warn{color:var(--warn)}

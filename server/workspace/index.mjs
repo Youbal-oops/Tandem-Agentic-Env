@@ -15,6 +15,7 @@ import { ensureProjectContext } from '../project-context.mjs';
 import { createLearning } from '../learning/session.mjs';
 import { createReview } from '../review/review.mjs';
 import { createSettings } from '../settings.mjs';
+import { UNSAFE_MODES } from '../agents/constants.mjs';
 import { createApiChat } from './api-chat.mjs';
 import { createHistory } from './history.mjs';
 import { createPrompt } from './prompt.mjs';
@@ -118,7 +119,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   function add(input, state) {
     if (entries.size >= 8) throw new Error('Up to eight planets per workspace.');
     const provider = input.provider;
-    if (!['claude', 'codex', 'api'].includes(provider)) throw new Error('Choose Claude CLI, Codex CLI or a compatible API.');
+    if (!['claude', 'codex', 'gemini', 'api'].includes(provider)) throw new Error('Choose Claude CLI, Codex CLI, Gemini CLI or a compatible API.');
     const config = { id: input.id || `${provider}-${crypto.randomBytes(4).toString('hex')}`, provider,
       name: String(input.name || provider).trim().slice(0, 32), model: input.model || null,
       conversationId: input.conversationId || crypto.randomUUID() };
@@ -188,6 +189,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     settings: () => settings.state(),
     saveSettings(input) {
       const out = settings.save(input); save();
+      if (!out.agents.allowFull) for (const a of entries.values()) if (a.cli && UNSAFE_MODES.has(a.cli.snapshot()[a.config.provider].meta.mode)) a.cli.setMode(a.config.provider, a.config.provider === 'gemini' ? 'edit' : 'edit');
       for (const a of entries.values()) if (a.cli) review.recheck(a);
       return out;
     },
@@ -230,6 +232,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (m.t === 'send' || m.t === 'implement') { review.guardSend(a); review.onSend(a); }
       if (m.t === 'implement') return learning.implement(a, { skipDesign: m.skipDesign === true });
       if (m.t === 'confirm-design') return learning.confirmDesign(a);
+      if (m.t === 'mode' && UNSAFE_MODES.has(m.mode) && !settings.agents().allowFull) throw new Error('Full access is switched off. Turn on "Allow full access mode" in Settings → Subagents first.');
       if (m.t === 'mode') learning.guardMode(a, m.mode);
       if (m.t === 'send') learning.onSend(a, m.text);
       const attachments = m.t === 'send' ? ctx.images.resolve(m.attachments) : [];

@@ -15,19 +15,20 @@ import { EFFORTS, MODES, validModel } from './constants.mjs';
 import { createEvents } from './events.mjs';
 import { createClaude } from './claude.mjs';
 import { createCodex } from './codex.mjs';
+import { createGemini } from './gemini.mjs';
 import { buildMeta, freshStats } from './stats.mjs';
 import { createSummarizer } from './tools.mjs';
 import { quietKill } from './util.mjs';
 
 export { MODES, validModel };
 
-export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex'], environment = {}, taskInstructions = '', getInstructions = () => '', denyTool = () => null }) {
+export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex', 'gemini'], environment = {}, taskInstructions = '', getInstructions = () => '', denyTool = () => null }) {
   const { rel, summarize } = createSummarizer(cwd);
   const agents = {};
   for (const id of providers) {
     agents[id] = {
       id,
-      mode: id === 'claude' ? 'ask' : 'read',
+      mode: id === 'claude' ? 'ask' : id === 'gemini' ? 'plan' : 'read',
       busy: false,
       sessionId: null,
       model: null,
@@ -64,6 +65,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
   const { put, note, fail, endTurnCleanup, reindex } = ctx;
   const claude = createClaude(ctx);
   const codex = createCodex(ctx);
+  const gemini = createGemini(ctx);
 
   /** Stop the process quietly (no failed-turn report). Claude restarts with new flags and resumes its session. */
   function dropProcess(a) {
@@ -91,6 +93,8 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
       if (id === 'claude') {
         const proc = claude.ensure(a);
         proc.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content: claudeContent(text, images) } }) + '\n');
+      } else if (id === 'gemini') {
+        gemini.send(a, text, images);
       } else {
         codex.send(a, text, images);
       }
@@ -154,7 +158,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
     setModel,
     setEffort(id, effort) {
       const a = agents[id];
-      if (!a || a.busy || ![null, '', ...EFFORTS].includes(effort)) return;
+      if (!a || a.busy || id === 'gemini' || ![null, '', ...EFFORTS].includes(effort)) return;
       if (id === 'codex' && effort === 'max') return fail(a, 'Use Extra high for Codex.');
       a.effort = effort || null;
       dropProcess(a);

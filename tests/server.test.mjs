@@ -44,7 +44,7 @@ async function boot(t) {
 
 test('the session handshake and the UI shell come from the real server', async (t) => {
   const { base, session } = await boot(t);
-  assert.deepEqual(Object.keys(session.modes).sort(), ['claude', 'codex']);
+  assert.deepEqual(Object.keys(session.modes).sort(), ['claude', 'codex', 'gemini']);
   assert.equal(session.local.learningMode, false);
   assert.deepEqual(session.local.checkpoints, { claude: { stage: 'build', designConfirmed: false, skipped: false }, codex: { stage: 'build', designConfirmed: false, skipped: false } });
   const status = (host) => new Promise((resolve, reject) => http.get(`${base}/`, { headers: { Host: host } }, (res) => { res.resume(); resolve(res.statusCode); }).on('error', reject));

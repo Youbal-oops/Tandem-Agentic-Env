@@ -5,13 +5,13 @@ const $ = (s) => document.querySelector(s);
 
 export function createSettingsDialog({ send, connected, notify, getAgent }) {
   let saved = { enabled: true, maxLines: 300, maxFiles: 10, hardStop: true, margin: 25 };
-  let savedAgents = { pingMain: true };
+  let savedAgents = { pingMain: true, allowFull: false };
   let reviewWindow = null;
   const held = new Set();
 
   const dirty = () => $('#set-review-on').checked !== saved.enabled || Number($('#set-max-lines').value) !== saved.maxLines || Number($('#set-max-files').value) !== saved.maxFiles
     || $('#set-hard-stop').checked !== saved.hardStop || Number($('#set-margin').value) !== saved.margin
-    || $('#set-ping-main').checked !== savedAgents.pingMain;
+    || $('#set-ping-main').checked !== savedAgents.pingMain || $('#set-allow-full').checked !== savedAgents.allowFull;
   const status = (text) => { $('#settings-status').textContent = text; };
   const refreshStatus = () => status(dirty() ? 'Unsaved changes' : '');
 
@@ -27,8 +27,8 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
 
   function showAgents(agents, force) {
     if (!agents) return;
-    savedAgents = { pingMain: agents.pingMain !== false };
-    if (force || !dirty()) $('#set-ping-main').checked = savedAgents.pingMain;
+    savedAgents = { pingMain: agents.pingMain !== false, allowFull: agents.allowFull === true };
+    if (force || !dirty()) { $('#set-ping-main').checked = savedAgents.pingMain; $('#set-allow-full').checked = savedAgents.allowFull; }
     refreshStatus();
   }
 
@@ -85,12 +85,16 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     if (!Number.isInteger(maxFiles) || maxFiles < 1 || maxFiles > 200) return status('Files must be a whole number from 1 to 200.');
     const margin = Number($('#set-margin').value);
     if (!Number.isInteger(margin) || margin < 5 || margin > 100) return status('The margin must be a whole number from 5 to 100.');
-    send({ t: 'savesettings', settings: { review: { enabled: $('#set-review-on').checked, maxLines, maxFiles, hardStop: $('#set-hard-stop').checked, margin }, agents: { pingMain: $('#set-ping-main').checked } } });
+    send({ t: 'savesettings', settings: { review: { enabled: $('#set-review-on').checked, maxLines, maxFiles, hardStop: $('#set-hard-stop').checked, margin }, agents: { pingMain: $('#set-ping-main').checked, allowFull: $('#set-allow-full').checked } } });
     status('Saving…');
   });
   $('#set-learning-mode').addEventListener('change', () => $('#btn-learning').click());
   $('#set-child-window').addEventListener('change', (e) => { try { localStorage.setItem('tandem:child-window', String(e.target.checked)); } catch { /* the choice just will not persist */ } });
   $('#set-ping-main').addEventListener('input', sync);
+  $('#set-allow-full').addEventListener('change', (e) => {
+    if (e.target.checked && !confirm('Allow full access mode? An agent in this mode runs without a sandbox: it can use the internet and change anything on this computer your account can reach. You still choose it per agent, and Tandem asks again each time.')) e.target.checked = false;
+    sync();
+  });
   $('#btn-review').addEventListener('click', openReview);
   $('#open-review').addEventListener('click', openReview);
 

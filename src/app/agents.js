@@ -28,7 +28,10 @@ export function initAgents(app) {
         model: (model) => (ui.demo ? onMeta(id, { modelPref: model || null, model: model || (id === 'claude' ? 'claude-opus-5-5' : null) }) : app.net.send({ t: 'model', agent: id, model })),
         send: (text, attachments) => (ui.demo ? app.demo.respond(id, text) : app.net.send({ t: 'send', agent: id, text, attachments })),
         stop: () => app.net.send({ t: 'stop', agent: id }),
-        mode: (mode) => (ui.demo ? onMeta(id, { mode }) : app.net.send({ t: 'mode', agent: id, mode })),
+        mode: (mode) => {
+          if (mode === 'full' && !ui.demo && !confirm('Full access removes the sandbox. This agent can run any command, use the internet and change anything on this computer your account can, not just this project. Tandem cannot undo that.\n\nSwitch to Full access?')) return;
+          if (ui.demo) onMeta(id, { mode }); else app.net.send({ t: 'mode', agent: id, mode });
+        },
         newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : app.net.send({ t: 'newchat', agent: id })),
         history: () => app.chatHistory.open(id),
         approve: (requestId, allow, answers) => app.net.send({ t: 'approve', agent: id, requestId, allow, answers }),

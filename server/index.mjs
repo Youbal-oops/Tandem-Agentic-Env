@@ -19,6 +19,7 @@ import { createGitStatus } from './app/git-status.mjs';
 import { createHttpServer } from './app/http.mjs';
 import { attachWebSocket, combineRoutes, createHub } from './app/ws.mjs';
 import { createAgentRoutes } from './app/routes/agent.mjs';
+import { createConnectRoutes } from './app/routes/connect.mjs';
 import { createLocalRoutes } from './app/routes/local.mjs';
 import { createPushRoutes } from './app/routes/push.mjs';
 import { createRepoRoutes } from './app/routes/repos.mjs';
@@ -47,6 +48,7 @@ attachWebSocket(server, {
   snapshot,
   routes: combineRoutes(
     createLocalRoutes({ agents, hub, snapshot }),
+    createConnectRoutes({ hub, snapshot }),
     createRepoRoutes({ agents, hub, gitStatus, repoService, clone, snapshot }),
     createPushRoutes({ agents, gitStatus, workDir }),
     createTerminalRoutes({ agents, workDir }),
@@ -68,6 +70,6 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) {
 
 server.listen(PORT, HOST, () => {
   console.log(`Tandem API  http://${HOST}:${PORT}   (agents work in: ${agents.cwd})`);
-  for (const id of AGENT_IDS) console.log(`  ${id.padEnd(7)} ${specs[id] ? 'found' : 'NOT FOUND (npm install -g the CLI)'}`);
+  for (const id of [...AGENT_IDS, 'gemini']) console.log(`  ${id.padEnd(7)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: More → Connect agents)'}`);
   console.log('Dev UI      http://localhost:5173  (npm run dev)');
 });

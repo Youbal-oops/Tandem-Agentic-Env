@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { createAgents, validModel } from './agents.mjs';
+import { UNSAFE_MODES } from './agents/constants.mjs';
 import { createImageStore } from './images.mjs';
 
 const ACTIVE = new Set(['queued', 'running']);
@@ -131,6 +132,7 @@ export function createChildren({ root, specs, getCwd, getParents, getWorktree = 
     attach(c);
     const method = { send: 'send', stop: 'stop', mode: 'setMode', model: 'setModel', effort: 'setEffort', approve: 'approve' }[m.action];
     if (!method) throw new Error('Unknown child chat action.');
+    if (m.action === 'mode' && UNSAFE_MODES.has(m.mode)) throw new Error('Full access is only available to main agents.');
     if (m.action === 'stop') c.status = 'interrupted';
     c.cli[method](c.provider, m.text ?? m.mode ?? m.model ?? m.effort ?? m.requestId, m.action === 'send' ? attachments : m.allow === true, m.answers);
     publish(c); return snapshot(c);

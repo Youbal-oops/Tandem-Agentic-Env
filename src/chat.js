@@ -328,7 +328,7 @@ export class ChatPanel {
   }
   /** Learning mode: main CLI agents are read-only until the user approves implementation. */
   setLearning(on) {
-    this.learning = !!on && (this.provider === 'claude' || this.provider === 'codex');
+    this.learning = !!on && ['claude', 'codex', 'gemini'].includes(this.provider);
     this.refresh();
   }
   /** Where this agent is in the checkpoint cycle: { stage, designConfirmed, skipped }. */

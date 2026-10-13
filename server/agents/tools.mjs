@@ -11,6 +11,12 @@ const CLASS_BY_NAME = {
   Task: 'agent', Agent: 'agent',
   TodoWrite: 'plan', TaskCreate: 'plan', TaskUpdate: 'plan', TaskList: 'plan', TaskGet: 'plan', TaskStop: 'plan', TaskOutput: 'plan',
 };
+/** Gemini CLI's tool names, as the Claude-style names the chat, review and learning code already understand. */
+export const GEMINI_TOOL = {
+  read_file: 'Read', read_many_files: 'Read', list_directory: 'LS', glob: 'Glob',
+  grep_search: 'Grep', search_file_content: 'Grep', google_web_search: 'WebSearch', web_fetch: 'WebFetch',
+  run_shell_command: 'Shell', write_file: 'Write', replace: 'Edit', write_todos: 'TodoWrite',
+};
 export const toolClass = (name = '') => CLASS_BY_NAME[name] || (/^mcp__|\./.test(name) ? 'mcp' : 'other');
 
 /** Path helpers bound to one working folder: paths inside it are shown relative to it. */
@@ -24,6 +30,7 @@ export function createSummarizer(cwd) {
   function summarize(name, input = {}) {
     const pick = (...ks) => ks.map((k) => input?.[k]).find((v) => typeof v === 'string' && v) || '';
     switch (name) {
+      case 'Shell':
       case 'Bash':
       case 'PowerShell':
         return trunc(pick('command'), 200);
@@ -32,10 +39,10 @@ export function createSummarizer(cwd) {
       case 'Edit':
       case 'MultiEdit':
       case 'NotebookEdit':
-        return rel(pick('file_path', 'notebook_path'));
+        return rel(pick('file_path', 'notebook_path', 'absolute_path', 'path'));
       case 'Glob':
       case 'Grep':
-        return pick('pattern');
+        return pick('pattern', 'dir_path');
       case 'WebFetch':
         return pick('url');
       case 'WebSearch':

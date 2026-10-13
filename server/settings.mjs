@@ -15,8 +15,11 @@ export function cleanReview(input, current = REVIEW_DEFAULTS) {
   };
 }
 
-export const AGENT_DEFAULTS = Object.freeze({ pingMain: true });
-export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({ pingMain: typeof input?.pingMain === 'boolean' ? input.pingMain : current.pingMain });
+export const AGENT_DEFAULTS = Object.freeze({ pingMain: true, allowFull: false });
+export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({
+  pingMain: typeof input?.pingMain === 'boolean' ? input.pingMain : current.pingMain,
+  allowFull: typeof input?.allowFull === 'boolean' ? input.allowFull : current.allowFull,
+});
 
 export function createSettings({ saved }) {
   let review = cleanReview(saved.settings?.review);
