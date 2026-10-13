@@ -10,15 +10,21 @@ import { execFile } from 'node:child_process';
 const PATCH_LIMIT = 1024 * 1024;
 
 const running = new Set();
+let epoch = 0;
 
-/** Stop any snapshot still running (the workspace is closing, and its folders are about to go away). */
+/**
+ * Stop any snapshot still running (the workspace is closing, and its folders are about to go away). Work that
+ * was already under way does not start its next git command either: it fails instead of reopening the folder.
+ */
 export function stopSnapshots() {
+  epoch += 1;
   for (const child of running) child.kill();
   running.clear();
 }
 
-function git(cwd, args, { env = {}, limit = PATCH_LIMIT } = {}) {
+function git(cwd, args, { env = {}, limit = PATCH_LIMIT, since = epoch } = {}) {
   return new Promise((resolve, reject) => {
+    if (since !== epoch) { reject(new Error('stopped')); return; }
     const child = execFile('git', ['-C', cwd, '--no-pager', ...args], { env: { ...process.env, ...env }, windowsHide: true, maxBuffer: limit, timeout: 20000, encoding: 'utf8' }, (err, out, errText) => {
       if (err) reject(new Error(err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'This change is too large to show as one diff.' : (String(errText).trim() || err.message)));
       else resolve(out);
@@ -31,11 +37,12 @@ function git(cwd, args, { env = {}, limit = PATCH_LIMIT } = {}) {
 /** The working folder (tracked and untracked files, minus ignored ones) as a git tree id, or null outside a repository. */
 export async function snapshotTree(cwd) {
   const index = path.join(os.tmpdir(), `tandem-index-${crypto.randomBytes(6).toString('hex')}`);
+  const since = epoch;
   const env = { GIT_INDEX_FILE: index };
   try {
-    try { await git(cwd, ['read-tree', 'HEAD'], { env }); } catch { /* a repository without a commit yet starts from an empty index */ }
-    await git(cwd, ['add', '-A', '--', '.'], { env });
-    return (await git(cwd, ['write-tree'], { env })).trim();
+    try { await git(cwd, ['read-tree', 'HEAD'], { env, since }); } catch { /* a repository without a commit yet starts from an empty index */ }
+    await git(cwd, ['add', '-A', '--', '.'], { env, since });
+    return (await git(cwd, ['write-tree'], { env, since })).trim();
   } catch {
     return null;
   } finally {
@@ -46,7 +53,8 @@ export async function snapshotTree(cwd) {
 /** Per-file changed line counts between two tree ids: [{ path, added, removed, binary }]. */
 export async function numstat(cwd, from, to) {
   if (!from || !to || from === to) return [];
-  const out = await git(cwd, ['diff', '--numstat', '--no-renames', '--no-ext-diff', '--no-textconv', from, to, '--']);
+  const since = epoch;
+  const out = await git(cwd, ['diff', '--numstat', '--no-renames', '--no-ext-diff', '--no-textconv', from, to, '--'], { since });
   return out.split('\n').filter(Boolean).map((line) => {
     const [a, r, ...rest] = line.split('\t');
     const binary = a === '-' || r === '-';
@@ -59,5 +67,5 @@ export async function patch(cwd, from, to, file) {
   if (!from || !to || from === to) return '';
   const args = ['diff', '--no-renames', '--no-ext-diff', '--no-textconv', '--no-color', '-U4', from, to, '--'];
   if (file) args.push(file);
-  return git(cwd, args);
+  return git(cwd, args, { since: epoch });
 }

@@ -165,3 +165,12 @@ test('past the cutoff the agent is cut off mid-job; under it, and with the cutof
   assert.equal(unattended.review.denyTool(unattended.a, 'Write', { file_path: 'b.txt', content: lots(400) }), null);
   assert.equal(unattended.review.promptBlock(), '');
 });
+
+test('stopping snapshots makes work in flight fail instead of starting its next git command', async () => {
+  const { stopSnapshots } = await import('../server/review/tree.mjs');
+  const dir = repo();
+  const running = snapshotTree(dir);
+  stopSnapshots();
+  assert.equal(await running, null, 'a snapshot caught by the stop returns nothing');
+  assert.match(await snapshotTree(dir), /^[0-9a-f]{40}$/, 'a later snapshot is unaffected');
+});

@@ -196,6 +196,7 @@ The user reviews your changes in batches of about ${l.maxLines} changed lines (a
 
     /** Limits were changed in Settings: a held batch may now be fine, and a fine one may now be held. */
     async recheck(a) {
+      if (!states.has(a.config.id) || !stateOf(a.config.id).baseP) return; // never used: nothing to re-check
       const s = stateOf(a.config.id);
       await measure(a);
       if (s.held && !overLimit(s.stats, limits(), 0, s.room)) { s.held = false; s.reason = ''; }
