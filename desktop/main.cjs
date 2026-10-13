@@ -30,10 +30,22 @@ async function start() {
   });
   const appUrl = `http://127.0.0.1:${Number(process.env.TANDEM_PORT || 4317)}`;
   const isAppUrl = (url) => { try { return new URL(url).origin === appUrl; } catch { return false; } };
+  // Only Tandem's own pop-out pages may open a window: the review window and a subagent's chat.
+  const POPUPS = new Set(['/review.html', '/child.html']);
   window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAppUrl(url) && POPUPS.has(new URL(url).pathname)) {
+      return { action: 'allow', overrideBrowserWindowOptions: { backgroundColor: '#02030a', autoHideMenuBar: true, minWidth: 420, minHeight: 360, webPreferences: { contextIsolation: true, nodeIntegration: false } } };
+    }
     if (!isAppUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  // The pop-outs get the same rules, and may not open further windows of their own.
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents === window.webContents) return;
+    contents.setWindowOpenHandler(({ url }) => { if (!isAppUrl(url)) shell.openExternal(url); return { action: 'deny' }; });
+    contents.on('will-navigate', (event, url) => { if (!isAppUrl(url)) { event.preventDefault(); shell.openExternal(url); } });
+  });
+  window.on('closed', () => app.quit());
   window.webContents.on('will-navigate', (event, url) => {
     if (!isAppUrl(url)) { event.preventDefault(); shell.openExternal(url); }
   });

@@ -136,6 +136,15 @@ try {
   const reopened = await (await fetch(`${origin}/api/session`)).json();
   assert.equal(reopened.agents.find((row) => row.id === agent.id).conversationId, agent.conversationId);
   console.log('PASS new chat, history picker, conversation restore and isolated drafts');
+  // The review window and a subagent's chat open as their own windows; no other app path may.
+  await evaluate(`window.open('/review.html?agent=${agent.id}', 'tandem-review', 'popup=yes,width=700,height=500'); window.open('/api/session', 'tandem-probe'); true`);
+  await eventually(async () => {
+    const pages = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
+    return pages.some((page) => page.type === 'page' && page.url.startsWith(`${origin}/review.html`));
+  }, 'review pop-out window');
+  const open = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
+  assert.equal(open.filter((page) => page.type === 'page' && page.url.includes('/api/session')).length, 0, 'only the review and subagent pages may open windows');
+  console.log('PASS pop-out windows open for the review and subagent pages only');
   const ws = await connect(`ws://127.0.0.1:${port}/ws?token=${session.token}`, { origin });
   const saved = new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Notes save timed out')), 10000);

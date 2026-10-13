@@ -7,6 +7,7 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
   let saved = { enabled: true, maxLines: 300, maxFiles: 10, hardStop: true, margin: 25 };
   let savedAgents = { pingMain: true, allowFull: false };
   let reviewWindow = null;
+  let touched = false; // true once the user has changed a control; until then the server's values fill the form
   const held = new Set();
 
   const dirty = () => $('#set-review-on').checked !== saved.enabled || Number($('#set-max-lines').value) !== saved.maxLines || Number($('#set-max-files').value) !== saved.maxFiles
@@ -28,14 +29,14 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
   function showAgents(agents, force) {
     if (!agents) return;
     savedAgents = { pingMain: agents.pingMain !== false, allowFull: agents.allowFull === true };
-    if (force || !dirty()) { $('#set-ping-main').checked = savedAgents.pingMain; $('#set-allow-full').checked = savedAgents.allowFull; }
+    if (force || !touched) { $('#set-ping-main').checked = savedAgents.pingMain; $('#set-allow-full').checked = savedAgents.allowFull; }
     refreshStatus();
   }
 
   function show(review, force) {
     if (!review) return;
     saved = { enabled: review.enabled, maxLines: review.maxLines, maxFiles: review.maxFiles, hardStop: review.hardStop, margin: review.margin };
-    if (force || !dirty()) {
+    if (force || !touched) {
       $('#set-review-on').checked = saved.enabled; $('#set-max-lines').value = saved.maxLines; $('#set-max-files').value = saved.maxFiles;
       $('#set-hard-stop').checked = saved.hardStop; $('#set-margin').value = saved.margin;
     }
@@ -77,7 +78,8 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     $('#settings-dialog').close();
     $(b.dataset.open).click();
   }));
-  for (const id of ['#set-review-on', '#set-max-lines', '#set-max-files', '#set-hard-stop', '#set-margin']) $(id).addEventListener('input', sync);
+  const touch = () => { touched = true; sync(); };
+  for (const id of ['#set-review-on', '#set-max-lines', '#set-max-files', '#set-hard-stop', '#set-margin']) $(id).addEventListener('input', touch);
   $('#save-settings').addEventListener('click', () => {
     if (!connected()) return notify('Connect to the local server first.');
     const maxLines = Number($('#set-max-lines').value); const maxFiles = Number($('#set-max-files').value);
@@ -90,8 +92,9 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
   });
   $('#set-learning-mode').addEventListener('change', () => $('#btn-learning').click());
   $('#set-child-window').addEventListener('change', (e) => { try { localStorage.setItem('tandem:child-window', String(e.target.checked)); } catch { /* the choice just will not persist */ } });
-  $('#set-ping-main').addEventListener('input', sync);
+  $('#set-ping-main').addEventListener('input', touch);
   $('#set-allow-full').addEventListener('change', (e) => {
+    touched = true;
     if (e.target.checked && !confirm('Allow full access mode? An agent in this mode runs without a sandbox: it can use the internet and change anything on this computer your account can reach. You still choose it per agent, and Tandem asks again each time.')) e.target.checked = false;
     sync();
   });
@@ -101,7 +104,7 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
   return {
     /** Server messages: settings arrive on their own, inside local state, and as review updates. */
     receive(msg) {
-      if (msg.t === 'settings') { show(msg.settings?.review, true); showAgents(msg.settings?.agents, true); status('Saved'); return true; }
+      if (msg.t === 'settings') { touched = false; show(msg.settings?.review, true); showAgents(msg.settings?.agents, true); status('Saved'); return true; }
       if (msg.t === 'review') {
         const r = msg.review;
         if (r.held && !held.has(r.agent)) notify(`${r.agent} needs your review: ${r.reason}.`);
