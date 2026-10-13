@@ -6,7 +6,7 @@ import path from 'node:path';
 const MAX_PROMPT = 8000;
 
 /** `ctx` supplies: saved, workingDir, projectContext (both current). `learning` is the learning-mode controller. */
-export function createPrompt(ctx, learning) {
+export function createPrompt(ctx, learning, extraBlocks = () => []) {
   let globalPrompt = { text: typeof ctx.saved.globalPrompt?.text === 'string' ? ctx.saved.globalPrompt.text.slice(0, MAX_PROMPT) : '', on: ctx.saved.globalPrompt?.on !== false };
 
   // Rendered fresh on every send, so a repo switch or a new chat always picks up the current repo.
@@ -14,7 +14,7 @@ export function createPrompt(ctx, learning) {
   function render(name, { provider = 'codex', child = false } = {}) {
     const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(ctx.workingDir)).replaceAll('{{path}}', ctx.workingDir).replaceAll('{{agent}}', name);
     const context = ctx.projectContext.text && `[Shared project context: ${ctx.projectContext.file}]\n${ctx.projectContext.text}`;
-    return [prompt, context, ...(child ? [] : learning.promptBlocks(provider))].filter(Boolean).join('\n\n');
+    return [prompt, context, ...(child ? [] : [...extraBlocks(provider), ...learning.promptBlocks(provider)])].filter(Boolean).join('\n\n');
   }
 
   return {

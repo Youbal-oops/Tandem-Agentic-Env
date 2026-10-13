@@ -29,6 +29,17 @@ export function createLocalRoutes({ agents, hub, snapshot }) {
         try { conn.send({ t: 'folders', request: m.request, ...await listFolders(m.path || os.homedir()) }); }
         catch (e) { conn.send({ t: 'folders', request: m.request, error: e.message }); }
       },
+      savesettings: (m, conn) => { const out = agents.saveSettings(m.settings); hub.broadcast({ t: 'settings', settings: out }); },
+      review: (m, conn) => conn.send({ t: 'review', review: agents.reviewView(String(m.agent)) }),
+      'review-patch': async (m, conn) => {
+        try { conn.send({ t: 'review-patch', request: m.request, agent: m.agent, file: m.file || '', text: await agents.reviewPatch(String(m.agent), m.file) }); }
+        catch (e) { conn.send({ t: 'review-patch', request: m.request, agent: m.agent, file: m.file || '', error: e.message }); }
+      },
+      'review-approve': async (m) => {
+        await agents.reviewApprove(String(m.agent));
+        if (m.continue === true) await agents.action({ t: 'send', agent: String(m.agent), text: 'Approved in Tandem: the user reviewed your changes so far. Carry on where you stopped, in steps small enough to review, and say what each one is for before you edit.' });
+      },
+      'review-propose': (m) => { agents.reviewPropose(String(m.agent), m); },
       stopall: () => { agents.stopAll(); hub.broadcast({ t: 'notice', text: 'Stopped all agent sessions. Conversations are kept.' }); },
       files: inspect('files'),
       file: inspect('file'),

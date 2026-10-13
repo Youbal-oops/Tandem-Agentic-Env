@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tandem · Review changes</title>
+  <link rel="stylesheet" href="/src/styles/review.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="title"><span class="eyebrow">REVIEW</span><h1>Changes since your last approval</h1></div>
+    <label class="who">Agent <select id="agent" aria-label="Agent to review"></select></label>
+    <div class="meter" id="meter" role="status" aria-live="polite"></div>
+    <div class="actions">
+      <button id="refresh" type="button">Refresh</button>
+      <button id="approve" type="button" title="Accept this batch; the next one starts from here">Approve batch</button>
+      <button id="approve-go" type="button" class="primary" title="Approve, then tell the agent to carry on in small steps">Approve &amp; continue</button>
+    </div>
+  </header>
+  <p id="banner" class="banner" hidden></p>
+  <main class="layout">
+    <nav id="files" aria-label="Changed files"></nav>
+    <section id="detail" aria-live="polite"><p class="empty">Connecting to Tandem…</p></section>
+  </main>
+  <p id="status" class="status" role="status"></p>
+  <script type="module" src="/src/review.js"></script>
+</body>
+</html>

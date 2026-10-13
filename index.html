@@ -29,9 +29,11 @@
           <button id="btn-workspace">Workspace</button>
           <button id="btn-setup" title="Set up projects, Git and agents">Set up</button>
           <button id="btn-inspect">Files / Diff</button>
+          <button id="btn-review" title="See what the agents changed, with their notes, in a separate window">Review</button>
           <button id="btn-terminal" title="Open a terminal in this project (Ctrl+`)">Terminal <kbd>Ctrl+`</kbd></button>
           <button id="btn-push" title="Review changes and push to a tandem/&lt;repo&gt; branch on origin">Push</button>
           <details class="toolbar-more"><summary>More <span>⌄</span></summary><div class="toolbar-menu">
+          <button id="btn-settings" title="Review limits, learning, appearance and saved text">Settings</button>
           <button id="btn-profile" title="What you know and what you want to learn">Learn profile</button>
           <button id="btn-journal" title="Steps finished in learning mode, kept for the next session">Learning journal</button>
           <button id="btn-prompt" title="Instructions every agent receives at the start of each session">Prompt</button>
@@ -142,6 +144,46 @@
       <div class="inspector-layout"><nav id="file-list" aria-label="Repository files"></nav><div class="file-preview"><p id="inspect-status" role="status"></p><pre id="inspect-content"></pre></div></div>
       <div class="inspector-toolbar"><select id="context-agent" aria-label="Agent for file context"></select><button id="attach-context" disabled>Add to chat draft</button></div>
       <p>Preview is read-only. Add a file or diff to a draft to discuss it with an agent; send it when ready.</p>
+    </dialog>
+    <dialog id="settings-dialog" class="settings-dialog">
+      <header><div><span class="eyebrow">SAVED ON THIS COMPUTER</span><h2>Settings</h2></div><button id="close-settings">Close ×</button></header>
+      <div class="settings-body">
+        <nav class="settings-nav" aria-label="Settings sections">
+          <button type="button" data-section="review" class="on">Review &amp; limits</button>
+          <button type="button" data-section="learning">Learning</button>
+          <button type="button" data-section="saved">Saved text</button>
+          <button type="button" data-section="look">Appearance</button>
+        </nav>
+        <div class="settings-panels">
+          <section data-panel="review">
+            <h3>Review &amp; limits</h3>
+            <label class="check"><input type="checkbox" id="set-review-on"> Keep agents to batches I can review (switch off for unattended runs)</label>
+            <div class="form-row">
+              <label>Budget: changed lines<input type="number" id="set-max-lines" min="20" max="5000" step="10"></label>
+              <label>Budget: files<input type="number" id="set-max-files" min="1" max="200"></label>
+            </div>
+            <label class="check"><input type="checkbox" id="set-hard-stop"> Cut an agent off if it goes just past the budget</label>
+            <div class="form-row"><label>Cutoff margin, %<input type="number" id="set-margin" min="5" max="100" step="5"></label><span id="set-cutoff" role="status"></span></div>
+            <p>Agents are told the budget. A big request should be split into components, with a stop and a review after each one. Going over the budget at the end of a job holds that agent's next task until you have approved. The cutoff sits a margin above the budget and is the safety net: an agent that reaches it is stopped mid-job, so expect it in long sessions that ignore the budget. A batch is everything changed since your last approval, added and removed lines both counted. Turn the first switch off, or the cutoff off, to let an agent run on without being interrupted.</p>
+            <div class="form-row"><button id="save-settings" class="primary">Save</button><button id="open-review" type="button">Open Review window</button><span id="settings-status" role="status"></span></div>
+          </section>
+          <section data-panel="learning" hidden>
+            <h3>Learning</h3>
+            <label class="check"><input type="checkbox" id="set-learning-mode"> Learning mode: main agents work with you, one approved step at a time</label>
+            <div class="form-row"><button type="button" data-open="#btn-profile">Learning profile…</button><button type="button" data-open="#btn-journal">Learning journal…</button></div>
+          </section>
+          <section data-panel="saved" hidden>
+            <h3>Saved text</h3>
+            <div class="form-row"><button type="button" data-open="#btn-prompt">Global prompt…</button><button type="button" data-open="#btn-notes">Repository notes…</button><button type="button" data-open="#btn-export">Export conversations…</button></div>
+            <p>The global prompt goes to every agent at the start of each session. Notes are yours only and are never sent to agents.</p>
+          </section>
+          <section data-panel="look" hidden>
+            <h3>Appearance</h3>
+            <div class="form-row"><button type="button" data-open="#btn-theme" id="set-theme"></button><button type="button" data-open="#btn-eco" id="set-eco"></button><button type="button" data-open="#btn-lite" id="set-lite"></button></div>
+            <p>Theme and Lite reload the page. Eco lowers the frame rate and effects to save battery.</p>
+          </section>
+        </div>
+      </div>
     </dialog>
     <dialog id="prompt-dialog">
       <header><div><span class="eyebrow">SAVED ON THIS COMPUTER · ALL AGENTS</span><h2>Global prompt</h2></div><button id="close-prompt">Close ×</button></header>

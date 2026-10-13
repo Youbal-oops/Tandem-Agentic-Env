@@ -217,9 +217,10 @@ export function createClaude(ctx) {
 
   function onControl(a, m) {
     const r = m.request || {};
-    if (r.subtype === 'can_use_tool' && denyTool(r.tool_name)) {
-      // The app, not the model, decides when a locked agent may leave read-only work.
-      reply(a, { subtype: 'success', request_id: m.request_id, response: { behavior: 'deny', message: String(denyTool(r.tool_name)) } });
+    const denied = r.subtype === 'can_use_tool' ? denyTool(r.tool_name, r.input) : null;
+    if (denied) {
+      // The app, not the model, decides when a locked agent may leave read-only work or has changed too much.
+      reply(a, { subtype: 'success', request_id: m.request_id, response: { behavior: 'deny', message: String(denied) } });
       return;
     }
     if (r.subtype === 'can_use_tool') {

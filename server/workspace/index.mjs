@@ -13,6 +13,8 @@ import { createImageStore } from '../images.mjs';
 import { createWorktrees } from '../worktrees.mjs';
 import { ensureProjectContext } from '../project-context.mjs';
 import { createLearning } from '../learning/session.mjs';
+import { createReview } from '../review/review.mjs';
+import { createSettings } from '../settings.mjs';
 import { createApiChat } from './api-chat.mjs';
 import { createHistory } from './history.mjs';
 import { createPrompt } from './prompt.mjs';
@@ -43,7 +45,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
 
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), childModelDefaults, repoChats: repos.repoChats,
+    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), settings: settings.state(), childModelDefaults, repoChats: repos.repoChats,
       agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
@@ -57,13 +59,15 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   const emit = (msg) => {
     if (ctx.closed) return;
     broadcast(msg); schedule();
-    if (msg.t === 'ev') { const a = entries.get(msg.agent); if (a) learning.onAgentEvent(a, msg.ev); else learning.observeEdit(msg.ev); }
+    if (msg.t === 'ev') { const a = entries.get(msg.agent); if (a) { learning.onAgentEvent(a, msg.ev); review.onEvent(a, msg.ev); } else learning.observeEdit(msg.ev); }
     else if (msg.t === 'child-event') learning.observeEdit(msg.ev);
   };
   Object.assign(ctx, { emit, schedule, save, snapshot: () => snapshot() });
 
   const learning = createLearning(ctx);
-  const prompt = createPrompt(ctx, learning);
+  const settings = createSettings(ctx);
+  const review = createReview({ limits: settings.review, emit: (msg) => emit(msg), agent: (id) => entries.get(id) });
+  const prompt = createPrompt(ctx, learning, () => [review.promptBlock()]);
   ctx.renderPrompt = prompt.render;
   const api = createApiChat(ctx);
   const history = createHistory(ctx); ctx.history = history;
@@ -75,11 +79,13 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     const { config } = a;
     return createAgents({ cwd: a.cwd, specs, providers: [config.provider], ...getAgentContext(config),
       getInstructions: () => prompt.render(config.name, { provider: config.provider }),
-      denyTool: (name) => learning.denyTool(a, name),
+      denyTool: (name, input) => learning.denyTool(a, name) || review.denyTool(a, name, input),
       broadcast: (msg) => {
         if (entries.get(config.id) !== a) return;
         emit({ ...msg, agent: config.id });
         learning.onCliMessage(a, msg);
+        if (msg.t === 'meta' && msg.meta && !msg.meta.busy && a.sawReviewBusy) { a.sawReviewBusy = false; review.onTurnEnd(a); }
+        else if (msg.t === 'meta' && msg.meta?.busy) a.sawReviewBusy = true;
       } });
   }
 
@@ -149,10 +155,20 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       else if (childModelDefaults[provider]) m = { ...m, model: childModelDefaults[provider] };
       const child = children.create(m.agent, m); save(); return child;
     },
-    localState: () => ({ cwd: ctx.workingDir, notes: typeof notes[ctx.workingDir] === 'string' ? notes[ctx.workingDir] : '', recent: repos.recent, prompt: prompt.state, ...learningState(), childModelDefaults }),
+    localState: () => ({ cwd: ctx.workingDir, notes: typeof notes[ctx.workingDir] === 'string' ? notes[ctx.workingDir] : '', recent: repos.recent, prompt: prompt.state, ...learningState(), settings: settings.state(), childModelDefaults }),
     savePrompt(text, on) { const out = prompt.save(text, on); save(); return out; },
     saveLearnerProfile(profile) { learning.saveProfile(profile); save(); return learningState(); },
     setLearningMode(on) { learning.setEnabled(on); save(); return learningState(); },
+    settings: () => settings.state(),
+    saveSettings(input) {
+      const out = settings.save(input); save();
+      for (const a of entries.values()) if (a.cli) review.recheck(a);
+      return out;
+    },
+    reviewView(id) { const a = entries.get(id); if (!a?.cli) throw new Error('Review works with Claude and Codex CLI agents.'); review.onSend(a); return review.view(id); },
+    reviewPatch(id, file) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); return review.patchFor(a, typeof file === 'string' ? file : ''); },
+    reviewApprove(id) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); return review.approve(a); },
+    reviewPropose(id, input) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); review.propose(a, input || {}); },
     journal: () => learning.journal(),
     clearJournal() { learning.clearJournal(); return learning.journal(); },
     saveNotes(cwd, text) {
@@ -184,6 +200,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (ctx.repoChanging && m.t === 'send') throw new Error('Wait for the repository clone to finish before sending a task.');
       const a = entries.get(m.agent);
       if (!a) throw new Error('Unknown agent.');
+      if (m.t === 'send' || m.t === 'implement') { review.guardSend(a); review.onSend(a); }
       if (m.t === 'implement') return learning.implement(a, { skipDesign: m.skipDesign === true });
       if (m.t === 'confirm-design') return learning.confirmDesign(a);
       if (m.t === 'mode') learning.guardMode(a, m.mode);

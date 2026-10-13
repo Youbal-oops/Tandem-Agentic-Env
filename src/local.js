@@ -1,5 +1,5 @@
 // Local tools are read-only until the user saves notes or sends a prepared draft.
-export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify, onLearning = () => {}, onCheckpoints = () => {} }) {
+export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify, onLearning = () => {}, onCheckpoints = () => {}, onSettings = () => {} }) {
   const $ = (s) => document.querySelector(s);
   let request = 0;
   let folder = '';
@@ -97,6 +97,7 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
       if (msg.t === 'prompt') { showPrompt(msg.prompt, true); return true; }
       if (msg.t === 'learnerprofile') { showProfile(msg.learnerProfile); showLearning(msg); return true; }
       if (msg.t === 'localstate') {
+        if (msg.settings) onSettings(msg.settings);
         showPrompt(msg.prompt, false);
         showProfile(msg.learnerProfile);
         showLearning(msg);

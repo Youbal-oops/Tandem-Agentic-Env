@@ -136,3 +136,14 @@ dialog .folder-entry:hover { background: #ece6d808; color: var(--warn); }
 label.check { flex-direction: row; align-items: center; gap: 10px; flex: none; }
 label.check input { accent-color: var(--warn); }
 
+
+/* Settings dialog and the Review button */
+.settings-dialog{width:min(760px,calc(100vw - 32px))}
+.settings-body{display:grid;grid-template-columns:170px 1fr;gap:18px;min-height:300px}
+.settings-nav{display:flex;flex-direction:column;gap:4px}
+.settings-nav button{text-align:left}
+.settings-nav button.on{border-color:var(--accent,#e8b27b)}
+.settings-panels h3{margin:0 0 10px;font-weight:500}
+.settings-panels input[type=number]{width:110px}
+#btn-review.attention{border-color:#f0b35a;color:#f0b35a}
+@media (max-width:620px){.settings-body{grid-template-columns:1fr}.settings-nav{flex-direction:row;flex-wrap:wrap}}
