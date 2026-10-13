@@ -46,7 +46,7 @@ export function readPluginJobs(cwd, roots) {
   return jobs;
 }
 
-export function createChildren({ root, specs, getCwd, getParents, getWorktree = (_, __) => getCwd(), broadcast, pluginRoots, pollMs = 1500, getInstructions = () => '' }) {
+export function createChildren({ root, specs, getCwd, getParents, getWorktree = (_, __) => getCwd(), broadcast, pluginRoots, pollMs = 1500, getInstructions = () => '', onDone = () => {} }) {
   const file = path.join(root, '.tandem', 'children.json');
   const children = new Map();
   let timer, saveTimer, closed = false;
@@ -79,7 +79,13 @@ export function createChildren({ root, specs, getCwd, getParents, getWorktree = 
     c.cli = createAgents({ cwd: c.cwd, specs, providers: [c.provider], getInstructions: () => getInstructions(c.provider), broadcast(msg) {
       if (closed) return;
       c.updatedAt = Date.now();
-      if (msg.t === 'ev' && msg.ev.k === 'turn') c.status = msg.ev.ok === false ? 'failed' : 'completed';
+      if (msg.t === 'ev' && msg.ev.k === 'turn') {
+        c.status = msg.ev.ok === false ? 'failed' : 'completed';
+        // The turn is over: tell whoever started this child, with the last thing it said.
+        const events = c.cli.snapshot()[c.provider].events;
+        const said = events.filter((e) => e.k === 'msg' && e.role === 'assistant' && e.done && e.text).at(-1)?.text || '';
+        try { onDone({ id: c.id, parentId: c.parentId, parentKey: c.parentKey, provider: c.provider, title: c.title, ok: msg.ev.ok !== false, summary: said }); } catch { /* a failed ping must not break the chat */ }
+      }
       if (msg.t === 'meta' && msg.meta.busy) c.status = 'running';
       if (visible(c)) {
         if (msg.t === 'ev') broadcast({ t: 'child-event', id: c.id, ev: msg.ev, updatedAt: c.updatedAt });
@@ -143,6 +149,7 @@ export function createChildren({ root, specs, getCwd, getParents, getWorktree = 
         c = { id, parentId: parent.id, parentKey: parent.key, cwd: getCwd(), provider: 'codex', source: 'plugin', title: String(job.summary || job.title || 'Codex task').slice(0, 100), state: { events: [], mode: 'read' } };
         children.set(id, c);
       }
+      const wasBusy = c.externalBusy === true;
       c.fingerprint = fingerprint; c.externalBusy = externalBusy; c.status = ACTIVE.has(job.status) && !externalBusy ? 'interrupted' : job.status;
       if (job.threadId && /^[a-zA-Z0-9_-]{1,100}$/.test(job.threadId)) c.state.sessionId = job.threadId;
       const events = [{ k: 'user', id: `${id}-task`, text: job.request?.prompt || job.summary || job.title || 'Delegated by Claude' }];
@@ -154,6 +161,7 @@ export function createChildren({ root, specs, getCwd, getParents, getWorktree = 
       // Preserve any follow-up messages already sent in Tandem.
       const previous = (c.state.events || []).filter((e) => !e.id?.startsWith(id + '-'));
       c.state.events = [...events, ...previous]; publish(c);
+      if (wasBusy && !externalBusy) try { onDone({ id: c.id, parentId: c.parentId, parentKey: c.parentKey, provider: c.provider, title: c.title, ok: c.status !== 'failed', summary: typeof answer === 'string' ? answer : '' }); } catch { /* ignore */ }
     }
   }
   timer = setInterval(poll, pollMs); timer.unref();

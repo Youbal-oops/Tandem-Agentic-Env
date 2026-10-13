@@ -151,6 +151,7 @@
         <nav class="settings-nav" aria-label="Settings sections">
           <button type="button" data-section="review" class="on">Review &amp; limits</button>
           <button type="button" data-section="learning">Learning</button>
+          <button type="button" data-section="agents">Subagents</button>
           <button type="button" data-section="saved">Saved text</button>
           <button type="button" data-section="look">Appearance</button>
         </nav>
@@ -171,6 +172,12 @@
             <h3>Learning</h3>
             <label class="check"><input type="checkbox" id="set-learning-mode"> Learning mode: main agents work with you, one approved step at a time</label>
             <div class="form-row"><button type="button" data-open="#btn-profile">Learning profile…</button><button type="button" data-open="#btn-journal">Learning journal…</button></div>
+          </section>
+          <section data-panel="agents" hidden>
+            <h3>Subagents</h3>
+            <label class="check"><input type="checkbox" id="set-child-window"> Open each subagent in its own window, on the right of the screen</label>
+            <label class="check"><input type="checkbox" id="set-ping-main"> Tell the main agent when a subagent finishes</label>
+            <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself.</p>
           </section>
           <section data-panel="saved" hidden>
             <h3>Saved text</h3>
@@ -227,6 +234,9 @@
       <header><div><span class="eyebrow">THIS PROJECT · .tandem/LEARNING.md</span><h2>Learning journal</h2></div><button id="close-journal">Close ×</button></header>
       <p>What you decided and learned, step by step. Agents in learning mode are reminded of the latest entries, so each session builds on the last. It is a plain Markdown file in the project's <b>.tandem</b> folder, kept out of Git by default.</p>
       <div id="journal-list"></div>
+      <details class="learning-doc"><summary>learning.md: what was built, explained for you</summary><pre id="doc-learning"></pre></details>
+      <details class="learning-doc"><summary>learningcontext.md: what every agent knows about teaching you</summary><pre id="doc-context"></pre></details>
+      <p>Both files are in <b>.tandem/learning</b> in the project. Edit them freely: agents re-read <b>learningcontext.md</b> at the start of each session.</p>
       <div class="form-row"><button id="journal-clear">Clear journal</button></div>
     </dialog>
     <dialog id="setup-dialog" class="setup-dialog">

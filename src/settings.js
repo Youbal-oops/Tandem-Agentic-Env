@@ -5,11 +5,13 @@ const $ = (s) => document.querySelector(s);
 
 export function createSettingsDialog({ send, connected, notify, getAgent }) {
   let saved = { enabled: true, maxLines: 300, maxFiles: 10, hardStop: true, margin: 25 };
+  let savedAgents = { pingMain: true };
   let reviewWindow = null;
   const held = new Set();
 
   const dirty = () => $('#set-review-on').checked !== saved.enabled || Number($('#set-max-lines').value) !== saved.maxLines || Number($('#set-max-files').value) !== saved.maxFiles
-    || $('#set-hard-stop').checked !== saved.hardStop || Number($('#set-margin').value) !== saved.margin;
+    || $('#set-hard-stop').checked !== saved.hardStop || Number($('#set-margin').value) !== saved.margin
+    || $('#set-ping-main').checked !== savedAgents.pingMain;
   const status = (text) => { $('#settings-status').textContent = text; };
   const refreshStatus = () => status(dirty() ? 'Unsaved changes' : '');
 
@@ -20,6 +22,13 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     $('#set-margin').disabled = !hard;
     const lines = Number($('#set-max-lines').value); const files = Number($('#set-max-files').value); const pct = Number($('#set-margin').value);
     $('#set-cutoff').textContent = hard && lines && files && pct ? `Cutoff: ${Math.ceil(lines * (1 + pct / 100))} lines or ${files + Math.max(1, Math.ceil(files * pct / 100))} files` : on ? 'No mid-job cutoff' : 'No limits';
+    refreshStatus();
+  }
+
+  function showAgents(agents, force) {
+    if (!agents) return;
+    savedAgents = { pingMain: agents.pingMain !== false };
+    if (force || !dirty()) $('#set-ping-main').checked = savedAgents.pingMain;
     refreshStatus();
   }
 
@@ -39,6 +48,7 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     $('#set-lite').textContent = `Lite mode: ${$('#btn-lite').classList.contains('on') ? 'on' : 'off'}`;
     const learn = $('#btn-learning').getAttribute('aria-pressed') === 'true';
     $('#set-learning-mode').checked = learn;
+    try { $('#set-child-window').checked = localStorage.getItem('tandem:child-window') !== 'false'; } catch { $('#set-child-window').checked = true; }
   }
 
   function section(name) {
@@ -75,17 +85,19 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     if (!Number.isInteger(maxFiles) || maxFiles < 1 || maxFiles > 200) return status('Files must be a whole number from 1 to 200.');
     const margin = Number($('#set-margin').value);
     if (!Number.isInteger(margin) || margin < 5 || margin > 100) return status('The margin must be a whole number from 5 to 100.');
-    send({ t: 'savesettings', settings: { review: { enabled: $('#set-review-on').checked, maxLines, maxFiles, hardStop: $('#set-hard-stop').checked, margin } } });
+    send({ t: 'savesettings', settings: { review: { enabled: $('#set-review-on').checked, maxLines, maxFiles, hardStop: $('#set-hard-stop').checked, margin }, agents: { pingMain: $('#set-ping-main').checked } } });
     status('Saving…');
   });
   $('#set-learning-mode').addEventListener('change', () => $('#btn-learning').click());
+  $('#set-child-window').addEventListener('change', (e) => { try { localStorage.setItem('tandem:child-window', String(e.target.checked)); } catch { /* the choice just will not persist */ } });
+  $('#set-ping-main').addEventListener('input', sync);
   $('#btn-review').addEventListener('click', openReview);
   $('#open-review').addEventListener('click', openReview);
 
   return {
     /** Server messages: settings arrive on their own, inside local state, and as review updates. */
     receive(msg) {
-      if (msg.t === 'settings') { show(msg.settings?.review, true); status('Saved'); return true; }
+      if (msg.t === 'settings') { show(msg.settings?.review, true); showAgents(msg.settings?.agents, true); status('Saved'); return true; }
       if (msg.t === 'review') {
         const r = msg.review;
         if (r.held && !held.has(r.agent)) notify(`${r.agent} needs your review: ${r.reason}.`);
@@ -95,6 +107,6 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
       }
       return false;
     },
-    local(settings) { show(settings?.review, false); },
+    local(settings) { show(settings?.review, false); showAgents(settings?.agents, false); },
   };
 }

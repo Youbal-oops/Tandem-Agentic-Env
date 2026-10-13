@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import { appendEntry, clearJournal, journalPrompt, readEntries } from './journal.mjs';
+import { appendLearning, contextPrompt, parseTeaching, readDocs, section, updateContext } from './docs.mjs';
 import { STAGES, beginImplement, finishImplement, freshCheckpoint, isConfirm, isDesignCard, noteFile, onDesignConfirmed, onDesignProposed, onUserMessage, publicView } from './checkpoints.mjs';
 import { bump, knownStack, loadCounts, techFromPath, techFromText } from './knowledge.mjs';
 import { detectStack } from './stack.mjs';
@@ -15,7 +16,7 @@ const READ_ONLY = { claude: 'plan', codex: 'read' };
 const LEVELS = ['new', 'familiar', 'confident'];
 const STYLES = ['plain', 'examples', 'diagrams', 'questions'];
 const PACES = ['light', 'normal', 'frequent'];
-const IMPLEMENT_TEXT = 'Approved in Tandem: the user pressed "Approve & implement". Implement the agreed step now, staying within the agreed scope, then write the report (what changed, why, how you checked it, what the user should now understand, what comes next).';
+const IMPLEMENT_TEXT = 'Approved in Tandem: the user pressed "Approve & implement". Implement the agreed step now, staying within the agreed scope, then write the report (what changed, why, how you checked it, what the user should now understand, what comes next), ending with the "## Learning note" and "## Teaching notes" blocks from your working method.';
 const SKIPPED_TEXT = ' The user chose to skip the design checkpoint because this is a small change: keep it small, and say what you assumed.';
 
 /** `ctx` supplies: saved, workingDir (current), entries, broadcast, emit, schedule. */
@@ -138,6 +139,11 @@ export function createLearning(ctx) {
       try {
         appendEntry(ctx.workingDir, { at: Date.now(), title: cp.request, request: cp.request, design: cp.design, skipped: cp.skipped, choices: cp.choices, files: cp.files, report });
       } catch (e) { console.error('Could not write the learning journal:', e.message); }
+      try {
+        // learning.md explains what was made; learningcontext.md carries how to teach this user into the next session.
+        appendLearning(ctx.workingDir, { title: cp.request, request: cp.request, files: cp.files, report, note: section(report, 'Learning note'), level: profile.level });
+        updateContext(ctx.workingDir, parseTeaching(report), profile);
+      } catch (e) { console.error('Could not write the learning documents:', e.message); }
     }
     announce(a);
   }
@@ -194,10 +200,11 @@ export function createLearning(ctx) {
         profile.known.length && `Works with often (by how frequently it comes up): ${profile.known.map((k) => `${k.name} (${k.n})`).join(', ')}`,
         `Experience: ${profile.level}; teaching preference: ${profile.style}; checkpoint frequency: ${profile.checkpoints}.`,
       ].filter(Boolean).join('\n');
-      return [`[Learner profile]\n${lines}`, workflowPrompt(provider, profile.checkpoints, { level: profile.level, style: profile.style }), journalPrompt(ctx.workingDir)].filter(Boolean);
+      return [`[Learner profile]\n${lines}`, workflowPrompt(provider, profile.checkpoints, { level: profile.level, style: profile.style }), journalPrompt(ctx.workingDir), contextPrompt(ctx.workingDir)].filter(Boolean);
     },
 
     checkpoints: () => Object.fromEntries([...entries.values()].filter((a) => a.cli).map((a) => [a.config.id, publicView(cpOf(a))])),
+    docs: () => readDocs(ctx.workingDir),
     journal: () => readEntries(ctx.workingDir).map(({ at, title, fields }) => ({ at, title, fields })),
     clearJournal: () => clearJournal(ctx.workingDir),
 

@@ -46,6 +46,9 @@ export function createJournalDialog({ send, connected, notify }) {
     receive(msg) {
       if (msg.t !== 'journal') return false;
       render(msg.entries || []);
+      const docs = msg.docs || {};
+      $('#doc-learning').textContent = docs.learning || 'Nothing yet. After each approved step in learning mode, the agent explains what it made here.';
+      $('#doc-context').textContent = docs.context || 'Nothing yet. This fills in as agents learn how to teach you.';
       return true;
     },
   };

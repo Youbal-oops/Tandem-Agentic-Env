@@ -14,7 +14,7 @@ function setup(t, specs = {}) {
     requests.push(JSON.parse(request.body));
     return { ok: true, json: async () => ({ choices: [{ message: { content: 'Reply' } }] }) };
   } };
-  const create = () => { const workspace = createWorkspace(options); workspaces.push(workspace); return workspace; };
+  const create = () => { const workspace = createWorkspace(options); workspace.saveSettings({ agents: { pingMain: false } }); workspaces.push(workspace); return workspace; };
   t.after(async () => { for (const workspace of workspaces) workspace.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
   return { w: create(), create, root, repo, requests };
 }

@@ -17,6 +17,7 @@ function setup(t) {
   const events = [];
   const options = { root, cwd: repo, specs, pluginRoots: [pluginRoot], childPollMs: 60000, broadcast: (m) => events.push(m) };
   const w = createWorkspace(options);
+  w.saveSettings({ agents: { pingMain: false } }); // these tests count the main chat's events
   const workspaces = [w];
   t.after(async () => { for (const workspace of workspaces) workspace.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return { w, root, repo, pluginRoot, events, options, workspaces };
@@ -26,7 +27,9 @@ test('child tasks stream independently, resume, and preserve their parent after 
   const { w, options, events, workspaces } = setup(t);
   const c = w.childAction({ t: 'child-create', agent: 'codex', provider: 'claude', text: 'Review settings' });
   await waitFor(() => !w.children()[0].meta.busy);
-  assert.equal(w.snapshot().codex.events.length, 0);
+  const parentEvents = w.snapshot().codex.events;
+  assert.deepEqual(parentEvents.map((e) => e.k), ['note'], 'the main chat only gets the completion line, not the child conversation');
+  assert.match(parentEvents[0].text, /Claude subagent "Review settings" finished/);
   assert.equal(w.children()[0].parentId, 'codex');
   assert.ok(events.some((m) => m.t === 'child-event' && m.ev.k === 'msg'));
   assert.equal(w.children()[0].meta.mode, 'edit');

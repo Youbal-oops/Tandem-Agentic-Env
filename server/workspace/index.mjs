@@ -84,9 +84,35 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
         if (entries.get(config.id) !== a) return;
         emit({ ...msg, agent: config.id });
         learning.onCliMessage(a, msg);
-        if (msg.t === 'meta' && msg.meta && !msg.meta.busy && a.sawReviewBusy) { a.sawReviewBusy = false; review.onTurnEnd(a); }
+        if (msg.t === 'meta' && msg.meta && !msg.meta.busy && a.sawReviewBusy) { a.sawReviewBusy = false; review.onTurnEnd(a).finally(() => flushPings(a)); }
         else if (msg.t === 'meta' && msg.meta?.busy) a.sawReviewBusy = true;
       } });
+  }
+
+  /**
+   * A subagent finished. The main agent's chat always gets a line saying so. When the main agent is idle it also
+   * receives a message with the result, so it can carry on; when it is busy it is already in a turn and will see
+   * the result through the job command, so no second turn is started for it.
+   */
+  function onChildDone(info) {
+    const a = [...entries.values()].find((e) => e.config.id === info.parentId && e.config.conversationId === info.parentKey);
+    if (!a?.cli) return;
+    const provider = a.config.provider;
+    const who = `${info.provider === 'claude' ? 'Claude' : 'Codex'} subagent "${String(info.title).slice(0, 80)}"`;
+    a.cli.note(provider, `${who} ${info.ok ? 'finished' : 'failed'}.`);
+    if (!settings.agents().pingMain) return;
+    const busy = a.cli.snapshot()[provider].meta.busy;
+    if (busy) return;
+    const said = String(info.summary || '').replace(/\s+/g, ' ').trim().slice(0, 700);
+    (a.pings ||= []).push(`[Tandem: subagent update] ${who} ${info.ok ? 'finished' : 'failed'}. Its full chat is attached to this conversation.${said ? ` It ended with: ${said}` : ''}`);
+    flushPings(a);
+  }
+  function flushPings(a) {
+    if (!a.pings?.length || !a.cli) return;
+    const provider = a.config.provider;
+    if (a.cli.snapshot()[provider].meta.busy || review.view(a.config.id).held) return;
+    const text = a.pings.splice(0).join('\n');
+    a.cli.send(provider, text);
   }
 
   function add(input, state) {
@@ -130,7 +156,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     return Object.fromEntries([...entries].map(([id, a]) => [id, a.cli ? a.cli.snapshot()[a.config.provider] : { events: a.events, meta: api.meta(a) }]));
   }
 
-  children = createChildren({ root, specs, getCwd: () => ctx.workingDir, getWorktree: (repo, id) => ctx.worktrees.ensure(repo, id), broadcast: emit, pluginRoots, pollMs: childPollMs,
+  children = createChildren({ onDone: onChildDone, root, specs, getCwd: () => ctx.workingDir, getWorktree: (repo, id) => ctx.worktrees.ensure(repo, id), broadcast: emit, pluginRoots, pollMs: childPollMs,
     getInstructions: (provider) => prompt.render(provider === 'claude' ? 'Claude' : 'Codex', { provider, child: true }),
     getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, cwd: a.cwd, provider: a.config.provider,
       sessionId: a.cli?.save()[a.config.provider]?.sessionId })) });
@@ -170,6 +196,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     reviewApprove(id) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); return review.approve(a); },
     reviewPropose(id, input) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); review.propose(a, input || {}); },
     journal: () => learning.journal(),
+    learningDocs: () => learning.docs(),
     clearJournal() { learning.clearJournal(); return learning.journal(); },
     saveNotes(cwd, text) {
       if (cwd !== ctx.workingDir) throw new Error('Repository changed. Reopen Notes before saving.');

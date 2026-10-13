@@ -137,6 +137,7 @@ label.check { flex-direction: row; align-items: center; gap: 10px; flex: none; }
 label.check input { accent-color: var(--warn); }
 
 
+.learning-doc{margin:10px 0}.learning-doc summary{cursor:pointer}.learning-doc pre{white-space:pre-wrap;max-height:240px;overflow:auto;font-size:12px;padding:8px;border:1px solid var(--faint);border-radius:6px}
 /* Settings dialog and the Review button */
 .settings-dialog{width:min(760px,calc(100vw - 32px))}
 .settings-body{display:grid;grid-template-columns:170px 1fr;gap:18px;min-height:300px}

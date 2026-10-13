@@ -1,0 +1,17 @@
+/* A subagent's own window: a header and its chat filling the rest. Reuses the chat panel styling. */
+body.child-window{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+#cw-bar{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--faint)}
+#cw-bar>div{margin-right:auto;min-width:0}
+.cw-eyebrow{font-size:10px;letter-spacing:.16em;color:var(--mute)}
+#cw-title{margin:2px 0 0;font:italic 400 20px/1.2 var(--serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#cw-state{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+#cw-state[data-state=busy]{color:var(--warn)}
+#cw-state[data-state=completed]{color:var(--good)}
+#cw-state[data-state=failed]{color:var(--bad)}
+#cw-bar button{border:1px solid var(--faint);border-radius:6px;padding:6px 10px;font-size:12px}
+#cw-bar button:hover{border-color:var(--soft)}
+#cw-chat{flex:1;min-height:0;display:flex;flex-direction:column;padding:8px 18px 0}
+#cw-chat>section.agent{flex:1;min-height:0;display:flex;flex-direction:column}
+#cw-chat .a-row{display:none}
+#cw-chat .a-body{display:flex;flex-direction:column;flex:1;min-height:0}
+#cw-note{margin:0;padding:6px 18px;min-height:28px;font-size:12px;color:var(--mute)}

@@ -132,8 +132,25 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     picker.value = c.id;
   }
   function show() { drawer.hidden = false; document.body.classList.add('child-open'); }
+  // A subagent opens in its own window (a chat only, no scene) on the right of the screen; the side panel is the fallback.
+  const windowMode = () => { try { return localStorage.getItem('tandem:child-window') !== 'false'; } catch { return true; } };
+  const windows = new Map();
+  function openWindow(id) {
+    const existing = windows.get(id);
+    if (existing && !existing.closed) { existing.focus(); return true; }
+    const width = 560, height = Math.max(480, Math.min(900, (screen.availHeight || 900) - 60));
+    const left = (screen.availLeft || 0) + (screen.availWidth || 1280) - width - 8, top = (screen.availTop || 0) + 30;
+    const win = window.open(`/child.html?id=${encodeURIComponent(id)}`, `tandem-child-${id}`, `popup=yes,width=${width},height=${height},left=${left},top=${top}`);
+    if (!win) return false;
+    windows.set(id, win);
+    return true;
+  }
   function open(id) {
     const c = records.get(id); if (!c || !panels[c.parentId]) return;
+    if (!isDemo() && windowMode()) {
+      if (openWindow(id)) { selectParent(c.parentId); markSeen(c); renderParents(); return; }
+      notice('The browser blocked the subagent window. Allow pop-ups for Tandem, or switch to the side panel in Settings.');
+    }
     parentId = c.parentId; selectParent(parentId); active = id; show();
     $('.child-views').hidden = false;
     $('.child-form').hidden = true; $('.child-picker-row').hidden = false; $('.child-context').hidden = false;

@@ -15,15 +15,21 @@ export function cleanReview(input, current = REVIEW_DEFAULTS) {
   };
 }
 
+export const AGENT_DEFAULTS = Object.freeze({ pingMain: true });
+export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({ pingMain: typeof input?.pingMain === 'boolean' ? input.pingMain : current.pingMain });
+
 export function createSettings({ saved }) {
   let review = cleanReview(saved.settings?.review);
+  let agents = cleanAgents(saved.settings?.agents);
   return {
     review: () => review,
-    state: () => ({ review }),
+    agents: () => agents,
+    state: () => ({ review, agents }),
     save(input) {
       if (!input || typeof input !== 'object') throw new Error('Invalid settings.');
       if (input.review !== undefined) review = cleanReview(input.review, review);
-      return { review };
+      if (input.agents !== undefined) agents = cleanAgents(input.agents, agents);
+      return { review, agents };
     },
   };
 }

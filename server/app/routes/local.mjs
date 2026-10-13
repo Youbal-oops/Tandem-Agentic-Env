@@ -23,7 +23,7 @@ export function createLocalRoutes({ agents, hub, snapshot }) {
       saveprompt: (m, conn) => conn.send({ t: 'prompt', ...agents.savePrompt(m.text, m.on) }),
       learningmode: (m) => hub.broadcast({ t: 'learnerprofile', ...agents.setLearningMode(m.on === true) }),
       savelearnerprofile: (m, conn) => conn.send({ t: 'learnerprofile', ...agents.saveLearnerProfile(m.profile) }),
-      journal: (m, conn) => conn.send({ t: 'journal', entries: agents.journal() }),
+      journal: (m, conn) => conn.send({ t: 'journal', entries: agents.journal(), docs: agents.learningDocs() }),
       'journal-clear': (m, conn) => conn.send({ t: 'journal', entries: agents.clearJournal() }),
       folders: async (m, conn) => {
         try { conn.send({ t: 'folders', request: m.request, ...await listFolders(m.path || os.homedir()) }); }

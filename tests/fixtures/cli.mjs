@@ -6,11 +6,11 @@ const emit = (m) => process.stdout.write(JSON.stringify(m) + '\n');
 if (provider === 'codex') {
   let text = '';
   process.stdin.on('data', (s) => text += s);
-  process.stdin.on('end', () => {
+  process.stdin.on('end', () => setTimeout(() => {
     emit({ type: 'thread.started', thread_id: '00000000-0000-4000-8000-000000000001' });
     emit({ type: 'item.completed', item: { id: 'reply', type: 'agent_message', text: JSON.stringify({ args, text }) } });
     emit({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } });
-  });
+  }, text.includes('SLOW-TURN') ? 900 : 0)); // lets a test keep a main agent busy while something else finishes
 } else {
   const lines = readline.createInterface({ input: process.stdin });
   lines.on('close', () => process.exit(0));

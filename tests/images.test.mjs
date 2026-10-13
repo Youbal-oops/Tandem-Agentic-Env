@@ -79,6 +79,7 @@ test('API images survive history and restart without storing base64 in conversat
 test('child follow-ups forward images to their independent CLI thread', async t => {
   const { root, attachment, onClose } = setup(t);
   const workspace = createWorkspace({ root, cwd: process.cwd(), specs: { codex: { file: process.execPath, args: [fixture, 'codex'] } }, broadcast() {} });
+  workspace.saveSettings({ agents: { pingMain: false } });
   onClose(() => workspace.closeAll());
   const child = workspace.childAction({ t: 'child-create', agent: 'codex', provider: 'codex', text: 'Review' });
   await waitFor(() => !workspace.children()[0].meta.busy);
@@ -86,5 +87,5 @@ test('child follow-ups forward images to their independent CLI thread', async t 
   await waitFor(() => workspace.children()[0].events.filter(e => e.k === 'msg').length === 2);
   const reply = JSON.parse(workspace.children()[0].events.filter(e => e.k === 'msg').at(-1).text);
   assert.ok(reply.args.includes('--image'));
-  assert.equal(workspace.snapshot().codex.events.length, 0);
+  assert.ok(workspace.snapshot().codex.events.every((e) => e.k === 'note'), 'only completion lines reach the main chat');
 });

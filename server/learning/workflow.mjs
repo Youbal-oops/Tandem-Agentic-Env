@@ -21,6 +21,12 @@ const LEVEL = {
   familiar: 'They know the basics of their stack. Offer two or three options with complexity and trade-offs and recommend one. Explain only the concepts that are new to them.',
   confident: 'They are experienced. Be brief. Lead with constraints, failure modes and what would change your recommendation, challenge unstated assumptions, and skip the basics.',
 };
+// What the code itself should look like at each level, and how much a review note should explain.
+const CODE = {
+  new: 'Write code a beginner can follow: plain constructs, descriptive names, one idea per function, and a short comment saying why (not what) at each non-obvious step. Avoid clever one-liners and heavy abstraction. In review notes, explain each changed file as if it is the first time they have seen that kind of file.',
+  familiar: 'Write ordinary, readable code for their stack. Comment the non-obvious decisions. In review notes, say what each change does and why, and explain only the parts that use ideas listed as new to them.',
+  confident: 'Write idiomatic code without hand-holding and without noise comments. In review notes, be brief: what changed, the one trade-off that matters, and anything risky.',
+};
 const STYLE = {
   plain: 'Explain in plain language.',
   examples: 'Teach with a short concrete example for each idea.',
@@ -36,8 +42,20 @@ export function workflowPrompt(provider, checkpoints = 'normal', { level = 'fami
     '2. Design checkpoint. Summarise the agreed design in a few lines (what, why, trade-offs, what is left open) and ask them to confirm or discuss. Tandem tracks this: implementation needs the design confirmed.',
     '3. Implementation checkpoint. Say what you will change (files, tests, what is out of scope). Tandem keeps you read-only until the user presses "Approve & implement" in Tandem: tell them to press it when they are ready, and do not try to edit files, run changing commands, exit plan mode or delegate work around that.',
     '4. Report. After implementing, say what changed and why, how you checked it, what the user should now understand, and what comes next. Tandem saves a short note of it in the learning journal.',
+    '5. Learning documents. End the report with exactly these two blocks. Tandem files them: the first becomes learning.md (an explanation of what was made, for the user to keep), the second goes into learningcontext.md (shared with every agent so teaching stays consistent).',
+    '## Learning note',
+    'What was made: one or two sentences, no jargon.',
+    'How it works: the flow or structure in a few lines (a small text diagram helps).',
+    'Why this way: the reasoning and what you decided against.',
+    'New ideas: term - what it means, one line each, only ones the user has not met.',
+    'Try it: one small change or check they could do themselves to see how it behaves.',
+    '## Teaching notes',
+    '- Pattern: one way of explaining that worked, or clearly did not, with this user',
+    '- Progress: something the user showed they understand, or struggled with',
+    '- Next: what to teach next',
     'For tiny unambiguous requests such as a typo, keep the checkpoint to a line or two. The user still presses "Approve & implement".',
     `Teaching: ${LEVEL[level] || LEVEL.familiar} ${STYLE[style] || STYLE.plain}`,
+    `Code and reviews: ${CODE[level] || CODE.familiar}`,
     `Pace: ${PACE[checkpoints] || PACE.normal}`,
     `How to ask: ${HOW_TO_ASK[provider] || HOW_TO_ASK.codex}`,
   ].join('\n');

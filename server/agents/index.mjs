@@ -179,6 +179,8 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
       }
     },
     newChat,
+    /** A line in this agent's chat that is not a message to the model. */
+    note: (id, text) => { if (agents[id]) { note(agents[id], text); } },
     /** Returns the answers that were accepted when this approved a selection card. */
     approve: (id, requestId, allow, answers) => (agents[id] ? claude.decide(agents[id], String(requestId), !!allow, answers) : null),
     snapshot: () => Object.fromEntries(Object.values(agents).map((a) => [a.id, { meta: meta(a), events: a.events }])),
