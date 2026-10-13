@@ -21,6 +21,11 @@ It is built around local agent tools first, but it is not tied to one provider. 
 - Browse files, inspect Git changes, attach images, save notes, export chats, and keep local workspace state.
 - Reopen saved conversations from **history** beside **new chat**. Chats stay grouped by project and agent, with their messages, model settings, and associated subagent chats. CLI conversations resume using that CLI's local thread history.
 - Set up a folder, clone a repo, connect GitHub through the GitHub CLI, and configure agents from inside the app.
+- **Review** opens a separate window showing what an agent changed since you last approved, with its own note on each edit. Edit a hunk or ask about it and the agent receives it; nothing is written to its folder. Agents are told a size budget (default 300 lines, 10 files) and asked to split big requests and stop for review; a cutoff a little above it stops a runaway. Both can be switched off for unattended runs.
+- Each subagent can open in its own window (just its chat, no scene), and the main agent is told when one finishes.
+- **Connect agents** installs and signs in to Claude Code, Codex and Gemini CLI from the app, with no terminal. Codex and Gemini have an opt-in full access mode (no sandbox), chosen per agent behind a warning.
+- Learning mode also writes `.tandem/learning/learning.md` (what was built, explained at your level) and `learningcontext.md` (how to teach you, shared by every agent).
+- **Settings → Structure** (off by default, only for projects cloned or created in Tandem) builds a separate git worktree and branch with big JS/TS/Python/CMake/PowerShell files split into smaller component files. Each original path re-exports its pieces. It is plain code, uses no tokens, and never changes your files in place.
 
 API agents are chat-only: they do not receive local shell or file tools. Their usage is billed by their provider. CLI agents use the local CLI account already signed in on your computer.
 
