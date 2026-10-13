@@ -10,7 +10,7 @@ function setup(t, fetchImpl) {
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
   const messages = [];
   const w = createWorkspace({ root, cwd: repo, specs: { claude: null, codex: null }, broadcast: (m) => messages.push(m), fetchImpl });
-  t.after(() => { w.closeAll(); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(() => { w.closeAll(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return { w, root, repo, messages };
 }
 test('notes are isolated by repo, survive restart and reject stale saves', (t) => {

@@ -9,7 +9,7 @@
 //            refused before it is written when the CLI asks first; otherwise it is stopped right after the edit.
 // The master switch turns all of it off, for unattended runs.
 
-import { numstat, patch, snapshotTree } from './tree.mjs';
+import { numstat, patch, snapshotTree, stopSnapshots } from './tree.mjs';
 
 export const PROPOSAL_ROOM = 100; // extra lines a held agent may use to apply the user's edit
 const SNIPPET = 4000;
@@ -52,6 +52,7 @@ export function overLimit(stats, limits, extra = 0, room = 0) {
 /** `ctx` supplies: limits() (current settings), emit(msg), agent(id) (the workspace entry). */
 export function createReview({ limits, emit, agent }) {
   const states = new Map();
+  let closed = false;
   const lastText = new Map(); // the agent's most recent finished message: it becomes the note on its next edit
 
   const stateOf = (id) => {
@@ -72,12 +73,14 @@ export function createReview({ limits, emit, agent }) {
 
   /** Take the starting snapshot for this agent's folder. Cheap to call again. */
   function begin(a) {
+    if (closed) return Promise.resolve(null);
     const s = stateOf(a.config.id);
     if (!s.baseP) s.baseP = snapshotTree(a.cwd).then((t) => { s.base = t; return t; });
     return s.baseP;
   }
 
   async function measure(a) {
+    if (closed) return;
     const id = a.config.id;
     const s = stateOf(id);
     s.measuring = s.measuring.then(async () => {
@@ -102,6 +105,8 @@ export function createReview({ limits, emit, agent }) {
   return {
     view,
     begin,
+    /** The workspace is closing: no new snapshots, and none left running in folders about to be removed. */
+    close() { closed = true; stopSnapshots(); },
 
     /** Chat events from a main agent: remember what it said, and re-measure after each finished edit. */
     onEvent(a, ev) {

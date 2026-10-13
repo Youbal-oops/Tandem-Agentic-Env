@@ -24,7 +24,7 @@ function setup(t) {
 
 test('stack detection reads the repository, including sub-folders', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-stack-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }));
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ dependencies: { react: '1', express: '1' }, devDependencies: { typescript: '1', vite: '1' } }));
   fs.writeFileSync(path.join(root, 'Dockerfile'), 'FROM node');
   fs.mkdirSync(path.join(root, 'api'));

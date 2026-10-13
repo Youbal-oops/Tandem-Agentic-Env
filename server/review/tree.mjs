@@ -9,12 +9,22 @@ import { execFile } from 'node:child_process';
 
 const PATCH_LIMIT = 1024 * 1024;
 
+const running = new Set();
+
+/** Stop any snapshot still running (the workspace is closing, and its folders are about to go away). */
+export function stopSnapshots() {
+  for (const child of running) child.kill();
+  running.clear();
+}
+
 function git(cwd, args, { env = {}, limit = PATCH_LIMIT } = {}) {
   return new Promise((resolve, reject) => {
-    execFile('git', ['-C', cwd, '--no-pager', ...args], { env: { ...process.env, ...env }, windowsHide: true, maxBuffer: limit, timeout: 20000, encoding: 'utf8' }, (err, out, errText) => {
+    const child = execFile('git', ['-C', cwd, '--no-pager', ...args], { env: { ...process.env, ...env }, windowsHide: true, maxBuffer: limit, timeout: 20000, encoding: 'utf8' }, (err, out, errText) => {
       if (err) reject(new Error(err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'This change is too large to show as one diff.' : (String(errText).trim() || err.message)));
       else resolve(out);
     });
+    running.add(child);
+    child.on('exit', () => running.delete(child));
   });
 }
 

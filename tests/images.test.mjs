@@ -13,7 +13,7 @@ const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
 function setup(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-images-'));
   const closers = [];
-  t.after(() => { for (const close of closers) close(); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(() => { for (const close of closers) close(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   const store = createImageStore(root);
   const attachment = { ...store.save(png), name: 'Screenshot.png' };
   return { root, store, attachment, onClose: close => closers.push(close) };

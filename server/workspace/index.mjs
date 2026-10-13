@@ -282,6 +282,6 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       schedule();
       if (m.t === 'newchat') save();
     },
-    closeAll() { clearTimeout(timer); if (!ctx.closed) { children.close(); try { save(); } catch {} } ctx.closed = true; for (const a of entries.values()) { a.cli?.closeAll(); a.controller?.abort(); } },
+    closeAll() { review.close(); clearTimeout(timer); if (!ctx.closed) { children.close(); try { save(); } catch {} } ctx.closed = true; for (const a of entries.values()) { a.cli?.closeAll(); a.controller?.abort(); } },
   };
 }
