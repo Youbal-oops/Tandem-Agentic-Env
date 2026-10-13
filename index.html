@@ -163,6 +163,7 @@
           <button type="button" data-section="review" class="on">Review &amp; limits</button>
           <button type="button" data-section="learning">Learning</button>
           <button type="button" data-section="agents">Subagents</button>
+          <button type="button" data-section="structure">Structure</button>
           <button type="button" data-section="saved">Saved text</button>
           <button type="button" data-section="look">Appearance</button>
         </nav>
@@ -190,6 +191,19 @@
             <label class="check"><input type="checkbox" id="set-ping-main"> Tell the main agent when a subagent finishes</label>
             <label class="check"><input type="checkbox" id="set-allow-full"> Allow full access mode for Codex and Gemini (no sandbox)</label>
             <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself. Full access lets an agent use the internet and change anything on this computer, not only the project: it is off until you allow it here, then chosen per agent with a warning. Subagents never get it.</p>
+          </section>
+          <section data-panel="structure" hidden>
+            <h3>Standardize structure</h3>
+            <label class="check"><input type="checkbox" id="set-structure-on"> Break big files into small component files, in a separate tree</label>
+            <div class="form-row">
+              <label>Split files over (lines)<input type="number" id="set-structure-lines" min="40" max="2000" step="10"></label>
+              <label>Only if at least this many pieces<input type="number" id="set-structure-groups" min="2" max="20"></label>
+              <button id="save-structure" type="button" class="primary">Save</button>
+            </div>
+            <p id="structure-status" role="status"></p>
+            <div class="form-row"><button id="structure-plan" type="button">Preview</button><button id="structure-create" type="button">Create structured tree</button><button id="structure-fork" type="button" hidden>This is a fork…</button></div>
+            <div id="structure-result" aria-live="polite"></div>
+            <p>For projects cloned or created in Tandem, never a folder you opened yourself. Tandem builds a separate git worktree on its own branch, so your files are not changed and you can diff, test and merge it. Each split file keeps its path and re-exports its pieces, so imports still work; pieces that share state or depend on each other stay together. It is done in plain code, not by a model, so it costs no tokens. JS, JSX, TS, TSX and Python are split by reading the code. CMake and PowerShell are split by function. C, C++ and EJS are only reported. Python code that patches names on a module (mock.patch) may behave differently afterwards, so run the tests in the new tree.</p>
           </section>
           <section data-panel="saved" hidden>
             <h3>Saved text</h3>

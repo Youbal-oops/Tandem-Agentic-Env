@@ -22,6 +22,7 @@ export function createRepoRoutes({ agents, hub, gitStatus, repoService, clone, s
               lastProgress = Date.now(); clone.set({ busy: true, text });
             });
             switchTo(destination); gitStatus.reset();
+            agents.markOrigin(destination, 'cloned');
             clone.set({ busy: false, ok: true, text: `Cloned and opened ${path.basename(destination)}.`, destination });
             resnapshot({ clone: true });
             await gitStatus.refresh();

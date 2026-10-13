@@ -74,6 +74,7 @@ export function initConnection(app) {
       if (app.localTools?.receive(msg)) return;
       if (app.settingsDialog?.receive(msg)) return;
       if (app.connectDialog?.receive(msg)) return;
+      if (app.structurePanel?.receive(msg)) return;
       if (app.pushDialog?.receive(msg)) return;
       if (app.journal?.receive(msg)) return;
       if (app.terminal?.receive(msg)) return;

@@ -16,6 +16,7 @@ import { createLearning } from '../learning/session.mjs';
 import { createReview } from '../review/review.mjs';
 import { createSettings } from '../settings.mjs';
 import { UNSAFE_MODES } from '../agents/constants.mjs';
+import { conventionsPrompt, createStructure } from '../structure/index.mjs';
 import { createApiChat } from './api-chat.mjs';
 import { createHistory } from './history.mjs';
 import { createPrompt } from './prompt.mjs';
@@ -42,11 +43,14 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     children: () => children,
   };
   const notes = saved.notes && typeof saved.notes === 'object' ? saved.notes : {};
+  // How each project got here: 'cloned' or 'created' in Tandem, 'forked' when the user said so, otherwise it was opened.
+  const origins = saved.origins && typeof saved.origins === 'object' && !Array.isArray(saved.origins) ? { ...saved.origins } : {};
+  const originKey = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(String(p)); } };
   const childModelDefaults = saved.childModelDefaults && typeof saved.childModelDefaults === 'object' ? { ...saved.childModelDefaults } : {};
 
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), settings: settings.state(), childModelDefaults, repoChats: repos.repoChats,
+    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), settings: settings.state(), origins, childModelDefaults, repoChats: repos.repoChats,
       agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
@@ -66,9 +70,11 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   Object.assign(ctx, { emit, schedule, save, snapshot: () => snapshot() });
 
   const learning = createLearning(ctx);
+  const structure = createStructure({ root, settings: () => settings.structure(), originOf: (p) => origins[originKey(p)] });
+  const structureConventions = () => { const s = structure.status(ctx.workingDir); return s.enabled && s.eligible ? conventionsPrompt(s.settings) : ''; };
   const settings = createSettings(ctx);
   const review = createReview({ limits: settings.review, emit: (msg) => emit(msg), agent: (id) => entries.get(id) });
-  const prompt = createPrompt(ctx, learning, () => [review.promptBlock()]);
+  const prompt = createPrompt(ctx, learning, () => [review.promptBlock(), structureConventions()]);
   ctx.renderPrompt = prompt.render;
   const api = createApiChat(ctx);
   const history = createHistory(ctx); ctx.history = history;
@@ -167,7 +173,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   return {
     get cwd() { return ctx.workingDir; },
     /** Folders the user can push from or open a terminal in: the repository, then each agent's own worktree. */
-    workDirs: () => [{ id: 'repo', name: 'Repository', cwd: ctx.workingDir }, ...[...entries.values()].filter((a) => a.cli).map((a) => ({ id: a.config.id, name: a.config.name, cwd: a.cwd }))],
+    workDirs: () => [{ id: 'repo', name: 'Repository', cwd: ctx.workingDir }, ...(ctx.structureTree && fs.existsSync(ctx.structureTree) ? [{ id: 'structure', name: 'Structured tree', cwd: ctx.structureTree }] : []), ...[...entries.values()].filter((a) => a.cli).map((a) => ({ id: a.config.id, name: a.config.name, cwd: a.cwd }))],
     configs: () => [...entries.values()].map((a) => ({ ...a.config, available: !!snapshot()[a.config.id].meta.available })),
     snapshot, add, remove: repos.remove, switchRepo: repos.switchRepo,
     chatHistory: history.chatHistory, reopenChat: history.reopenChat,
@@ -182,7 +188,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       else if (childModelDefaults[provider]) m = { ...m, model: childModelDefaults[provider] };
       const child = children.create(m.agent, m); save(); return child;
     },
-    localState: () => ({ cwd: ctx.workingDir, notes: typeof notes[ctx.workingDir] === 'string' ? notes[ctx.workingDir] : '', recent: repos.recent, prompt: prompt.state, ...learningState(), settings: settings.state(), childModelDefaults }),
+    localState: () => ({ cwd: ctx.workingDir, notes: typeof notes[ctx.workingDir] === 'string' ? notes[ctx.workingDir] : '', recent: repos.recent, prompt: prompt.state, ...learningState(), settings: settings.state(), structure: structure.status(ctx.workingDir), childModelDefaults }),
     savePrompt(text, on) { const out = prompt.save(text, on); save(); return out; },
     saveLearnerProfile(profile) { learning.saveProfile(profile); save(); return learningState(); },
     setLearningMode(on) { learning.setEnabled(on); save(); return learningState(); },
@@ -198,6 +204,10 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     reviewApprove(id) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); return review.approve(a); },
     reviewPropose(id, input) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); review.propose(a, input || {}); },
     journal: () => learning.journal(),
+    markOrigin(p, origin) { if (['cloned', 'created', 'forked'].includes(origin)) { origins[originKey(p)] = origin; save(); } },
+    structureStatus: () => structure.status(ctx.workingDir),
+    structurePlan: () => structure.plan(ctx.workingDir),
+    async structureCreate() { const out = await structure.create(ctx.workingDir); if (out.created) ctx.structureTree = out.path; return out; },
     learningDocs: () => learning.docs(),
     clearJournal() { learning.clearJournal(); return learning.journal(); },
     saveNotes(cwd, text) {

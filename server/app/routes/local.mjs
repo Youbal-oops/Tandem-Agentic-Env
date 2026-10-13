@@ -40,6 +40,20 @@ export function createLocalRoutes({ agents, hub, snapshot }) {
         if (m.continue === true) await agents.action({ t: 'send', agent: String(m.agent), text: 'Approved in Tandem: the user reviewed your changes so far. Carry on where you stopped, in steps small enough to review, and say what each one is for before you edit.' });
       },
       'review-propose': (m) => { agents.reviewPropose(String(m.agent), m); },
+      'structure-status': (m, conn) => conn.send({ t: 'structure', kind: 'status', status: agents.structureStatus() }),
+      'structure-plan': async (m, conn) => {
+        try {
+          const { publicPlan } = await import('../../structure/index.mjs');
+          conn.send({ t: 'structure', kind: 'plan', status: agents.structureStatus(), plan: publicPlan(await agents.structurePlan()) });
+        } catch (e) { conn.send({ t: 'structure', kind: 'error', error: e.message }); }
+      },
+      'structure-create': async (m, conn) => {
+        try {
+          const out = await agents.structureCreate();
+          conn.send({ t: 'structure', kind: 'created', ...out, status: agents.structureStatus() });
+        } catch (e) { conn.send({ t: 'structure', kind: 'error', error: e.message }); }
+      },
+      'structure-fork': (m, conn) => { agents.markOrigin(agents.cwd, 'forked'); conn.send({ t: 'structure', kind: 'status', status: agents.structureStatus() }); },
       stopall: () => { agents.stopAll(); hub.broadcast({ t: 'notice', text: 'Stopped all agent sessions. Conversations are kept.' }); },
       files: inspect('files'),
       file: inspect('file'),

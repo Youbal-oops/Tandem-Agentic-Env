@@ -17,6 +17,7 @@ import { createLocalTools } from './local.js';
 import { createJournalDialog } from './journal.js';
 import { createSettingsDialog } from './settings.js';
 import { createConnectDialog } from './connect.js';
+import { createStructurePanel } from './structure.js';
 import { createPushDialog } from './push.js';
 import { createTerminalPanel } from './terminal.js';
 import { initAgents } from './app/agents.js';
@@ -63,6 +64,8 @@ app.journal = createJournalDialog({ send: (msg) => app.net.send(msg), connected,
 app.folderPicker = createFolderPicker({ send: (msg) => app.net.send(msg), connected, getRepo: () => app.repoPath, notify: app.showNotice });
 app.settingsDialog = createSettingsDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, getAgent: () => (app.ui.sel && app.AGENTS.includes(app.ui.sel) ? app.ui.sel : app.AGENTS[0]) });
 app.connectDialog = createConnectDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice });
+app.structurePanel = createStructurePanel({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, getAgents: () => app.AGENTS.map((id) => ({ id, name: app.NAMES[id] })),
+  setDraft: (id, text) => { const panel = app.panels[id]; if (!panel) return false; panel.setDraft([panel.ta.value, text].filter(Boolean).join('\n\n')); app.select(id); return true; } });
 app.localTools = createLocalTools({
   onSettings: (settings) => app.settingsDialog.local(settings),
   send: (msg) => app.net.send(msg), connected, getRepo: () => app.repoPath,

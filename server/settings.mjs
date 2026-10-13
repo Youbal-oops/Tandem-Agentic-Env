@@ -15,6 +15,16 @@ export function cleanReview(input, current = REVIEW_DEFAULTS) {
   };
 }
 
+export const STRUCTURE_SETTINGS = Object.freeze({ enabled: false, minLines: 150, minGroups: 3 });
+export function cleanStructure(input, current = STRUCTURE_SETTINGS) {
+  const r = input && typeof input === 'object' ? input : {};
+  return {
+    enabled: typeof r.enabled === 'boolean' ? r.enabled : current.enabled,
+    minLines: int(r.minLines, 40, 2000, current.minLines),
+    minGroups: int(r.minGroups, 2, 20, current.minGroups),
+  };
+}
+
 export const AGENT_DEFAULTS = Object.freeze({ pingMain: true, allowFull: false });
 export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({
   pingMain: typeof input?.pingMain === 'boolean' ? input.pingMain : current.pingMain,
@@ -24,15 +34,18 @@ export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({
 export function createSettings({ saved }) {
   let review = cleanReview(saved.settings?.review);
   let agents = cleanAgents(saved.settings?.agents);
+  let structure = cleanStructure(saved.settings?.structure);
   return {
     review: () => review,
     agents: () => agents,
-    state: () => ({ review, agents }),
+    structure: () => structure,
+    state: () => ({ review, agents, structure }),
     save(input) {
       if (!input || typeof input !== 'object') throw new Error('Invalid settings.');
       if (input.review !== undefined) review = cleanReview(input.review, review);
       if (input.agents !== undefined) agents = cleanAgents(input.agents, agents);
-      return { review, agents };
+      if (input.structure !== undefined) structure = cleanStructure(input.structure, structure);
+      return { review, agents, structure };
     },
   };
 }
