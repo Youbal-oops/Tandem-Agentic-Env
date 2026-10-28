@@ -1,33 +1,48 @@
 # Tandem
 
-Tandem is a local place to work with coding AIs without letting them become a black box.
+Run Claude Code, Codex and other coding AIs on your own project, and understand what they build.
 
-The idea is simple: let an AI help build the project, while Tandem helps you understand the choices behind the code. It can explain the architecture, slow down and teach a concept, show a few ways to solve something, and make the trade-offs clear before work starts. You do not need to write every line yourself just to learn from the project.
+Tandem is a Windows desktop app that keeps coding agents from becoming a black box. Several agents work side by side on one project, each in its own git branch. Tandem explains the choices behind the code at your level, and you review every change before it leaves your machine.
 
-It is built around local agent tools first, but it is not tied to one provider. Add Claude Code, Codex, another compatible CLI, or a Chat Completions-compatible API model.
+It is for people who build with AI and want to learn from it, and for developers who want to run agents in parallel without losing track of what changed. It is not tied to one provider: add Claude Code, Codex, Gemini CLI, or any Chat Completions-compatible API model.
 
 ## What it does
 
-- Run multiple coding agents around one selected project.
-- Keep a learning profile: your familiar stack, what you want to learn, experience level, and preferred explanation style.
-- Pick up the stack you actually work with. A technology counts as known once it has come up a few times in your messages or in files the agents edit for you, most frequent first. You can still edit the profile yourself.
-- Open a **Terminal** drawer (Ctrl+`) in the repository or any agent's worktree. It runs one command line at a time in your system shell and keeps `cd` between commands; it is not a full terminal, so vim-style programs do not work.
-- **Push** opens a review dialog: choose which changed files to commit, write the commit message, and edit the branch name. Pushes only go to `tandem/...` branches (default `tandem/<repo>`), never by force. Files that look private (`.env`, keys) start unselected.
-- Show a context graph for each running subagent under its main agent in the right-hand panel.
-- Let you choose a model for a main agent or subagent; Tandem remembers the last model used for each provider.
-- Detect available models from compatible API providers when they expose a `/models` endpoint.
-- Give each CLI agent and Tandem-created subagent an isolated Git worktree and branch where Git is available.
-- Create a shared `.tandem/PROJECT_CONTEXT.md` in every selected or created project. All Tandem agents receive it as common project context.
-- Browse files, inspect Git changes, attach images, save notes, export chats, and keep local workspace state.
-- Reopen saved conversations from **history** beside **new chat**. Chats stay grouped by project and agent, with their messages, model settings, and associated subagent chats. CLI conversations resume using that CLI's local thread history.
-- Set up a folder, clone a repo, connect GitHub through the GitHub CLI, and configure agents from inside the app.
-- **Review** opens a separate window showing what an agent changed since you last approved, with its own note on each edit. Edit a hunk or ask about it and the agent receives it; nothing is written to its folder. Agents are told a size budget (default 300 lines, 10 files) and asked to split big requests and stop for review; a cutoff a little above it stops a runaway. Both can be switched off for unattended runs.
-- Each subagent can open in its own window (just its chat, no scene), and the main agent is told when one finishes.
-- **Connect agents** installs and signs in to Claude Code, Codex and Gemini CLI from the app, with no terminal. Codex and Gemini have an opt-in full access mode (no sandbox), chosen per agent behind a warning.
-- Learning mode also writes `.tandem/learning/learning.md` (what was built, explained at your level) and `learningcontext.md` (how to teach you, shared by every agent).
+### Work with several agents at once
+
+- Run multiple coding agents around one selected project, and give each a model of its own. Tandem remembers the last model used for each provider.
+- Every CLI agent and every Tandem-created subagent gets an isolated git worktree and branch, where Git is available.
+- Each subagent can open in its own window, and the main agent is told when one finishes. A context graph for each running subagent shows in the right-hand panel.
+- A shared `.tandem/PROJECT_CONTEXT.md` is created in every project. All agents receive it, so they start from the same picture.
+- Reopen saved conversations from **history** beside **new chat**. Chats stay grouped by project and agent, with their model settings and subagent chats. CLI conversations resume from that CLI's own thread history.
+
+### Learn while the project gets built
+
+- Keep a learning profile: your familiar stack, what you want to learn, your experience level and your preferred explanation style.
+- Tandem picks up the stack you work with. A technology counts as known once it has come up a few times in your messages or in files the agents edit for you. You can still edit the profile yourself.
+- Learning mode explains architecture, slows down to teach a concept, and lays out options and trade-offs before work starts.
+- It also writes `.tandem/learning/learning.md` (what was built, explained at your level) and `learningcontext.md` (how to teach you, shared by every agent).
+
+### Review before anything ships
+
+- **Review** opens a window showing what an agent changed since you last approved, with the agent's own note on each edit. Edit a hunk or ask about it and the agent receives your change. Nothing is written to its folder.
+- Agents are given a size budget (default 300 lines, 10 files) and asked to split big requests and stop for review. A cutoff a little above it stops a runaway. Both can be switched off for unattended runs.
+- **Push** opens a dialog where you choose which files to commit, write the message and edit the branch name. Pushes only go to `tandem/...` branches (default `tandem/<repo>`), never by force. Files that look private (`.env`, keys) start unselected.
+
+### Set up without a terminal
+
+- **Connect agents** installs and signs in to Claude Code, Codex and Gemini CLI from the app. Codex and Gemini have an opt-in full access mode (no sandbox), chosen per agent behind a warning.
+- Open a local folder, clone a repo, start a new project, and connect GitHub through the GitHub CLI.
+- Browse files, inspect Git changes, attach images, save notes and export chats.
+- A **Terminal** drawer (Ctrl+`) runs one command line at a time in the repository or any agent's worktree. It keeps `cd` between commands but is not a full terminal, so vim-style programs do not work.
+
+### Also included
+
+- A 3D solar-system view of your agents, with **Lite** (text only) and **Eco** (lower frame rate) modes for slower computers.
+- **Demo** replays a scripted session without using any quota.
 - **Settings → Structure** (off by default, only for projects cloned or created in Tandem) builds a separate git worktree and branch with big JS/TS/Python/CMake/PowerShell files split into smaller component files. Each original path re-exports its pieces. It is plain code, uses no tokens, and never changes your files in place.
 
-API agents are chat-only: they do not receive local shell or file tools. Their usage is billed by their provider. CLI agents use the local CLI account already signed in on your computer.
+API agents are chat-only: they do not receive local shell or file tools, and their provider bills the usage. CLI agents use the local CLI account already signed in on your computer.
 
 ## Get Tandem on Windows
 
