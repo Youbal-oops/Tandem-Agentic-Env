@@ -77,11 +77,6 @@ try {
       }
     }
   }
-  for (const model of ['cat.glb', 'kitten.glb', 'tandem_cat.glb']) {
-    const res = await fetch(`${origin}/models/${model}`);
-    assert.equal(res.status, 200, model);
-    assert.equal(Buffer.from(await res.arrayBuffer()).subarray(0, 4).toString(), 'glTF', model);
-  }
   console.log('PASS bundled HTML, JavaScript, styles and fonts');
   const targets = await eventually(async () => {
     const res = await fetch(`http://127.0.0.1:${debugPort}/json/list`);

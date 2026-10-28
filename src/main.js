@@ -37,10 +37,7 @@ const params = new URLSearchParams(location.search);
 if (params.get('lite') !== null) localStorage.setItem('tandem:lite', params.get('lite') !== '0');
 app.lite = localStorage.getItem('tandem:lite') === 'true';
 document.body.classList.toggle('lite', app.lite);
-if (params.get('theme') === 'space' || params.get('theme') === 'forest') localStorage.setItem('tandem:theme', params.get('theme'));
-app.theme = localStorage.getItem('tandem:theme') === 'forest' ? 'forest' : 'space';
-document.body.dataset.theme = app.theme;
-const { createScene } = await (app.lite ? import('./scene-lite.js') : app.theme === 'forest' ? import('./scene-forest.js') : import('./scene.js'));
+const { createScene } = await (app.lite ? import('./scene-lite.js') : import('./scene.js'));
 app.scene = createScene($('#stage'));
 
 initNotice(app);

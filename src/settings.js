@@ -44,7 +44,6 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
   }
 
   function labels() {
-    $('#set-theme').textContent = $('#btn-theme').textContent;
     $('#set-eco').textContent = `Eco mode: ${$('#btn-eco').classList.contains('on') ? 'on' : 'off'}`;
     $('#set-lite').textContent = `Lite mode: ${$('#btn-lite').classList.contains('on') ? 'on' : 'off'}`;
     const learn = $('#btn-learning').getAttribute('aria-pressed') === 'true';

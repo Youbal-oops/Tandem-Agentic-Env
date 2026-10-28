@@ -44,6 +44,6 @@ export function createApp() {
     cloneParent: '',
     // Created by main.js and the modules, in this order:
     scene: null, info: null, net: null, demo: null, localTools: null, folderPicker: null, childChats: null, chatHistory: null, pushDialog: null, terminal: null,
-    theme: 'space', lite: false,
+    lite: false,
   };
 }

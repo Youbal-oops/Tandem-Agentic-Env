@@ -42,7 +42,6 @@ export function initLabels(app) {
   let hovered = null;
   app.scene.onHover((id) => (hovered = id));
   app.scene.onFrame(() => {
-    if (app.theme === 'forest') return;
     for (const a of AGENTS) {
       const s = app.scene.screen(a);
       const el = labelEls[a];

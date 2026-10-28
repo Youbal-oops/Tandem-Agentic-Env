@@ -155,8 +155,6 @@ export function initAgents(app) {
       tps: act[id].tps,
       moons: s.tools?.running || [],
       subagents: subs,
-      // Keep each kitten's own activity; the solar theme still consumes status strings.
-      kittens: [...(s.subagents || []).map((x, i) => ({ ...x, id: x.id || `${id}-native-${i}` })), ...kids],
       tools: { total: s.tools?.total || 0, byClass: s.tools?.byClass || {} },
       plan,
       mcp: (s.mcp || []).map((x) => x.status),

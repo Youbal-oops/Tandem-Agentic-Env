@@ -1,4 +1,4 @@
-// The top bar and keyboard: overview, hide panels, demo, eco/lite/theme switches, the clock and the Alt shortcuts.
+// The top bar and keyboard: overview, hide panels, demo, eco/lite switches, the clock and the Alt shortcuts.
 
 import { $ } from './state.js';
 
@@ -13,11 +13,6 @@ export function initControls(app) {
   $('#btn-eco').addEventListener('click', () => setEco(!eco));
   $('#btn-lite').classList.toggle('on', app.lite);
   $('#btn-lite').addEventListener('click', () => { localStorage.setItem('tandem:lite', !app.lite); location.reload(); });
-  $('#btn-theme').textContent = app.theme === 'forest' ? 'Theme: Solar system' : 'Theme: Sunset cats';
-  $('#btn-theme').addEventListener('click', () => {
-    localStorage.setItem('tandem:theme', app.theme === 'forest' ? 'space' : 'forest');
-    location.reload();
-  });
   setEco(eco);
 
   $('#btn-overview').addEventListener('click', () => { scene.setTopDown(true); app.select(null); });
