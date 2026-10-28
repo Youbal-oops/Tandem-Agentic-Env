@@ -16,7 +16,8 @@ export function createLaunchRoutes({ workDir, launcher = createLauncher() }) {
         const dir = workDir(m.source);
         try {
           const file = typeof m.path === 'string' && m.path ? repoPath(dir.cwd, m.path) : null;
-          const { using } = await launcher.openEditor(file || dir.cwd, !!file);
+          const line = Number.isInteger(m.line) && m.line > 0 && m.line < 1e7 ? m.line : 0;
+          const { using } = await launcher.openEditor(file || dir.cwd, !!file, line);
           reply(conn, `Opened ${file ? 'the file' : dir.name} in ${using}.${using === 'default app' ? ' VS Code was not found.' : ''}`);
         } catch (e) { reply(conn, `Could not open the editor: ${e.message}`); }
       },

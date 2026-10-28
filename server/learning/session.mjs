@@ -7,10 +7,12 @@
 import path from 'node:path';
 import { appendEntry, clearJournal, journalPrompt, readEntries } from './journal.mjs';
 import { appendLearning, contextPrompt, parseTeaching, readDocs, section, updateContext } from './docs.mjs';
-import { STAGES, beginImplement, finishImplement, freshCheckpoint, isConfirm, isDesignCard, noteFile, onDesignConfirmed, onDesignProposed, onUserMessage, publicView } from './checkpoints.mjs';
+import { STAGES, beginImplement, finishImplement, freshCheckpoint, isConfirm, isDesignCard, noteFile, onDesignConfirmed, onDesignProposed, onReady, onUserMessage, publicView } from './checkpoints.mjs';
 import { bump, knownStack, loadCounts, techFromPath, techFromText } from './knowledge.mjs';
 import { detectStack } from './stack.mjs';
+import { applyNotes, delegationIn, delegationNote, learnerNotes, loadBehavior, loadSkills, observedLines, readyIn, trackMessage } from './understanding.mjs';
 import { workflowPrompt } from './workflow.mjs';
+import { TODO_IMPLEMENT_TEXT, askedToWrite, askedToWriteNote, checkText, mergeChecklist, scanTodos, todoPrompt } from './todo.mjs';
 
 const READ_ONLY = { claude: 'plan', codex: 'read', gemini: 'plan' };
 const LEVELS = ['new', 'familiar', 'confident'];
@@ -28,12 +30,15 @@ export function createLearning(ctx) {
     familiar: String(saved.learnerProfile?.familiar || '').slice(0, 2000),
     learning: String(saved.learnerProfile?.learning || '').slice(0, 2000),
     counts: loadCounts(saved.learnerProfile),
+    skills: loadSkills(saved.learnerProfile?.skills), behavior: loadBehavior(saved.learnerProfile?.behavior),
     observed: [], known: [],
     level: LEVELS.includes(saved.learnerProfile?.level) ? saved.learnerProfile.level : 'familiar',
     style: STYLES.includes(saved.learnerProfile?.style) ? saved.learnerProfile.style : 'plain',
     checkpoints: PACES.includes(saved.learnerProfile?.checkpoints) ? saved.learnerProfile.checkpoints : 'normal',
   };
   let on = saved.learningMode === true;
+  let todo = saved.todoMode === true; // TODO mode: the agent builds the scaffold and tests, the user writes the logic (only while learning mode is on)
+  const todoOn = () => on && todo;
   // `known` is what the user works with often (see knowledge.mjs); `observed` is the same list as plain names.
   const refreshKnown = () => { profile.known = knownStack(profile.counts); profile.observed = profile.known.map((k) => k.name); };
   refreshKnown();
@@ -75,6 +80,12 @@ export function createLearning(ctx) {
     if (!on || !a.cli) return;
     const cp = cpOf(a);
     if (paths.length && cp.stage === 'implement') for (const p of paths) noteFile(cp, relative(a, p));
+    if (ev.k === 'msg' && ev.done && ev.role === 'assistant' && ev.text) {
+      // What the agent concluded about the person, and whether it says it is satisfied.
+      if (applyNotes(profile, learnerNotes(ev.text))) { ctx.emit({ t: 'learnerprofile', learnerProfile: profile }); }
+      const note = readyIn(ev.text);
+      if (note && (cp.stage === 'build' || cp.stage === 'design')) { onReady(cp, note); announce(a); }
+    }
     if (ev.k === 'tool' && ev.name === 'AskUserQuestion' && ev.status === 'awaiting' && isDesignCard(ev.detail?.questions)) {
       onDesignProposed(cp, ev.detail.questions[0]?.question);
       announce(a);
@@ -117,7 +128,7 @@ export function createLearning(ctx) {
     const cp = beginImplement(cpOf(a), { skipDesign: skipDesign === true });
     a.unlocked = true; a.sawBusy = false;
     a.cli.setMode(provider, 'edit');
-    a.cli.send(provider, IMPLEMENT_TEXT + (cp.skipped ? SKIPPED_TEXT : ''));
+    a.cli.send(provider, (todoOn() ? TODO_IMPLEMENT_TEXT : IMPLEMENT_TEXT) + (cp.skipped ? SKIPPED_TEXT : ''));
     announce(a);
   }
 
@@ -146,6 +157,32 @@ export function createLearning(ctx) {
       } catch (e) { console.error('Could not write the learning documents:', e.message); }
     }
     announce(a);
+    if (todoOn()) reportTodos(a, cp.files.length > 0);
+  }
+
+  // ---------------------------------------------------------------- TODO mode
+  /** Look for the user's TODO(you) markers in the agent's folder, update its checklist (a marker that is gone is done) and tell every browser. */
+  async function todos(a) {
+    const found = await scanTodos(a.cwd);
+    a.checklist = mergeChecklist(a.checklist, found);
+    broadcast({ t: 'todos', agent: a.config.id, todos: a.checklist });
+    return found;
+  }
+  /** After the scaffold: send the list, and say so when the agent left none (it may have written the logic itself). */
+  async function reportTodos(a, changedFiles) {
+    try {
+      const list = await todos(a);
+      if (!list.length && changedFiles) broadcast({ t: 'notice', text: `${a.config.name} left no TODO(you) markers, so it may have written the logic itself. Check what it wrote, or ask it to leave the logic for you.` });
+    } catch (e) { console.error('Could not look for TODO markers:', e.message); }
+  }
+  /** "Check my work": the agent reads what the user wrote and gives hints, never the logic. */
+  async function checkTodos(a) {
+    if (!todoOn()) throw new Error('Turn on TODO mode (and learning mode) first.');
+    if (!a.cli) throw new Error('Only Claude, Codex and Gemini chats can check your work.');
+    const provider = a.config.provider;
+    if (a.cli.snapshot()[provider].meta.busy) throw new Error('Wait for the agent to finish its current reply.');
+    const list = await todos(a);
+    a.cli.send(provider, checkText(list));
   }
 
   /** What the main agent's CLI wrapper reports: tracks when an approved turn starts and ends. */
@@ -159,6 +196,10 @@ export function createLearning(ctx) {
   return {
     get profile() { return profile; },
     get enabled() { return on; },
+    get todoMode() { return todo; },
+    todos,
+    checkTodos,
+    setTodo(next) { todo = next === true; },
     stack: detectedStack,
     STAGES,
     observeEdit,
@@ -179,15 +220,27 @@ export function createLearning(ctx) {
     guardDelegation(a) {
       if (on && a?.cli && !a.unlocked) throw new Error('Learning mode: the user must press Approve & implement before this agent delegates work.');
     },
+    /**
+     * A message from the user to a main agent. Returns the text to send: unchanged, unless the user is handing the
+     * thinking back before the agent is satisfied, in which case a note is added that makes the agent refuse it.
+     */
     onSend(a, text) {
       observeLearning(text);
-      if (!on || !a.cli) return;
-      onUserMessage(cpOf(a), text);
+      if (!on || !a.cli) return text;
+      const cp = cpOf(a);
+      const questioning = !cp.ready && (cp.stage === 'build' || cp.stage === 'design'); // the agent is not satisfied yet
+      const handedBack = questioning ? delegationIn(text) : null;
+      const askedWrite = todoOn() ? askedToWrite(text) : null; // TODO mode: asking the agent to write the user's own logic
+      trackMessage(profile.behavior, text, { answering: questioning && !!cp.request });
+      if (askedWrite && !handedBack) profile.behavior.delegations++;
+      onUserMessage(cp, text);
+      ctx.schedule();
       announce(a);
       if (!a.unlocked) relock(a);
+      return askedWrite ? text + askedToWriteNote(askedWrite) : handedBack ? text + delegationNote(handedBack) : text;
     },
     /** A fresh conversation starts a fresh cycle. */
-    reset(a) { a.cp = freshCheckpoint(); if (on && a.cli) announce(a); },
+    reset(a) { a.cp = freshCheckpoint(); a.checklist = []; if (on && a.cli) { announce(a); broadcast({ t: 'todos', agent: a.config.id, todos: [] }); } },
 
     /** Extra prompt text for a main agent: the profile, the working method and the journal. Nothing when learning mode is off. */
     promptBlocks(provider) {
@@ -198,9 +251,10 @@ export function createLearning(ctx) {
         profile.learning && `Learning goals: ${profile.learning}`,
         stack.length && `Repo stack (detected from the repository): ${stack.join(', ')}`,
         profile.known.length && `Works with often (by how frequently it comes up): ${profile.known.map((k) => `${k.name} (${k.n})`).join(', ')}`,
+        ...observedLines(profile),
         `Experience: ${profile.level}; teaching preference: ${profile.style}; checkpoint frequency: ${profile.checkpoints}.`,
       ].filter(Boolean).join('\n');
-      return [`[Learner profile]\n${lines}`, workflowPrompt(provider, profile.checkpoints, { level: profile.level, style: profile.style }), journalPrompt(ctx.workingDir), contextPrompt(ctx.workingDir)].filter(Boolean);
+      return [`[Learner profile]\n${lines}`, workflowPrompt(provider, profile.checkpoints, { level: profile.level, style: profile.style }), todo && todoPrompt(), journalPrompt(ctx.workingDir), contextPrompt(ctx.workingDir)].filter(Boolean);
     },
 
     checkpoints: () => Object.fromEntries([...entries.values()].filter((a) => a.cli).map((a) => [a.config.id, publicView(cpOf(a))])),
@@ -220,12 +274,12 @@ export function createLearning(ctx) {
       if (!input || typeof input !== 'object') throw new Error('Invalid learner profile.');
       profile = {
         familiar: String(input.familiar || '').slice(0, 2000), learning: String(input.learning || '').slice(0, 2000),
-        counts: profile.counts, observed: [], known: [], // the tally is the server's own; only what the user types is taken from the client
+        counts: profile.counts, skills: profile.skills, behavior: profile.behavior, observed: [], known: [], // the tally and what agents observed are the server's own; only what the user types is taken from the client
         level: LEVELS.includes(input.level) ? input.level : 'familiar', style: STYLES.includes(input.style) ? input.style : 'plain', checkpoints: PACES.includes(input.checkpoints) ? input.checkpoints : 'normal',
       };
       refreshKnown();
     },
     /** What gets saved to workspace.json. */
-    state: () => ({ learnerProfile: profile, learningMode: on }),
+    state: () => ({ learnerProfile: profile, learningMode: on, todoMode: todo }),
   };
 }

@@ -55,6 +55,7 @@ export function initConnection(app) {
         ui.connected = true;
         setConn('ok', 'live · localhost');
         setOffline(false);
+        if (ui.todoMode) app.setTodoMode(true); // look for the checklist again now that the server is reachable
         app.childChats?.setOffline(false);
         info.log({ agent: 'claude', kind: 'info', text: 'connected to the Tandem server' });
       } else if (kind === 'closed') {
@@ -79,6 +80,7 @@ export function initConnection(app) {
       if (app.journal?.receive(msg)) return;
       if (msg.t === 'notice') { app.showNotice(msg.text); return; }
       if (msg.t === 'checkpoint') { app.setCheckpoint(msg.agent, msg.checkpoint); return; }
+      if (msg.t === 'todos') { app.setTodos(msg.agent, msg.todos); return; }
       if (msg.t === 'githubrepos') { app.receiveGithubRepos(msg); return; }
       if (msg.t === 'apimodels') { app.receiveApiModels(msg); return; }
       if (msg.t === 'clone') { app.setCloneStatus(msg); return; }

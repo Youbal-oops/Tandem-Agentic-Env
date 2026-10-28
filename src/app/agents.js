@@ -35,6 +35,9 @@ export function initAgents(app) {
         newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : app.net.send({ t: 'newchat', agent: id })),
         history: () => app.chatHistory.open(id),
         approve: (requestId, allow, answers) => app.net.send({ t: 'approve', agent: id, requestId, allow, answers }),
+        openTodo: (file, line) => app.net.send({ t: 'open-editor', source: id, path: file, line }),
+        refreshTodos: () => (ui.demo ? app.showNotice('Turn off Demo to use TODO mode.') : app.net.send({ t: 'todos', agent: id })),
+        checkTodos: () => (ui.demo ? app.showNotice('Turn off Demo to use TODO mode.') : app.net.send({ t: 'todo-check', agent: id })),
         implement: (skipDesign) => (ui.demo ? app.showNotice('Turn off Demo to use learning mode.') : app.net.send({ t: 'implement', agent: id, ...(skipDesign ? { skipDesign: true } : {}) })),
         confirmDesign: () => (ui.demo ? app.showNotice('Turn off Demo to use learning mode.') : app.net.send({ t: 'confirm-design', agent: id })),
         forward: (text) => forward(id, text),
@@ -43,6 +46,8 @@ export function initAgents(app) {
     });
     panels[id].setLearning(ui.learning);
     panels[id].setCheckpoint(ui.checkpoints[id]);
+    panels[id].setTodoMode(ui.todoMode);
+    panels[id].setTodos(ui.todos[id]);
   }
 
   for (const id of AGENTS) createPanel(id);
@@ -269,6 +274,7 @@ export function initAgents(app) {
     app.childChats?.parentSelected(id);
     ui.sel = id || null;
     document.body.dataset.sel = ui.sel || '';
+    if (id && ui.todoMode && app.net?.open && configs[id]?.provider !== 'api') app.net.send({ t: 'todos', agent: id }); // the checklist follows the code you edit elsewhere
     for (const a of AGENTS) {
       panels[a].root.classList.toggle('on', a === ui.sel);
       panels[a].root.classList.toggle('collapsed', a !== ui.sel);
@@ -287,6 +293,16 @@ export function initAgents(app) {
     $('#btn-learning').setAttribute('aria-pressed', String(on));
     $('#btn-learning').firstElementChild.textContent = on ? 'on' : 'off';
   };
+  /** TODO mode on or off: every main chat shows or hides its checklist, and looks for markers when it turns on. */
+  app.setTodoMode = (on) => {
+    ui.todoMode = on;
+    for (const id of AGENTS) {
+      panels[id]?.setTodoMode(on);
+      if (on && app.net?.open && configs[id]?.provider !== 'api') app.net.send({ t: 'todos', agent: id });
+    }
+  };
+  /** The TODO checklist of one agent. */
+  app.setTodos = (agent, todos) => { ui.todos[agent] = todos; panels[agent]?.setTodos(todos); };
   /** Where each main agent is in its checkpoint cycle (build, design, implement, report). */
   app.setCheckpoint = (agent, checkpoint) => { ui.checkpoints[agent] = checkpoint; panels[agent]?.setCheckpoint(checkpoint); };
 }

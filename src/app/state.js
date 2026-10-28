@@ -38,7 +38,7 @@ export function createApp() {
     act: {}, // per-agent activity: chars, rate, spark, tps
     warned: {}, // which context/limit warnings were already logged
     awaiting: { claude: new Set(), codex: new Set() },
-    ui: { sel: null, hidden: false, demo: false, connected: false, learning: false, checkpoints: {} },
+    ui: { sel: null, hidden: false, demo: false, connected: false, learning: false, todoMode: false, todos: {}, checkpoints: {} },
     bootAt: Date.now(),
     repoPath: '',
     cloneParent: '',

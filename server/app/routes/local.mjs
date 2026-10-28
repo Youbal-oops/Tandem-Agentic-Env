@@ -22,6 +22,8 @@ export function createLocalRoutes({ agents, hub, snapshot }) {
       savenotes: (m, conn) => conn.send({ t: 'localstate', ...agents.saveNotes(m.cwd, m.text), saved: true }),
       saveprompt: (m, conn) => conn.send({ t: 'prompt', ...agents.savePrompt(m.text, m.on) }),
       learningmode: (m) => hub.broadcast({ t: 'learnerprofile', ...agents.setLearningMode(m.on === true) }),
+      todomode: (m) => hub.broadcast({ t: 'learnerprofile', ...agents.setTodoMode(m.on === true) }),
+      todos: async (m, conn) => conn.send(await agents.todosFor(String(m.agent))),
       savelearnerprofile: (m, conn) => conn.send({ t: 'learnerprofile', ...agents.saveLearnerProfile(m.profile) }),
       journal: (m, conn) => conn.send({ t: 'journal', entries: agents.journal(), docs: agents.learningDocs() }),
       'journal-clear': (m, conn) => conn.send({ t: 'journal', entries: agents.clearJournal() }),

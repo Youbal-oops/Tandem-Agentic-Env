@@ -29,3 +29,21 @@
 .journal-entry time { font: 10px var(--mono); color: var(--mute); white-space: nowrap; }
 .journal-entry p { margin: 4px 0; font: 11.5px/1.6 var(--mono); color: var(--soft); overflow-wrap: anywhere; }
 .journal-entry p i { display: inline-block; min-width: 64px; margin-right: 8px; font-style: normal; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+
+/* TODO mode: the checklist of logic the user writes. */
+.c-todos { flex: none; margin: 4px 0 6px; padding: 6px 10px 8px; border: 1px solid var(--faint); border-radius: 8px; background: rgba(8, 10, 18, 0.5); }
+.c-todos[hidden] { display: none; }
+.c-todos-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 500 10px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--c); }
+.c-todos-actions { display: flex; gap: 12px; }
+.c-todos-actions button { padding: 2px 0; font: 500 10px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--mute); }
+.c-todos-actions button:hover:not(:disabled) { color: var(--ink); }
+.c-todos-actions button:disabled { opacity: 0.4; cursor: default; }
+.c-todos-list { margin: 6px 0 0; padding: 0; list-style: none; max-height: 22vh; overflow-y: auto; }
+.c-todos-list li.empty { font: 11.5px/1.5 var(--mono); color: var(--mute); }
+.c-todos-list button { width: 100%; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 4px 2px; text-align: left; font: 12px/1.45 var(--mono); color: var(--ink); border-radius: 4px; }
+.c-todos-list button:hover { background: rgba(255, 255, 255, 0.05); }
+.c-todos-list .box { color: var(--c); }
+.c-todos-list .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-todos-list .loc { color: var(--mute); font-size: 10.5px; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; }
+.c-todos-list li.done .txt { text-decoration: line-through; color: var(--mute); }
+.c-todos-list li.done .box { color: var(--mute); }

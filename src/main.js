@@ -66,6 +66,7 @@ app.localTools = createLocalTools({
   send: (msg) => app.net.send(msg), connected, getRepo: () => app.repoPath,
   getAgents: () => app.AGENTS.map((id) => ({ id, name: app.NAMES[id] })), notify: app.showNotice,
   onLearning: (on) => app.setLearning(on),
+  onTodoMode: (on) => app.setTodoMode(on),
   onCheckpoints: (map) => { for (const [agent, cp] of Object.entries(map || {})) app.setCheckpoint(agent, cp); },
   setDraft(id, text) {
     const panel = app.panels[id];

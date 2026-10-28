@@ -20,7 +20,9 @@ It is for people who build with AI and want to learn from it, and for developers
 
 - Keep a learning profile: your familiar stack, what you want to learn, your experience level and your preferred explanation style.
 - Tandem picks up the stack you work with. A technology counts as known once it has come up a few times in your messages or in files the agents edit for you. You can still edit the profile yourself.
-- Learning mode explains architecture, slows down to teach a concept, and lays out options and trade-offs before work starts.
+- In learning mode the agent questions and challenges you before it codes. It asks one question at a time, pushes back on vague answers, and cannot write code until it says it is fully satisfied (`READY TO BUILD`). You cannot hand the thinking back ("you decide", "just do it"): Tandem flags it and the agent refuses it, and the agent may not decide for you either.
+- **TODO mode** (Settings → Learning, needs learning mode): the agent builds the structure, wiring and real tests, and leaves the core logic for you as `TODO(you)` markers with throwing stubs. A checklist in the chat lists every marker with a hint and `file:line`; click one to open that block in VS Code. A marker that disappears from the code ticks itself off. **Check my work** asks the agent to read what you wrote and give hints, never the logic, and asking it to "write it for me" is refused.
+- It keeps track of you. Agents note your level in each technology and habits such as vague answers or handing decisions back, and every agent sees those notes and adjusts how hard it pushes.
 - It also writes `.tandem/learning/learning.md` (what was built, explained at your level) and `learningcontext.md` (how to teach you, shared by every agent).
 
 ### Review before anything ships

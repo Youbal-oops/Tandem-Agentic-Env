@@ -3,6 +3,8 @@ import readline from 'node:readline';
 const provider = process.argv[2];
 const args = process.argv.slice(3);
 const emit = (m) => process.stdout.write(JSON.stringify(m) + '\n');
+// Normally the fixture echoes what it was sent (as JSON). A message containing `RAW-REPLY:` makes it reply with the text after the marker, as written, so a test can play the agent.
+const echo = (text) => { const i = text.indexOf('RAW-REPLY:'); return i >= 0 ? text.slice(i + 10).trim() : JSON.stringify({ args, text }); };
 if (provider === 'gemini') {
   let text = '';
   process.stdin.on('data', (c) => text += c);
@@ -13,7 +15,7 @@ if (provider === 'gemini') {
     emit({ type: 'message', role: 'assistant', content: 'the file.', delta: true });
     emit({ type: 'tool_use', tool_name: 'replace', tool_id: 'call-1', parameters: { file_path: 'a.txt', old_string: 'one', new_string: 'two' } });
     emit({ type: 'tool_result', tool_id: 'call-1', status: 'success', output: 'ok' });
-    emit({ type: 'message', role: 'assistant', content: JSON.stringify({ args, text }), delta: true });
+    emit({ type: 'message', role: 'assistant', content: echo(text), delta: true });
     emit({ type: 'result', status: 'success', stats: { input_tokens: 5, output_tokens: 7, duration_ms: 9 } });
   });
 } else if (provider === 'codex') {
@@ -21,7 +23,7 @@ if (provider === 'gemini') {
   process.stdin.on('data', (s) => text += s);
   process.stdin.on('end', () => setTimeout(() => {
     emit({ type: 'thread.started', thread_id: '00000000-0000-4000-8000-000000000001' });
-    emit({ type: 'item.completed', item: { id: 'reply', type: 'agent_message', text: JSON.stringify({ args, text }) } });
+    emit({ type: 'item.completed', item: { id: 'reply', type: 'agent_message', text: echo(text) } });
     emit({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } });
   }, text.includes('SLOW-TURN') ? 900 : 0)); // lets a test keep a main agent busy while something else finishes
 } else {
@@ -31,7 +33,7 @@ if (provider === 'gemini') {
   let seq = 0;
   lines.on('line', (s) => {
     const msg = JSON.parse(s);
-    emit({ type: 'assistant', message: { id: `reply-${process.pid}-${++seq}`, content: [{ type: 'text', text: JSON.stringify({ args, text: msg.message.content }) }] } });
+    emit({ type: 'assistant', message: { id: `reply-${process.pid}-${++seq}`, content: [{ type: 'text', text: typeof msg.message.content === 'string' ? echo(msg.message.content) : JSON.stringify({ args, text: msg.message.content }) }] } });
     emit({ type: 'result', subtype: 'success', duration_ms: 1, usage: { input_tokens: 1, output_tokens: 1 } });
   });
 }

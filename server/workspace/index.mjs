@@ -205,7 +205,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     getParents: () => [...entries.values()].map((a) => ({ id: a.config.id, key: a.config.conversationId, cwd: a.cwd, provider: a.config.provider,
       sessionId: a.cli?.save()[a.config.provider]?.sessionId })) });
 
-  const learningState = () => ({ learnerProfile: learning.profile, learningMode: learning.enabled, stack: learning.stack(), checkpoints: learning.checkpoints() });
+  const learningState = () => ({ learnerProfile: learning.profile, learningMode: learning.enabled, todoMode: learning.todoMode, stack: learning.stack(), checkpoints: learning.checkpoints() });
 
   return {
     get cwd() { return ctx.workingDir; },
@@ -229,6 +229,9 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     savePrompt(text, on) { const out = prompt.save(text, on); save(); return out; },
     saveLearnerProfile(profile) { learning.saveProfile(profile); save(); return learningState(); },
     setLearningMode(on) { learning.setEnabled(on); save(); return learningState(); },
+    setTodoMode(on) { learning.setTodo(on); save(); return learningState(); },
+    /** The TODO(you) markers in one agent's folder. */
+    async todosFor(id) { const a = entries.get(id); if (!a?.cli) throw new Error('Unknown agent.'); await learning.todos(a); return { t: 'todos', agent: id, todos: a.checklist }; },
     settings: () => settings.state(),
     saveSettings(input) {
       const out = settings.save(input); save();
@@ -279,9 +282,10 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (m.t === 'send' || m.t === 'implement') { review.guardSend(a); review.onSend(a); }
       if (m.t === 'implement') return learning.implement(a, { skipDesign: m.skipDesign === true });
       if (m.t === 'confirm-design') return learning.confirmDesign(a);
+      if (m.t === 'todo-check') return learning.checkTodos(a);
       if (m.t === 'mode' && UNSAFE_MODES.has(m.mode) && !settings.agents().allowFull) throw new Error('Full access is switched off. Turn on "Allow full access mode" in Settings → Subagents first.');
       if (m.t === 'mode') learning.guardMode(a, m.mode);
-      if (m.t === 'send') learning.onSend(a, m.text);
+      if (m.t === 'send') m = { ...m, text: learning.onSend(a, m.text) };
       const attachments = m.t === 'send' ? ctx.images.resolve(m.attachments) : [];
       if (m.t === 'send' && !String(m.text || '').trim() && attachments.length) m = { ...m, text: 'Describe these images.' };
       if (m.t === 'newchat') {

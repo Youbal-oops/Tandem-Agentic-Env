@@ -1,5 +1,5 @@
 // Local tools are read-only until the user saves notes or sends a prepared draft.
-export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify, onLearning = () => {}, onCheckpoints = () => {}, onSettings = () => {} }) {
+export function createLocalTools({ send, connected, getRepo, getAgents, setDraft, notify, onLearning = () => {}, onTodoMode = () => {}, onCheckpoints = () => {}, onSettings = () => {} }) {
   const $ = (s) => document.querySelector(s);
   let request = 0;
   let folder = '';
@@ -76,11 +76,13 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
   }
   function showLearning(msg) {
     if (typeof msg.learningMode === 'boolean') { $('#profile-learning-mode').checked = msg.learningMode; onLearning(msg.learningMode); }
+    if (typeof msg.todoMode === 'boolean') { $('#profile-todo-mode').checked = msg.todoMode; onTodoMode(msg.todoMode); }
     if (msg.checkpoints) onCheckpoints(msg.checkpoints);
     if (Array.isArray(msg.stack)) $('#profile-stack').textContent = msg.stack.length ? `Detected in this repository: ${msg.stack.join(', ')}` : 'No technologies detected in this repository yet.';
   }
   const setLearningMode = (on) => { if (!ask({ t: 'learningmode', on })) { $('#profile-learning-mode').checked = !on; } };
   $('#profile-learning-mode').addEventListener('change', (e) => setLearningMode(e.target.checked));
+  $('#profile-todo-mode').addEventListener('change', (e) => { if (!ask({ t: 'todomode', on: e.target.checked })) e.target.checked = !e.target.checked; });
   $('#btn-learning').addEventListener('click', () => setLearningMode($('#btn-learning').getAttribute('aria-pressed') !== 'true'));
   $('#btn-profile').addEventListener('click', () => { if (!connected()) return notify('Connect to the local server first.'); $('#profile-dialog').showModal(); ask({ t: 'localstate' }); });
   $('#close-profile').addEventListener('click', () => $('#profile-dialog').close());

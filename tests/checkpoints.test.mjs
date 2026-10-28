@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { beginImplement, finishImplement, freshCheckpoint, isConfirm, isDesignCard, noteFile, onDesignConfirmed, onDesignProposed, onUserMessage, publicView } from '../server/learning/checkpoints.mjs';
+import { onReady, beginImplement, finishImplement, freshCheckpoint, isConfirm, isDesignCard, noteFile, onDesignConfirmed, onDesignProposed, onUserMessage, publicView } from '../server/learning/checkpoints.mjs';
 import { appendEntry, clearJournal, entryToMarkdown, journalPrompt, parseJournal, readEntries } from '../server/learning/journal.mjs';
 import { workflowPrompt } from '../server/learning/workflow.mjs';
 import { createWorkspace } from '../server/workspace.mjs';
@@ -18,10 +18,13 @@ test('a step moves build -> design -> implement -> report, and the next message 
   const cp = freshCheckpoint();
   onUserMessage(cp, '  Add a retry   to the\npush button ');
   assert.equal(cp.request, 'Add a retry to the push button');
-  assert.deepEqual(publicView(cp), { stage: 'build', designConfirmed: false, skipped: false });
+  assert.deepEqual(publicView(cp), { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false });
   onUserMessage(cp, 'more thoughts');
   assert.equal(cp.request, 'Add a retry to the push button', 'only the first message names the step');
 
+  assert.throws(() => beginImplement(cp), /not satisfied yet/);
+  onReady(cp, 'Retry three times with backoff, tested against a dead server');
+  assert.equal(cp.ready, true);
   onDesignProposed(cp, 'Retry three times with backoff');
   assert.equal(cp.stage, 'design');
   assert.equal(cp.designConfirmed, false);
@@ -43,12 +46,14 @@ test('a step moves build -> design -> implement -> report, and the next message 
   assert.equal(cp.files.length, 2, 'files are only noted while implementing');
 
   onUserMessage(cp, 'Now do the terminal');
-  assert.deepEqual(publicView(cp), { stage: 'build', designConfirmed: false, skipped: false });
+  assert.deepEqual(publicView(cp), { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false });
   assert.equal(cp.request, 'Now do the terminal');
 });
 
-test('skipping the design checkpoint is explicit and remembered', () => {
+test('skipping the design checkpoint is explicit and remembered, but never skips the agent being satisfied', () => {
   const cp = freshCheckpoint();
+  assert.throws(() => beginImplement(cp, { skipDesign: true }), /not satisfied yet/);
+  onReady(cp, 'Fix the typo in the heading');
   beginImplement(cp, { skipDesign: true });
   assert.equal(cp.stage, 'implement');
   assert.equal(cp.skipped, true);
@@ -97,7 +102,7 @@ test('teaching adapts to the learner: level and style change the working method'
   assert.match(workflowPrompt('claude', 'normal', { level: 'new', style: 'diagrams' }), /new to this[^]*text diagrams/);
   assert.match(workflowPrompt('claude', 'normal', { level: 'confident' }), /experienced/);
   assert.match(workflowPrompt('codex', 'normal', { level: 'familiar', style: 'questions' }), /guiding questions/);
-  assert.match(workflowPrompt('codex'), /Everyone reasons first/);
+  assert.match(workflowPrompt('codex'), /Nobody answers for anyone else/);
 });
 
 test('the full cycle in a workspace: confirm, implement, lock again, journal, and the journal reaches the next chat', async (t) => {
@@ -110,10 +115,13 @@ test('the full cycle in a workspace: confirm, implement, lock again, journal, an
   const idle = (id) => !w.snapshot()[id].meta.busy;
 
   w.setLearningMode(true);
-  assert.deepEqual(w.localState().checkpoints, { claude: { stage: 'build', designConfirmed: false, skipped: false }, codex: { stage: 'build', designConfirmed: false, skipped: false } });
+  assert.deepEqual(w.localState().checkpoints, { claude: { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false }, codex: { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false } });
 
   await w.action({ t: 'send', agent: 'codex', text: 'Add a retry to the push button' });
   await waitFor(() => replies('codex').length > 0 && idle('codex'));
+  assert.throws(() => w.action({ t: 'implement', agent: 'codex' }), /not satisfied yet/);
+  await w.action({ t: 'send', agent: 'codex', text: 'Retry three times, back off, give up on a dead server. RAW-REPLY:\nREADY TO BUILD: three retries with backoff, then a clear error' });
+  await waitFor(() => w.localState().checkpoints.codex.ready && idle('codex'));
   w.action({ t: 'confirm-design', agent: 'codex' });
   assert.equal(w.localState().checkpoints.codex.designConfirmed, true);
 
@@ -135,4 +143,20 @@ test('the full cycle in a workspace: confirm, implement, lock again, journal, an
   assert.deepEqual(w.clearJournal(), []);
   await w.action({ t: 'send', agent: 'codex', text: 'Next thing' });
   assert.equal(w.localState().checkpoints.codex.stage, 'build', 'a new message after a report starts a new cycle');
+});
+
+test("anything the user says next takes the agent's satisfaction back", () => {
+  const cp = freshCheckpoint();
+  onUserMessage(cp, 'Add a cache');
+  onReady(cp, 'An LRU of 100 entries, evicted on write');
+  assert.equal(cp.ready, true);
+  onDesignConfirmed(cp);
+  assert.equal(cp.ready, true, 'confirming the design does not undo it');
+  onUserMessage(cp, 'Actually make it 1000 entries and share it between tabs');
+  assert.equal(cp.ready, false);
+  assert.equal(cp.readyNote, '');
+  assert.throws(() => beginImplement(cp), /not satisfied yet/);
+  beginImplement(onReady(cp, 'Shared 1000 entry cache'));
+  onReady(cp, 'ignored while implementing');
+  assert.equal(cp.stage, 'implement');
 });

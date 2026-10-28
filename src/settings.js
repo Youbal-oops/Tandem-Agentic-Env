@@ -48,6 +48,7 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     $('#set-lite').textContent = `Lite mode: ${$('#btn-lite').classList.contains('on') ? 'on' : 'off'}`;
     const learn = $('#btn-learning').getAttribute('aria-pressed') === 'true';
     $('#set-learning-mode').checked = learn;
+    $('#set-todo-mode').checked = $('#profile-todo-mode').checked;
     try { $('#set-child-window').checked = localStorage.getItem('tandem:child-window') !== 'false'; } catch { $('#set-child-window').checked = true; }
   }
 
@@ -90,6 +91,7 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     status('Saving…');
   });
   $('#set-learning-mode').addEventListener('change', () => $('#btn-learning').click());
+  $('#set-todo-mode').addEventListener('change', () => $('#profile-todo-mode').click());
   $('#set-child-window').addEventListener('change', (e) => { try { localStorage.setItem('tandem:child-window', String(e.target.checked)); } catch { /* the choice just will not persist */ } });
   $('#set-ping-main').addEventListener('input', touch);
   $('#set-allow-full').addEventListener('change', (e) => {

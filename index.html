@@ -169,6 +169,7 @@
           <section data-panel="learning" hidden>
             <h3>Learning</h3>
             <label class="check"><input type="checkbox" id="set-learning-mode"> Learning mode: main agents work with you, one approved step at a time</label>
+            <label class="check"><input type="checkbox" id="set-todo-mode"> TODO mode: agents build the structure and tests, you write the logic (needs learning mode)</label>
             <div class="form-row"><button type="button" data-open="#btn-profile">Learning profile…</button><button type="button" data-open="#btn-journal">Learning journal…</button></div>
           </section>
           <section data-panel="agents" hidden>
@@ -225,6 +226,7 @@
       <label>What you want to learn<textarea id="profile-learning" maxlength="2000" rows="3" placeholder="Backend design, databases, testing…"></textarea></label>
       <div class="form-row"><label>Experience<select id="profile-level"><option value="new">New</option><option value="familiar">Familiar</option><option value="confident">Confident</option></select></label><label>Teaching<select id="profile-style"><option value="plain">Plain language</option><option value="examples">Examples</option><option value="diagrams">Diagrams</option><option value="questions">Guiding questions</option></select></label><label>Checkpoints<select id="profile-checkpoints"><option value="light">Light</option><option value="normal">Normal</option><option value="frequent">Frequent</option></select></label></div>
       <label class="check"><input type="checkbox" id="profile-learning-mode"> Learning mode: main agents work with you, one approved step at a time</label>
+      <label class="check"><input type="checkbox" id="profile-todo-mode"> TODO mode: agents build the structure and tests, you write the logic (needs learning mode)</label>
       <p id="profile-stack"></p><p id="profile-observed"></p><div class="form-row"><button id="save-profile">Save profile</button><span id="profile-status" role="status"></span></div>
       <p>Learning mode applies to main agents only. When it is on they stay read-only and work through four checkpoints with you: <b>Build</b> (you reason first), <b>Design</b> (you confirm it), <b>Implement</b> (nothing changes until you press <b>Approve &amp; implement</b>) and <b>Report</b>. Each finished step is saved to the learning journal. Teaching is tuned to your experience level and style. The profile, repository stack and journal are sent only while learning mode is on. Subagent chats are not affected.</p>
     </dialog>

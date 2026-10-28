@@ -17,7 +17,7 @@ export const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
 
 const STAGES = ['build', 'design', 'implement', 'report'];
 const STEP_NOTE = {
-  build: () => 'Say how you would approach it. The agent reasons with you before any design.',
+  build: (cp) => (cp.ready ? `The agent is satisfied: ${cp.readyNote || 'it has a clear answer'}. Confirm the design, then approve.` : 'The agent will question and challenge you. Answer in your own words: it cannot code until it is satisfied, and "you decide" is not an answer it accepts.'),
   design: (cp) => (cp.designConfirmed ? 'Design confirmed. Approve when you are ready.' : 'Confirm the design, or keep discussing.'),
   implement: (cp) => (cp.skipped ? 'Implementing (design checkpoint skipped).' : 'Implementing the step you approved.'),
   report: () => 'Step done and saved to the journal. Your next message starts a new one.',
@@ -32,7 +32,9 @@ export class ChatPanel {
     this.name = name;
     this.provider = provider;
     this.learning = false;
-    this.cp = { stage: 'build', designConfirmed: false, skipped: false };
+    this.cp = { stage: 'build', ready: false, designConfirmed: false, skipped: false };
+    this.todoMode = false; // TODO mode: the user writes the logic; `todos` is the checklist [{ file, line, text, done }]
+    this.todos = [];
     this.armed = false;
     this.otherName = otherName;
     this.h = handlers;
@@ -100,6 +102,16 @@ export class ChatPanel {
             <li data-step="report" title="What changed, how it was checked, what to understand now"><b>4</b>Report</li>
           </ol>
           <span class="c-step-note" role="status"></span>
+        </div>
+        <div class="c-todos" hidden>
+          <div class="c-todos-head">
+            <b class="c-todos-count"></b>
+            <span class="c-todos-actions">
+              <button type="button" class="todo-refresh" title="Look for TODO(you) markers again">Refresh</button>
+              <button type="button" class="todo-check" title="Ask the agent to read what you wrote and give hints, never the logic">Check my work</button>
+            </span>
+          </div>
+          <ol class="c-todos-list" aria-label="TODO checklist"></ol>
         </div>
         <div class="c-attachments" aria-label="Attached images" hidden></div>
         <div class="c-upload-status" role="status" aria-live="polite"></div>
@@ -172,6 +184,13 @@ export class ChatPanel {
     this.$('.c-compose').addEventListener('drop', (e) => { e.preventDefault(); this.addImages([...e.dataTransfer.files]); });
     this.$('.stop').addEventListener('click', () => this.h.stop());
     this.$('.implement').addEventListener('click', () => this.onImplement());
+    this.$('.todo-refresh').addEventListener('click', () => this.h.refreshTodos?.());
+    this.$('.todo-check').addEventListener('click', () => this.h.checkTodos?.());
+    this.$('.c-todos-list').addEventListener('click', (e) => {
+      const item = e.target.closest('button[data-i]');
+      const todo = item && this.todos[Number(item.dataset.i)];
+      if (todo) this.h.openTodo?.(todo.file, todo.line);
+    });
     this.$('.confirm').addEventListener('click', () => this.h.confirmDesign?.());
     this.$('.c-new').addEventListener('click', () => {
       this.h.newChat();
@@ -331,9 +350,45 @@ export class ChatPanel {
     this.learning = !!on && ['claude', 'codex', 'gemini'].includes(this.provider);
     this.refresh();
   }
+  /** TODO mode on or off for this chat. */
+  setTodoMode(on) {
+    this.todoMode = !!on;
+    this.refresh();
+  }
+  /** The TODO checklist: every TODO(you) marker the agent left, ticked when it is gone from the code. */
+  setTodos(list) {
+    this.todos = Array.isArray(list) ? list : [];
+    this.renderTodos();
+  }
+  /** The checklist. Each item opens its block in the editor. Built with text nodes: file names and hints are never HTML. */
+  renderTodos() {
+    const box = this.$('.c-todos');
+    box.hidden = !(this.learning && this.todoMode);
+    if (box.hidden) return;
+    const done = this.todos.filter((t) => t.done).length;
+    this.$('.c-todos-count').textContent = this.todos.length ? `TODO checklist · ${done}/${this.todos.length} done` : 'TODO checklist';
+    this.$('.todo-check').disabled = this.offline || !this.meta.available || !!this.meta.busy || this.workspaceBusy;
+    const list = this.$('.c-todos-list');
+    list.replaceChildren();
+    if (!this.todos.length) {
+      const empty = document.createElement('li'); empty.className = 'empty';
+      empty.textContent = 'Nothing yet. Approve a step and the agent builds the scaffold and tests, and leaves TODO(you) markers for the logic you write.';
+      list.append(empty);
+      return;
+    }
+    this.todos.forEach((t, i) => {
+      const li = document.createElement('li'); li.className = t.done ? 'done' : '';
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.i = String(i);
+      b.title = t.done ? 'Done: this marker is gone from the code. Click to open the file anyway.' : 'Open this block in the editor';
+      const box2 = document.createElement('span'); box2.className = 'box'; box2.textContent = t.done ? '☑' : '☐';
+      const where = document.createElement('span'); where.className = 'loc'; where.textContent = `${t.file}:${t.line}`;
+      const text = document.createElement('span'); text.className = 'txt'; text.textContent = t.text || 'Write this logic';
+      b.append(box2, text, where); li.append(b); list.append(li);
+    });
+  }
   /** Where this agent is in the checkpoint cycle: { stage, designConfirmed, skipped }. */
   setCheckpoint(cp) {
-    this.cp = { stage: 'build', designConfirmed: false, skipped: false, ...cp };
+    this.cp = { stage: 'build', ready: false, designConfirmed: false, skipped: false, ...cp };
     this.disarm();
     this.refresh();
   }
@@ -419,7 +474,7 @@ export class ChatPanel {
   /** The four-step strip and the Confirm design / Approve & implement buttons. */
   renderCheckpoint() {
     const m = this.meta;
-    const cp = this.cp || { stage: 'build', designConfirmed: false, skipped: false };
+    const cp = this.cp || { stage: 'build', ready: false, designConfirmed: false, skipped: false };
     const steps = this.$('.c-steps');
     steps.hidden = !this.learning;
     const now = STAGES.indexOf(cp.stage);
@@ -435,11 +490,14 @@ export class ChatPanel {
     confirm.disabled = busy;
     const implement = this.$('.implement');
     implement.hidden = !this.learning;
-    implement.disabled = busy || cp.stage === 'implement';
+    // The agent decides when it is satisfied; until it says "READY TO BUILD" nothing can be approved.
+    const waiting = cp.stage !== 'implement' && cp.stage !== 'report' && !cp.ready;
+    implement.disabled = busy || cp.stage === 'implement' || waiting;
     implement.classList.toggle('armed', !!this.armed);
     implement.classList.toggle('skip', !cp.designConfirmed);
-    implement.textContent = this.armed ? 'Skip the design checkpoint?' : cp.designConfirmed ? 'Approve & implement' : 'Implement without design';
-    implement.title = cp.designConfirmed ? 'Let this agent change files for the step you agreed' : 'The design is not confirmed yet. This is for small changes: click twice to skip the design checkpoint.';
+    implement.textContent = waiting ? 'Agent not satisfied yet' : this.armed ? 'Skip the design checkpoint?' : cp.designConfirmed ? 'Approve & implement' : 'Implement without design';
+    implement.title = waiting ? 'The agent is still questioning you. It says READY TO BUILD when it has a clear answer, and only then can you approve.' : cp.designConfirmed ? 'Let this agent change files for the step you agreed' : 'The design is not confirmed yet. This is for small changes: click twice to skip the design checkpoint.';
+    this.renderTodos();
   }
   filterFeed() {
     const query = this.$('.chat-search').value.toLowerCase();

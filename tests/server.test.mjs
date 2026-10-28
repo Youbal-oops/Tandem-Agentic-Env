@@ -46,7 +46,7 @@ test('the session handshake and the UI shell come from the real server', async (
   const { base, session } = await boot(t);
   assert.deepEqual(Object.keys(session.modes).sort(), ['claude', 'codex', 'gemini']);
   assert.equal(session.local.learningMode, false);
-  assert.deepEqual(session.local.checkpoints, { claude: { stage: 'build', designConfirmed: false, skipped: false }, codex: { stage: 'build', designConfirmed: false, skipped: false } });
+  assert.deepEqual(session.local.checkpoints, { claude: { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false }, codex: { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false } });
   const status = (host) => new Promise((resolve, reject) => http.get(`${base}/`, { headers: { Host: host } }, (res) => { res.resume(); resolve(res.statusCode); }).on('error', reject));
   assert.equal(await status('evil.example'), 403, 'a wrong Host header is refused (DNS rebinding)');
   assert.equal(await status(new URL(base).host), 200);
@@ -61,9 +61,9 @@ test('learning mode, the checkpoint stage and the journal travel over the socket
   const lp = await wait((m) => m.t === 'learnerprofile' && m.learningMode === true);
   assert.equal(lp.learnerProfile.level, 'familiar');
   send({ t: 'confirm-design', agent: 'codex' });
-  assert.deepEqual((await wait((m) => m.t === 'checkpoint' && m.agent === 'codex' && m.checkpoint.designConfirmed)).checkpoint, { stage: 'design', designConfirmed: true, skipped: false });
-  send({ t: 'implement', agent: 'claude' }); // not confirmed, so the server refuses
-  assert.match((await wait((m) => m.t === 'notice' && /Confirm the design first/.test(m.text))).text, /skip the design checkpoint/);
+  assert.deepEqual((await wait((m) => m.t === 'checkpoint' && m.agent === 'codex' && m.checkpoint.designConfirmed)).checkpoint, { stage: 'design', ready: false, readyNote: '', designConfirmed: true, skipped: false });
+  send({ t: 'implement', agent: 'claude' }); // the agent has not said it is satisfied, so the server refuses
+  assert.match((await wait((m) => m.t === 'notice' && /not satisfied yet/.test(m.text))).text, /READY TO BUILD/);
   send({ t: 'journal' });
   assert.deepEqual((await wait((m) => m.t === 'journal')).entries, []);
   assert.ok(!log.some((m) => m.t === 'checkpoint' && m.agent === 'claude' && m.checkpoint.stage === 'implement'));

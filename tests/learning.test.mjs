@@ -14,6 +14,12 @@ const idle = (w, id) => !w.snapshot()[id].meta.busy;
 const mode = (w, id) => w.snapshot()[id].meta.mode;
 const replies = (w, id) => w.snapshot()[id].events.filter((e) => e.k === 'msg').map((e) => e.text);
 
+/** The stub CLI replies with whatever follows RAW-REPLY: in a message, so a test can play the agent saying it is satisfied. */
+const satisfy = async (w, id) => {
+  await w.action({ t: 'send', agent: id, text: 'My approach is X. RAW-REPLY:\nREADY TO BUILD: do X' });
+  await waitFor(() => replies(w, id).some((r) => /^READY TO BUILD: do X/m.test(r)) && idle(w, id));
+};
+
 function setup(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-learning-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
@@ -68,6 +74,9 @@ test('learning mode holds main agents read-only until the user approves, then lo
   assert.throws(() => w.action({ t: 'mode', agent: 'codex', mode: 'edit' }), /Approve & implement/);
   assert.equal(mode(w, 'claude'), 'plan');
 
+  assert.throws(() => w.action({ t: 'implement', agent: 'codex' }), /not satisfied yet/);
+  assert.equal(mode(w, 'codex'), 'read');
+  await satisfy(w, 'codex');
   assert.throws(() => w.action({ t: 'implement', agent: 'codex' }), /Confirm the design first/);
   assert.equal(mode(w, 'codex'), 'read');
   w.action({ t: 'confirm-design', agent: 'codex' });
@@ -77,6 +86,7 @@ test('learning mode holds main agents read-only until the user approves, then lo
   await waitFor(() => mode(w, 'codex') === 'read');
   assert.throws(() => w.action({ t: 'mode', agent: 'codex', mode: 'edit' }), /Approve & implement/);
 
+  await satisfy(w, 'claude');
   w.action({ t: 'implement', agent: 'claude', skipDesign: true }); // a small change: the user skips the design checkpoint
   await waitFor(() => replies(w, 'claude').some((r) => r.includes('acceptEdits') && r.includes('Approved in Tandem') && r.includes('skip the design checkpoint')) && idle(w, 'claude'));
   await waitFor(() => mode(w, 'claude') === 'plan');

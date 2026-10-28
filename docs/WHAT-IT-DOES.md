@@ -74,11 +74,13 @@ Electron window  ->  local server (127.0.0.1:4317)  ->  agent CLIs (claude, code
 
 - **Learner profile.** It records your stack, goals, level, and how you like things explained. It also counts which technologies you work with, from your messages and the files agents edit. A technology becomes "known" after it comes up three times. It can also detect the stack from the repository.
 - **The checkpoint cycle.** Main agents go through four stages:
-  1. **Build:** think the problem through with you, your approach first.
+  1. **Build:** the agent questions and challenges you, one question at a time, your approach first. It may not code, and it may not decide for you. If you say "you decide" or "think of it yourself", Tandem adds a note to your message so the agent refuses it, and counts it as a habit.
   2. **Design:** a design is put to you.
-  3. **Implement:** it starts only after you press **Approve & implement**.
+  3. **Implement:** it starts only after the agent has written `READY TO BUILD: <the clear answer>` (it must be satisfied: goal, constraints and approach agreed, specific answers from you, an edge case tested, no open question) and you have pressed **Approve & implement**. Anything new you say takes its "ready" back, so it has to be satisfied again.
   4. **Report:** the step is summarised.
-- The app enforces the lock. A locked agent stays read-only and is refused the exit from planning until you approve. The prompt does not carry that rule.
+- The app enforces the lock. A locked agent stays read-only and is refused the exit from planning until it is satisfied and you approve. The prompt does not carry that rule.
+- **TODO mode** (`server/learning/todo.mjs`). A switch next to learning mode. After you approve a step the agent builds the scaffold (structure, types, wiring, runnable tests) and leaves `TODO(you)` markers with throwing stubs where the logic belongs; the logic is yours. Tandem scans the agent's worktree with `git grep` and keeps a checklist: each item shows the hint and `file:line`, opens that block in VS Code when clicked, and ticks itself when the marker is gone. **Check my work** asks the agent to review what you wrote and give hints only. "Write it for me" and "just give me the answer" get a note that makes the agent refuse. If a step ends with no markers at all, Tandem says the agent may have written the logic itself.
+- **What it learns about you** (`server/learning/understanding.mjs`). Agents end a message with a `## Learner notes` block: `skill: React = familiar (evidence)` and `behavior: ...`. Tandem files these, counts habits itself (messages, very short answers, handing the decision back, asking to hurry), saves them, and puts them in every agent's prompt so each one adjusts how hard it pushes. The profile dialog cannot overwrite them.
 - **Documents it writes:**
   - `learning.md`: what was built, explained at your level.
   - `learningcontext.md`: how to teach you, shared by every agent.

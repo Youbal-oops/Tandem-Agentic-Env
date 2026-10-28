@@ -18,13 +18,14 @@ export function terminalLaunch(platform, dir, { wt = false } = {}) {
 }
 
 /** The command that opens `target` in VS Code (`code` is its path or command), or in the default app when VS Code is missing. */
-export function editorLaunch(platform, target, { code = null, isFile = false } = {}) {
+export function editorLaunch(platform, target, { code = null, isFile = false, line = 0 } = {}) {
+  const goto = line > 0 ? `${target}:${line}` : target; // VS Code opens a file at a line with --goto path:line
   if (platform === 'win32') {
     if (!code) return ps(`Start-Process -FilePath ${q(target)}`);
-    return ps(`Start-Process -FilePath ${q(code)} -ArgumentList ${isFile ? "'--goto', " : ''}${q(quoted(target))}`);
+    return ps(`Start-Process -FilePath ${q(code)} -ArgumentList ${isFile ? "'--goto', " : ''}${q(quoted(goto))}`);
   }
-  if (platform === 'darwin') return code ? { cmd: 'open', args: ['-a', 'Visual Studio Code', target] } : { cmd: 'open', args: [target] };
-  return code ? { cmd: code, args: isFile ? ['--goto', target] : [target] } : { cmd: 'xdg-open', args: [target] };
+  if (platform === 'darwin') return code ? { cmd: 'open', args: ['-a', 'Visual Studio Code', ...(isFile && line > 0 ? ['--args', '--goto', goto] : [target])] } : { cmd: 'open', args: [target] };
+  return code ? { cmd: code, args: isFile ? ['--goto', goto] : [target] } : { cmd: 'xdg-open', args: [target] };
 }
 
 export function createLauncher({ platform = process.platform, spawnImpl = spawn, exists = fs.existsSync, env = process.env, execImpl = execFileSync } = {}) {
@@ -64,9 +65,9 @@ export function createLauncher({ platform = process.platform, spawnImpl = spawn,
       await run(terminalLaunch(platform, dir, { wt }));
       return { using: wt ? 'Windows Terminal' : platform === 'win32' ? 'PowerShell' : 'terminal' };
     },
-    async openEditor(target, isFile = false) {
+    async openEditor(target, isFile = false, line = 0) {
       const code = findVsCode();
-      await run(editorLaunch(platform, target, { code, isFile }));
+      await run(editorLaunch(platform, target, { code, isFile, line }));
       return { using: code ? 'VS Code' : 'default app' };
     },
   };
