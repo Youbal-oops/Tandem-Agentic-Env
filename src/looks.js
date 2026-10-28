@@ -6,6 +6,7 @@ export const AGENT_LOOK = {
     palette: ['#6b2a1c', '#e8663d', '#ffb25a', '#f8e6c4'],
     rim: '#ffb25a',
     style: 0,
+    ring: 0,
     radius: 21,
     orbit: { a: 150, b: 138, tilt: 0.14, speed: 0.085, phase: 0.9 },
     spin: 0.18,
@@ -16,11 +17,18 @@ export const AGENT_LOOK = {
     palette: ['#05314a', '#1593b8', '#74e6ff', '#ecfdff'],
     rim: '#74e6ff',
     style: 1,
+    ring: 1,
     radius: 18,
     orbit: { a: 245, b: 226, tilt: -0.11, speed: 0.052, phase: 4.1 },
     spin: 0.12,
   },
 };
+/** A colour pulled toward black (toward = 0) or white (toward = 1) by `amount`, so one hue can make a whole planet palette. */
+export function shade(hex, toward, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c) => Math.round(c + (toward * 255 - c) * amount);
+  return '#' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => mix(c).toString(16).padStart(2, '0')).join('');
+}
 export const CLASS_COLORS = {
   read: '#6ea8ff',
   search: '#b18cff',

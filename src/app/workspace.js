@@ -144,11 +144,34 @@ export function initWorkspace(app) {
     if (!app.net.open) return app.showNotice('Connect to the server first.');
     app.net.send({ t: 'repo', cwd: $('#repo-path').value.trim() });
   });
+  // Known API services (OpenRouter, OpenAI, Groq, local servers…) join the Connection list and fill in the endpoint and key variable.
+  let services = [];
+  app.setServices = (list) => {
+    services = Array.isArray(list) ? list : [];
+    const select = $('#agent-provider');
+    select.querySelectorAll('option[data-service]').forEach((o) => o.remove());
+    const custom = select.querySelector('option[value="api"]');
+    for (const s of services) {
+      const o = document.createElement('option'); o.value = `api:${s.id}`; o.dataset.service = s.id; o.textContent = `${s.name} API`;
+      select.insertBefore(o, custom);
+    }
+  };
   $('#agent-provider').addEventListener('change', () => {
-    const api = $('#agent-provider').value === 'api';
+    const value = $('#agent-provider').value;
+    const service = services.find((s) => `api:${s.id}` === value);
+    const api = value === 'api' || !!service;
     $('#api-fields').hidden = !api;
     $('#agent-form [name="model"]').required = api;
     $('#agent-form [name="endpoint"]').required = api;
+    if (service) {
+      $('#agent-form [name="endpoint"]').value = service.endpoint;
+      $('#agent-form [name="keyEnv"]').value = service.keyEnv;
+      if (!$('#agent-form [name="name"]').value) $('#agent-form [name="name"]').value = service.name.replace(/ \(local\)$/, '');
+    }
+  });
+  $('#scan-connections').addEventListener('click', () => {
+    if (!app.net.open) return app.showNotice('Connect to the server first.');
+    app.net.send({ t: 'scan-connections' });
   });
   $('#detect-api-models').addEventListener('click', () => {
     if (!app.net.open) return app.showNotice('Connect to the server first.');
@@ -166,7 +189,9 @@ export function initWorkspace(app) {
   $('#agent-form').addEventListener('submit', (e) => {
     e.preventDefault();
     if (!app.net.open) return app.showNotice('Connect to the server first.');
-    app.net.send({ t: 'addagent', config: Object.fromEntries(new FormData(e.target)) });
+    const config = Object.fromEntries(new FormData(e.target));
+    if (String(config.provider).startsWith('api:')) { config.service = config.provider.slice(4); config.provider = 'api'; }
+    app.net.send({ t: 'addagent', config });
   });
   $('#btn-export').addEventListener('click', () => {
     const lines = [`# Tandem session`, ``, `Repository: ${app.repoPath}`, `Exported: ${new Date().toISOString()}`, ``];

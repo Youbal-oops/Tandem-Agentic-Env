@@ -17,6 +17,7 @@ import { createReview } from '../review/review.mjs';
 import { createSettings } from '../settings.mjs';
 import { UNSAFE_MODES } from '../agents/constants.mjs';
 import { conventionsPrompt, createStructure } from '../structure/index.mjs';
+import { PLANET_RINGS, PLANET_STYLES, serviceById } from '../app/services.mjs';
 import { createApiChat } from './api-chat.mjs';
 import { createHistory } from './history.mjs';
 import { createPrompt } from './prompt.mjs';
@@ -46,11 +47,13 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   // How each project got here: 'cloned' or 'created' in Tandem, 'forked' when the user said so, otherwise it was opened.
   const origins = saved.origins && typeof saved.origins === 'object' && !Array.isArray(saved.origins) ? { ...saved.origins } : {};
   const originKey = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(String(p)); } };
+  // Kinds of connection that already had a planet at some point (or were removed on purpose), so a scan never re-adds them.
+  const seenConnections = new Set(Array.isArray(saved.seenConnections) ? saved.seenConnections.filter((k) => typeof k === 'string') : []);
   const childModelDefaults = saved.childModelDefaults && typeof saved.childModelDefaults === 'object' ? { ...saved.childModelDefaults } : {};
 
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), settings: settings.state(), origins, childModelDefaults, repoChats: repos.repoChats,
+    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), settings: settings.state(), origins, childModelDefaults, repoChats: repos.repoChats, seenConnections: [...seenConnections],
       agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
@@ -137,7 +140,15 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (url.username || url.password || url.search || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) throw new Error('Use HTTPS, or HTTP for a local model server.');
       config.endpoint = url.href;
       config.keyEnv = String(input.keyEnv || '');
+      if (input.service && serviceById(String(input.service))) config.service = String(input.service);
       if (config.keyEnv && !/^[A-Z][A-Z0-9_]{0,79}$/.test(config.keyEnv)) throw new Error('Enter an environment variable name, not an API key.');
+    }
+    // The two starting planets keep their own looks; every other planet gets a random style (and sometimes a ring) that is saved with it.
+    if (!['claude', 'codex'].includes(config.id)) {
+      config.style = Number.isInteger(input.style) && input.style >= 0 && input.style < PLANET_STYLES ? input.style : crypto.randomInt(PLANET_STYLES);
+      // Legacy saved planets stored a yes/no ring; that becomes the first ring look. Otherwise about three in seven have no ring.
+      const ring = input.ring === true ? 1 : input.ring;
+      config.ring = Number.isInteger(ring) && ring >= 0 && ring < PLANET_RINGS ? ring : (() => { const n = crypto.randomInt(PLANET_RINGS + 2); return n < PLANET_RINGS ? n : 0; })();
     }
     const agentCwd = provider === 'api' ? ctx.workingDir : ctx.worktrees.ensure(ctx.workingDir, `agent-${config.id}`);
     const a = { config, cwd: agentCwd, events: state?.events || [], effort: state?.effort || null, controller: null };
@@ -151,11 +162,37 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     return config;
   }
 
+  const connectionKey = (config) => (config.provider === 'api' ? (config.service ? `api:${config.service}` : null) : `cli:${config.provider}`);
+  /**
+   * Give each newly found kind of connection its own planet. `found` comes from app/connections.mjs. A kind that
+   * was seen before (it has a planet, or had one the user removed) is left alone. Returns the names added.
+   */
+  function autoConnect(found) {
+    const added = [];
+    if (ctx.repoChanging || ctx.closed) return added;
+    for (const c of found) {
+      if (seenConnections.has(c.key)) continue;
+      seenConnections.add(c.key);
+      if (entries.size >= 8) break;
+      if ([...entries.values()].some((a) => connectionKey(a.config) === c.key)) continue;
+      try {
+        let id = c.provider === 'api' ? c.service : c.provider;
+        if (entries.has(id)) id = `${id}-${crypto.randomBytes(3).toString('hex')}`;
+        add({ id, provider: c.provider, name: c.name, model: c.model, endpoint: c.endpoint, keyEnv: c.keyEnv, service: c.service });
+        added.push(c.name);
+      } catch (e) { console.error(`Could not add a planet for ${c.name}:`, e.message); }
+    }
+    schedule();
+    return added;
+  }
+
   const defaults = [{ id: 'claude', name: 'Claude', provider: 'claude' }, { id: 'codex', name: 'Codex', provider: 'codex' }];
   for (const row of saved.agents || defaults.map((config) => ({ config }))) {
     try { add(row.config, row.state); } catch (e) { console.error('Could not restore agent:', e.message); }
   }
   if (!entries.size) for (const c of defaults) add(c);
+  // Planets that already exist count as seen, so only connections that appear later are added automatically.
+  for (const a of entries.values()) { const k = connectionKey(a.config); if (k) seenConnections.add(k); }
   ctx.loading = false;
   for (const a of entries.values()) learning.relock(a);
 
@@ -175,7 +212,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     /** Folders the user can push from or open a terminal in: the repository, then each agent's own worktree. */
     workDirs: () => [{ id: 'repo', name: 'Repository', cwd: ctx.workingDir }, ...(ctx.structureTree && fs.existsSync(ctx.structureTree) ? [{ id: 'structure', name: 'Structured tree', cwd: ctx.structureTree }] : []), ...[...entries.values()].filter((a) => a.cli).map((a) => ({ id: a.config.id, name: a.config.name, cwd: a.cwd }))],
     configs: () => [...entries.values()].map((a) => ({ ...a.config, available: !!snapshot()[a.config.id].meta.available })),
-    snapshot, add, remove: repos.remove, switchRepo: repos.switchRepo,
+    snapshot, add, autoConnect, remove: repos.remove, switchRepo: repos.switchRepo,
     chatHistory: history.chatHistory, reopenChat: history.reopenChat,
     children: () => children.snapshot(),
     pollChildren: () => children.poll(),

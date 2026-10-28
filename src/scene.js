@@ -84,7 +84,7 @@ function ringTexture() {
   g.stroke();
   return new THREE.CanvasTexture(c);
 }
-function bandTexture(hex) {
+function bandTexture(hex, kind = 'bands') {
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 4;
@@ -92,7 +92,12 @@ function bandTexture(hex) {
   const col = new THREE.Color(hex);
   for (let x = 0; x < 512; x++) {
     const t = x / 511;
-    const a = (Math.sin(t * 80) * 0.5 + 0.5) * (Math.sin(t * 23 + 1) * 0.35 + 0.65) * Math.sin(Math.PI * t) ** 0.6;
+    const edge = Math.sin(Math.PI * t) ** 0.6;
+    // bands: fine stripes · dust: soft and cloudy · dash: clumps with gaps · solid: one smooth band
+    const a = kind === 'dust' ? (Math.sin(t * 17) * 0.25 + 0.75) * (Math.sin(t * 6 + 2) * 0.3 + 0.7) * Math.sin(Math.PI * t) ** 1.4
+      : kind === 'dash' ? (Math.sin(t * 38) > 0.2 ? 1 : 0.08) * edge
+      : kind === 'solid' ? 0.85 * Math.sin(Math.PI * t) ** 0.35
+      : (Math.sin(t * 80) * 0.5 + 0.5) * (Math.sin(t * 23 + 1) * 0.35 + 0.65) * edge;
     g.fillStyle = `rgba(${(col.r * 255) | 0},${(col.g * 255) | 0},${(col.b * 255) | 0},${(a * 0.9).toFixed(3)})`;
     g.fillRect(x, 0, 1, 4);
   }
@@ -307,13 +312,37 @@ export function createScene(host) {
               surf = mix(mix(uC0,uC1,t), mix(uC2,uC3,t2), 0.42);
               float storm = smoothstep(0.16,0.0,length((p-normalize(vec3(0.7,-0.25,0.65)))*vec3(1.,2.2,1.)));
               surf = mix(surf, uC3, storm*0.7);
-            } else {
+            } else if (uStyle < 1.5) {
               float n = fbm(p*2.6 + vec3(0., uTime*0.01, 0.));
               float clouds = smoothstep(0.12, 0.62, fbm(p*vec3(3.5,5.5,3.5) + vec3(uTime*0.03,0.,0.)));
               vec3 ocean = mix(uC0, uC1, smoothstep(-0.45,0.5,n));
               surf = mix(ocean, uC2, smoothstep(0.35,0.7,n)*0.5);
               surf = mix(surf, uC3, clouds*0.75);
               surf = mix(surf, uC3, smoothstep(0.76,0.94,abs(p.y)));
+            } else if (uStyle < 2.5) {
+              // molten: dark crust cut by glowing cracks
+              float rock = fbm(p*4.0)*0.5+0.5;
+              float crack = smoothstep(0.07, 0.0, abs(fbm(p*3.1+7.0)-0.04));
+              surf = mix(mix(uC0, uC1, rock), uC3, crack);
+              surf += uC2*crack*(0.5+0.4*sin(uTime*0.8+p.y*6.0));
+            } else if (uStyle < 3.5) {
+              // ice: pale plates with blue fractures
+              float plate = fbm(p*3.6)*0.5+0.5;
+              float frac = smoothstep(0.2, 0.0, abs(fbm(p*7.5+3.0)));
+              surf = mix(uC3, uC2, smoothstep(0.2,0.8,plate));
+              surf = mix(surf, uC1, frac*0.65);
+              surf = mix(surf, uC3, smoothstep(0.62,0.9,abs(p.y)));
+            } else if (uStyle < 4.5) {
+              // desert: long dunes with a dusty haze
+              float dune = sin((p.x*2.4 + p.z*1.6 + fbm(p*2.2)*3.0)*7.0)*0.5+0.5;
+              float dust = fbm(p*vec3(6.,3.,6.)+5.0)*0.5+0.5;
+              surf = mix(mix(uC0, uC1, dune), mix(uC2, uC3, dust), 0.42);
+            } else {
+              // swirl: bright spiral bands around the poles
+              float a = atan(p.z, p.x);
+              float sw = sin(a*4.0 + p.y*9.0 + fbm(p*2.0+uTime*0.02)*4.0);
+              surf = mix(mix(uC0, uC1, smoothstep(-0.3,0.3,sw)), uC2, smoothstep(0.55,1.0,sw)*0.75);
+              surf = mix(surf, uC3, smoothstep(0.84,0.97,abs(p.y)));
             }
             surf = mix(surf, vec3(1.0,0.2,0.15), uAlert*0.55);
             vec3 N = normalize(vN); vec3 L = normalize(-vW); vec3 V = normalize(cameraPosition - vW);
@@ -353,16 +382,29 @@ export function createScene(host) {
     tilt.add(body);
     g.add(tilt, atm);
 
+    // Ring styles (look.ring: 0 none): each is a list of [inner, outer, texture, opacity] in planet radii, plus the tilt.
+    const RINGS = {
+      1: { tilt: 0.38, rows: [[1.4, 2.0, 'bands', 0.85]] }, // broad striped ring
+      2: { tilt: 0.7, rows: [[1.42, 1.62, 'solid', 0.8], [1.82, 1.98, 'solid', 0.55]] }, // two thin rings with a gap
+      3: { tilt: 0.2, rows: [[1.3, 2.5, 'dust', 0.7]] }, // wide soft dusty disc
+      4: { tilt: 0.5, rows: [[1.5, 1.95, 'dash', 0.9]] }, // clumped, broken ring
+      5: { tilt: -0.55, rows: [[1.45, 1.8, 'bands', 0.85], [2.0, 2.12, 'solid', 0.5]] }, // leans the other way, with a thin outer band
+    };
     let ring = null;
-    if (id === 'codex') {
-      ring = new THREE.Mesh(
-        new THREE.RingGeometry(r * 1.4, r * 2.0, 128, 1),
-        new THREE.MeshBasicMaterial({ map: bandTexture(look.hex), color: 0xffffff, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
-      );
-      const uv = ring.geometry.attributes.uv;
-      const posA = ring.geometry.attributes.position;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, (Math.hypot(posA.getX(i), posA.getY(i)) - r * 1.4) / (r * 0.6), 0.5);
-      ring.rotation.x = Math.PI / 2 + 0.38;
+    const spec = RINGS[look.ring === true ? 1 : look.ring];
+    if (spec) {
+      ring = new THREE.Group();
+      for (const [inner, outer, kind, opacity] of spec.rows) {
+        const m = new THREE.Mesh(
+          new THREE.RingGeometry(r * inner, r * outer, 128, 1),
+          new THREE.MeshBasicMaterial({ map: bandTexture(look.hex, kind), color: 0xffffff, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
+        );
+        const uv = m.geometry.attributes.uv;
+        const posA = m.geometry.attributes.position;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, (Math.hypot(posA.getX(i), posA.getY(i)) - r * inner) / (r * (outer - inner)), 0.5);
+        ring.add(m);
+      }
+      ring.rotation.x = Math.PI / 2 + spec.tilt;
       ring.rotation.y = 0.12;
       g.add(ring);
     }

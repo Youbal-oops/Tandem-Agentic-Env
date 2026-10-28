@@ -18,6 +18,7 @@ import { createDelegation } from './app/delegation.mjs';
 import { createGitStatus } from './app/git-status.mjs';
 import { createHttpServer } from './app/http.mjs';
 import { attachWebSocket, combineRoutes, createHub } from './app/ws.mjs';
+import { API_SERVICES } from './app/services.mjs';
 import { createAgentRoutes } from './app/routes/agent.mjs';
 import { createConnectRoutes } from './app/routes/connect.mjs';
 import { createLocalRoutes } from './app/routes/local.mjs';
@@ -42,13 +43,14 @@ const clone = { get: () => cloneState, set: (state) => { cloneState = state; hub
 const snapshot = ({ clone: withClone = false } = {}) => ({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git: gitStatus.current, ...(withClone ? { clone: cloneState } : {}) });
 const workDir = (id) => agents.workDirs().find((d) => d.id === (id || 'repo')) || agents.workDirs()[0];
 
-const server = createHttpServer({ agents, images, delegationKeys: delegation.keys, gitStatus, getClone: clone.get, modelChoices });
+const server = createHttpServer({ agents, images, delegationKeys: delegation.keys, gitStatus, getClone: clone.get, modelChoices, services: API_SERVICES });
+const connectRoutes = createConnectRoutes({ hub, snapshot, agents });
 attachWebSocket(server, {
   hub,
   snapshot,
   routes: combineRoutes(
     createLocalRoutes({ agents, hub, snapshot }),
-    createConnectRoutes({ hub, snapshot }),
+    connectRoutes,
     createRepoRoutes({ agents, hub, gitStatus, repoService, clone, snapshot }),
     createPushRoutes({ agents, gitStatus, workDir }),
     createTerminalRoutes({ agents, workDir }),
@@ -72,4 +74,6 @@ server.listen(PORT, HOST, () => {
   console.log(`Tandem API  http://${HOST}:${PORT}   (agents work in: ${agents.cwd})`);
   for (const id of [...AGENT_IDS, 'gemini']) console.log(`  ${id.padEnd(7)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: More → Connect agents)'}`);
   console.log('Dev UI      http://localhost:5173  (npm run dev)');
+  // Once the server is up, give any connection that is already set up (and has no planet yet) its own planet.
+  if (!process.env.TANDEM_NO_AUTOSCAN) connectRoutes.scan();
 });

@@ -24,7 +24,7 @@ async function boot(t) {
   fs.writeFileSync(path.join(repo, 'a.txt'), 'changed');
 
   const port = await freePort();
-  const proc = spawn(process.execPath, ['server/index.mjs'], { cwd: APP, stdio: 'ignore', windowsHide: true, env: { ...process.env, TANDEM_PORT: String(port), TANDEM_APP_ROOT: APP, TANDEM_DATA_ROOT: path.join(root, 'data'), TANDEM_CWD: repo } });
+  const proc = spawn(process.execPath, ['server/index.mjs'], { cwd: APP, stdio: 'ignore', windowsHide: true, env: { ...process.env, TANDEM_PORT: String(port), TANDEM_APP_ROOT: APP, TANDEM_DATA_ROOT: path.join(root, 'data'), TANDEM_CWD: repo, TANDEM_NO_AUTOSCAN: '1' } });
   const base = `http://127.0.0.1:${port}`;
   t.after(async () => { proc.kill(); await new Promise((r) => setTimeout(r, 300)); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 200 }); });
 

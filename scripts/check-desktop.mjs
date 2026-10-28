@@ -29,7 +29,7 @@ const freePort = () => new Promise((resolve, reject) => {
 });
 const port = await freePort(), debugPort = await freePort();
 const origin = `http://127.0.0.1:${port}`;
-const env = { ...process.env, TANDEM_PORT: String(port), TANDEM_CWD: workspace, TANDEM_DATA_ROOT: path.join(root, 'data') };
+const env = { ...process.env, TANDEM_PORT: String(port), TANDEM_CWD: workspace, TANDEM_DATA_ROOT: path.join(root, 'data'), TANDEM_NO_AUTOSCAN: '1' };
 delete env.ELECTRON_RUN_AS_NODE;
 const child = spawn(executable, ['--tandem-smoke-test', `--remote-debugging-port=${debugPort}`], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
 let output = '', spawnError;

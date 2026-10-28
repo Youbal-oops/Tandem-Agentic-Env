@@ -1,7 +1,7 @@
 // The agents in the UI: a chat panel per planet, events and meta arriving from the server, what each planet
 // is drawn doing, and which agent is selected.
 
-import { AGENT_LOOK } from '../looks.js';
+import { AGENT_LOOK, shade } from '../looks.js';
 import { ChatPanel, EDIT_TOOLS } from '../chat.js';
 import { $ } from './state.js';
 
@@ -59,7 +59,10 @@ export function initAgents(app) {
         AGENTS.push(c.id);
         const colors = ['#ffb25a', '#74e6ff', '#bda1ff', '#7ee0a3', '#ff8faf', '#ffe181', '#83a8ff', '#efadff'];
         const hex = colors[i % colors.length];
-        AGENT_LOOK[c.id] = { ...AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'], name: c.name, hex, rim: hex, palette: ['#142335', '#416080', hex, '#fff2df'], orbit: { a: 150 + i * 76, b: 138 + i * 70, tilt: 0.03, speed: 0.07 / (1 + i * 0.3), phase: i * 2.4 }, radius: 18 };
+        // The server gives every planet it adds a random style (and sometimes a ring); the colours come from the planet's own hue.
+        const style = Number.isInteger(c.style) ? c.style : AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'].style;
+        const ring = Number.isInteger(c.ring) ? c.ring : typeof c.ring === 'boolean' ? Number(c.ring) : AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'].ring;
+        AGENT_LOOK[c.id] = { ...AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'], style, ring, name: c.name, hex, rim: hex, palette: [shade(hex, 0, 0.82), shade(hex, 0, 0.5), hex, shade(hex, 1, 0.82)], orbit: { a: 150 + i * 76, b: 138 + i * 70, tilt: 0.03, speed: 0.07 / (1 + i * 0.3), phase: i * 2.4 }, radius: 18 };
         scene.addPlanet(c.id, AGENT_LOOK[c.id]);
         createPanel(c.id, c.provider);
         const el = document.createElement('div'); el.className = 'pl'; el.dataset.agent = c.id; el.innerHTML = '<b></b><small>idle</small>'; $('b', el).textContent = c.name; $('#plabels').append(el); labelEls[c.id] = el;

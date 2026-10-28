@@ -18,7 +18,7 @@ function readBody(req, res, limit) {
   });
 }
 
-export function createHttpServer({ agents, images, delegationKeys, gitStatus, getClone, modelChoices }) {
+export function createHttpServer({ agents, images, delegationKeys, gitStatus, getClone, modelChoices, services = [] }) {
   function uploadImage(req, res) {
     if (!safeEqual(String(req.headers.authorization || '').replace(/^Bearer /, ''), TOKEN)) { res.writeHead(403).end('Forbidden'); return; }
     const chunks = []; let size = 0;
@@ -71,6 +71,7 @@ export function createHttpServer({ agents, images, delegationKeys, gitStatus, ge
       git: gitStatus.current,
       modes: MODES,
       models: modelChoices(),
+      services,
       learningMode: agents.localState().learningMode,
       agents: agents.configs(),
       clone: getClone(),

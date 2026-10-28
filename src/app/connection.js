@@ -45,6 +45,7 @@ export function initConnection(app) {
         if (data.local?.childModelDefaults) { Object.assign(CHILD_MODEL_DEFAULTS, data.local.childModelDefaults); app.childChats?.setDefaults(); }
         app.cloneParent = data.cloneParent || '';
         if (data.clone) app.setCloneStatus(data.clone);
+        app.setServices?.(data.services || []);
         app.reconcile(data.agents);
         for (const [provider, models] of Object.entries(data.models || {})) {
           MODEL_PRESETS[provider] = models;

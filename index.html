@@ -113,10 +113,10 @@
       </section><section data-workspace-page="agents" hidden>
       <div class="settings-heading"><h3>Planets</h3><span>Up to eight independent agents</span></div>
       <div id="agent-list"></div>
-      <div class="form-row"><button id="open-connect" type="button">Install or sign in to agents…</button><span>Claude Code, Codex and Gemini, without a terminal</span></div>
+      <div class="form-row"><button id="open-connect" type="button">Install or sign in to agents…</button><button id="scan-connections" type="button">Find connections</button><span>Every connection that is ready gets its own planet automatically.</span></div>
       <form id="agent-form">
         <h3>Add a planet</h3>
-        <div class="form-row"><label>Name<input name="name" required maxlength="32" placeholder="Reviewer" /></label><label>Connection<select name="provider" id="agent-provider"><option value="codex">Codex CLI</option><option value="claude">Claude Code CLI</option><option value="gemini">Gemini CLI</option><option value="api">Compatible API chat</option></select></label></div>
+        <div class="form-row"><label>Name<input name="name" required maxlength="32" placeholder="Reviewer" /></label><label>Connection<select name="provider" id="agent-provider"><option value="codex">Codex CLI</option><option value="claude">Claude Code CLI</option><option value="gemini">Gemini CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label></div>
         <label>Model<input name="model" list="api-model-options" placeholder="Default for CLI; required for API" /></label>
         <datalist id="api-model-options"></datalist>
         <div id="api-fields" hidden>
