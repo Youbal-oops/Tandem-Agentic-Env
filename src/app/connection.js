@@ -57,7 +57,6 @@ export function initConnection(app) {
         setOffline(false);
         app.childChats?.setOffline(false);
         info.log({ agent: 'claude', kind: 'info', text: 'connected to the Tandem server' });
-        app.terminal?.reconnected();
       } else if (kind === 'closed') {
         app.githubReset();
         ui.connected = false;
@@ -78,7 +77,6 @@ export function initConnection(app) {
       if (app.structurePanel?.receive(msg)) return;
       if (app.pushDialog?.receive(msg)) return;
       if (app.journal?.receive(msg)) return;
-      if (app.terminal?.receive(msg)) return;
       if (msg.t === 'notice') { app.showNotice(msg.text); return; }
       if (msg.t === 'checkpoint') { app.setCheckpoint(msg.agent, msg.checkpoint); return; }
       if (msg.t === 'githubrepos') { app.receiveGithubRepos(msg); return; }

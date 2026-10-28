@@ -37,6 +37,6 @@
 .agent .c-feed::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--c) 70%, transparent); background-clip: padding-box; }
 #child-drawer .c-feed::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--c) 30%, transparent); background-clip: padding-box; }
 
-/* terminal and code-like panes: a thinner bar so text is never cramped */
-#term-out::-webkit-scrollbar, pre::-webkit-scrollbar, .logbox::-webkit-scrollbar, textarea::-webkit-scrollbar { width: 7px; height: 7px; }
+/* code-like panes: a thinner bar so text is never cramped */
+pre::-webkit-scrollbar, .logbox::-webkit-scrollbar, textarea::-webkit-scrollbar { width: 7px; height: 7px; }
 dialog::-webkit-scrollbar { width: 8px; }

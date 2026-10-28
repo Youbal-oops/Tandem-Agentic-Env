@@ -209,7 +209,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
 
   return {
     get cwd() { return ctx.workingDir; },
-    /** Folders the user can push from or open a terminal in: the repository, then each agent's own worktree. */
+    /** Folders the user can push from, or open in a terminal or editor: the repository, then each agent's own worktree. */
     workDirs: () => [{ id: 'repo', name: 'Repository', cwd: ctx.workingDir }, ...(ctx.structureTree && fs.existsSync(ctx.structureTree) ? [{ id: 'structure', name: 'Structured tree', cwd: ctx.structureTree }] : []), ...[...entries.values()].filter((a) => a.cli).map((a) => ({ id: a.config.id, name: a.config.name, cwd: a.cwd }))],
     configs: () => [...entries.values()].map((a) => ({ ...a.config, available: !!snapshot()[a.config.id].meta.available })),
     snapshot, add, autoConnect, remove: repos.remove, switchRepo: repos.switchRepo,

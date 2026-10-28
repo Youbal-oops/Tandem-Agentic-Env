@@ -6,7 +6,7 @@
   top: var(--top);
   bottom: var(--bot);
   width: var(--lw);
-  padding: 0 44px 6px 28px;
+  padding: 0 30px 6px 20px;
   display: flex;
   flex-direction: column;
   background: linear-gradient(90deg, rgba(3, 4, 10, 0.96) 0%, rgba(3, 4, 10, 0.9) 82%, rgba(3, 4, 10, 0) 100%);
@@ -47,7 +47,7 @@
 }
 .agent {
   --c: var(--claude);
-  --row: 82px;
+  --row: 56px;
   flex: 1 1 0;
   min-height: var(--row);
   display: flex;
@@ -97,7 +97,7 @@
   height: var(--row);
   position: relative;
   display: grid;
-  grid-template-columns: 30px 1fr 112px 104px;
+  grid-template-columns: 26px 1fr 84px 88px;
   grid-template-areas: 'num name spark stat';
   align-items: center;
   gap: 0 10px;
@@ -121,7 +121,7 @@
 }
 .a-row .name {
   grid-area: name;
-  font: italic 400 40px/1 var(--serif);
+  font: italic 400 30px/1 var(--serif);
   color: var(--ink);
   transition: color 0.3s, text-shadow 0.3s;
 }
@@ -132,8 +132,8 @@
 }
 .a-row .tag {
   position: absolute;
-  left: 40px;
-  top: 12px;
+  left: 36px;
+  top: 6px;
   font: 500 8.5px var(--mono);
   letter-spacing: 0.24em;
   text-transform: uppercase;

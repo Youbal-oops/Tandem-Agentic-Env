@@ -34,7 +34,7 @@ It is for people who build with AI and want to learn from it, and for developers
 - **Connect agents** installs and signs in to Claude Code, Codex and Gemini CLI from the app. Codex and Gemini have an opt-in full access mode (no sandbox), chosen per agent behind a warning.
 - Open a local folder, clone a repo, start a new project, and connect GitHub through the GitHub CLI.
 - Browse files, inspect Git changes, attach images, save notes and export chats.
-- A **Terminal** drawer (Ctrl+`) runs one command line at a time in the repository or any agent's worktree. It keeps `cd` between commands but is not a full terminal, so vim-style programs do not work.
+- **Terminal** (Ctrl+`) opens your real terminal (Windows Terminal, or PowerShell) in the selected agent's worktree, or the repository. **Editor** (Ctrl+E) opens the same folder in VS Code, or the default app if VS Code is not installed. In Files / Diff, **Open in editor** opens one file.
 
 ### Also included
 

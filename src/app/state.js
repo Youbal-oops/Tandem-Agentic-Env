@@ -43,7 +43,7 @@ export function createApp() {
     repoPath: '',
     cloneParent: '',
     // Created by main.js and the modules, in this order:
-    scene: null, info: null, net: null, demo: null, localTools: null, folderPicker: null, childChats: null, chatHistory: null, pushDialog: null, terminal: null,
+    scene: null, info: null, net: null, demo: null, localTools: null, folderPicker: null, childChats: null, chatHistory: null, pushDialog: null,
     lite: false,
   };
 }

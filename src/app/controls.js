@@ -1,4 +1,4 @@
-// The top bar and keyboard: overview, hide panels, demo, eco/lite switches, the clock and the Alt shortcuts.
+// The top bar and keyboard: overview, hide panels, demo, eco/lite switches, the terminal and editor buttons, the clock and the Alt shortcuts.
 
 import { $ } from './state.js';
 
@@ -21,7 +21,16 @@ export function initControls(app) {
   $('#btn-sky').addEventListener('click', () => scene.sky(SKY[skyN++ % SKY.length]));
   scene.onPick((id) => (id === 'sun' ? app.openWorkspace() : app.select(id && id !== ui.sel ? id : null)));
 
+  // The real terminal and editor open as their own windows, in the selected agent's worktree or else the repository.
+  const openTool = (t) => (app.net.open ? app.net.send({ t, source: ui.sel || 'repo' }) : app.showNotice('Connect to the server first.'));
+  $('#btn-terminal').addEventListener('click', () => openTool('open-terminal'));
+  $('#btn-editor').addEventListener('click', () => openTool('open-editor'));
+
   document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
+      if (e.key === '`' || e.code === 'Backquote') { e.preventDefault(); openTool('open-terminal'); return; }
+      if (e.key.toLowerCase() === 'e' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) { e.preventDefault(); openTool('open-editor'); return; }
+    }
     if (e.key === 'Escape') {
       if (document.querySelector('dialog[open]')) return;
       app.select(null);

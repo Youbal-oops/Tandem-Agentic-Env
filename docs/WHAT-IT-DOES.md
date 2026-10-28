@@ -13,7 +13,7 @@ Tandem is a desktop app (Electron, Windows) that wraps a small local web server 
 ```
 Electron window  ->  local server (127.0.0.1:4317)  ->  agent CLIs (claude, codex, gemini)
    (UI, 3D scene)     (workspace, learning, review,        working in git worktrees
-                       push, terminal, structure)           inside your project
+                       push, launcher, structure)           inside your project
 ```
 
 ## 1. Desktop shell (`desktop/main.cjs`)
@@ -39,7 +39,7 @@ Electron window  ->  local server (127.0.0.1:4317)  ->  agent CLIs (claude, code
   - Edits fly into the sun as light, and flares mark errors and approval requests.
 - **Left: the agent chats.** Each has its own message box, model picker, effort, and mode.
 - **Right: the info panel.** It shows usage, what the agents are doing, and the project's git state.
-- **Top bar:** System, Workspace, Set up, Files/Diff, Review, Terminal, Push, Connect agents, Settings, Learn profile, Learning journal, Prompt, Notes, Export conversations, Stop all, Lite, Eco, Demo, Sky, Hide panels.
+- **Top bar:** System, Workspace, Set up, Files/Diff, Review, Terminal, Editor, Push, Connect agents, Settings, Learn profile, Learning journal, Prompt, Notes, Export conversations, Stop all, Lite, Eco, Demo, Sky, Hide panels.
 - **Lite** turns the 3D scene off. **Eco** lowers the frame rate and effects.
 
 ## 4. Agents (`server/agents/`)
@@ -101,10 +101,11 @@ Electron window  ->  local server (127.0.0.1:4317)  ->  agent CLIs (claude, code
 - Browse the repository (skipping `.git`, `.tandem`, `node_modules` and the like), read files up to 256 KB, and see the git diff.
 - You can add a file to the chat draft.
 
-## 12. Terminal (`server/terminal.mjs`)
+## 12. Terminal and editor (`server/launcher.mjs`)
 
-- Runs one command line at a time in your system shell (PowerShell on Windows), in the repository or an agent's worktree.
-- It remembers `cd` between commands. It is not a full terminal, so vim-style programs do not work.
+- **Terminal** opens your real terminal window (Windows Terminal if installed, otherwise PowerShell) in the selected agent's worktree, or in the repository when no agent is selected. There is no built-in terminal.
+- **Editor** opens that same folder in VS Code. If VS Code is not found it opens the folder in the default app. **Open in editor** in Files / Diff opens a single file.
+- The folder always comes from Tandem's own list of work folders, and a file must be inside it.
 
 ## 13. Setup and connecting (`server/connect.mjs`, `repos.mjs`, `folders.mjs`)
 

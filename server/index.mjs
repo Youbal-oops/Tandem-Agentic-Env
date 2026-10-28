@@ -3,9 +3,8 @@
 // Runs Claude Code and Codex CLI as chat sessions and streams them to the browser UI.
 // Security model: bound to 127.0.0.1 only; Host and Origin are checked on every request;
 // the WebSocket needs a per-launch random token; agents can only start the two known CLI
-// binaries. The one exception is the built-in terminal, which runs the lines the signed-in
-// user types in the system shell (same token and origin checks, one terminal per connection,
-// stopped when the connection closes). Repo changes require idle agents. CLI subprocesses do not
+// binaries. It can also open a terminal window or VS Code on a work folder (never a command the
+// user typed). Repo changes require idle agents. CLI subprocesses do not
 // inherit API keys; optional API chats read a named server environment variable.
 //
 // This file only assembles the pieces:  app/  (HTTP, WebSocket, routes)  ·  workspace/  (planets and chats)
@@ -24,7 +23,7 @@ import { createConnectRoutes } from './app/routes/connect.mjs';
 import { createLocalRoutes } from './app/routes/local.mjs';
 import { createPushRoutes } from './app/routes/push.mjs';
 import { createRepoRoutes } from './app/routes/repos.mjs';
-import { createTerminalRoutes } from './app/routes/terminal.mjs';
+import { createLaunchRoutes } from './app/routes/launch.mjs';
 import { createImageStore } from './images.mjs';
 import { createRepoService } from './repos.mjs';
 import { createWorkspace } from './workspace.mjs';
@@ -53,7 +52,7 @@ attachWebSocket(server, {
     connectRoutes,
     createRepoRoutes({ agents, hub, gitStatus, repoService, clone, snapshot }),
     createPushRoutes({ agents, gitStatus, workDir }),
-    createTerminalRoutes({ agents, workDir }),
+    createLaunchRoutes({ workDir }),
     createAgentRoutes({ agents, hub, snapshot }),
   ),
 });

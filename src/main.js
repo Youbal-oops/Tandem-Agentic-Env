@@ -19,7 +19,6 @@ import { createSettingsDialog } from './settings.js';
 import { createConnectDialog } from './connect.js';
 import { createStructurePanel } from './structure.js';
 import { createPushDialog } from './push.js';
-import { createTerminalPanel } from './terminal.js';
 import { initAgents } from './app/agents.js';
 import { initBoard } from './app/board.js';
 import { initConnection } from './app/connection.js';
@@ -56,7 +55,6 @@ initWorkspace(app);
 initControls(app);
 
 app.pushDialog = createPushDialog({ send: (msg) => app.net.send(msg), connected, getSource: source, notify: app.showNotice });
-app.terminal = createTerminalPanel({ send: (msg) => app.net.send(msg), connected, getSource: source, notify: app.showNotice });
 app.journal = createJournalDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice });
 app.folderPicker = createFolderPicker({ send: (msg) => app.net.send(msg), connected, getRepo: () => app.repoPath, notify: app.showNotice });
 app.settingsDialog = createSettingsDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, getAgent: () => (app.ui.sel && app.AGENTS.includes(app.ui.sel) ? app.ui.sel : app.AGENTS[0]) });

@@ -1,6 +1,6 @@
 // How the screen is divided: the chat panel on the left, the instruments on the right, and the scene between.
 // Both side panels can be dragged wider (double-click a handle to reset). Everything that sits in the middle
-// (the 3D scene's visible area, the terminal, the child drawer) reads --lw and --rw, so it follows along.
+// (the 3D scene's visible area, the child drawer) reads --lw and --rw, so it follows along.
 
 import { $, clamp } from './state.js';
 
@@ -14,7 +14,7 @@ export function initLayout(app) {
   function layout() {
     const vw = window.innerWidth;
     const left = saved(LEFT_KEY), right = saved(RIGHT_KEY);
-    const lw = vw < 700 ? vw : left ? clamp(340, left, Math.min(820, vw * 0.55)) : clamp(380, vw * 0.34, 600);
+    const lw = vw < 700 ? vw : left ? clamp(340, left, Math.min(1200, vw * 0.7)) : clamp(420, vw * 0.42, 780);
     // The right panel hides on narrow windows unless the user has chosen a width, and never takes more than the left leaves.
     const rw = vw <= 900 ? 0 : right ? clamp(300, right, Math.min(760, vw * 0.5, vw - lw - 320)) : vw > 1280 ? clamp(360, vw * 0.22, 460) : 0;
     const root = document.documentElement.style;

@@ -69,7 +69,7 @@ test('learning mode, the checkpoint stage and the journal travel over the socket
   assert.ok(!log.some((m) => m.t === 'checkpoint' && m.agent === 'claude' && m.checkpoint.stage === 'implement'));
 });
 
-test('push dialog and terminal work through the real server', async (t) => {
+test('push dialog works through the real server', async (t) => {
   const { send, wait, log, remote } = await boot(t);
   send({ t: 'pushinfo', source: 'repo' });
   const info = await wait((m) => m.t === 'pushinfo');
@@ -83,11 +83,4 @@ test('push dialog and terminal work through the real server', async (t) => {
   send({ t: 'push', source: 'repo', branch: 'tandem/repo-ui', message: 'Change a', files: ['a.txt'] });
   assert.equal((await wait((m) => m.t === 'push-done')).ok, true);
   assert.equal(git(remote, 'log', '-1', '--format=%s', 'tandem/repo-ui'), 'Change a');
-
-  log.length = 0;
-  send({ t: 'term-open', source: 'repo' });
-  await wait((m) => m.t === 'term' && m.kind === 'ready');
-  send({ t: 'term-run', line: 'git log -1 --format=%s' });
-  await wait((m) => m.t === 'term' && m.kind === 'done');
-  assert.match(log.filter((m) => m.kind === 'out').map((m) => m.text).join(''), /Change a/);
 });

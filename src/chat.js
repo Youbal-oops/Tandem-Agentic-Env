@@ -105,7 +105,7 @@ export class ChatPanel {
         <div class="c-upload-status" role="status" aria-live="polite"></div>
         <div class="c-compose">
           <span class="pr">›</span>
-          <textarea rows="2" placeholder="Message ${esc(name)}…  (Enter to send · Shift+Enter for a new line)" spellcheck="true"></textarea>
+          <textarea rows="4" placeholder="Message ${esc(name)}…  (Enter to send · Shift+Enter for a new line)" spellcheck="true"></textarea>
           <div class="c-actions">
             <button class="attach" type="button" title="Attach images (or paste or drop them here)" aria-label="Attach images">+ image</button>
             <input class="image-picker" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
@@ -214,7 +214,7 @@ export class ChatPanel {
   }
   autosize() {
     this.ta.style.height = 'auto';
-    this.ta.style.height = Math.min(this.ta.scrollHeight, 260) + 'px';
+    this.ta.style.height = Math.min(this.ta.scrollHeight, Math.round(window.innerHeight * 0.45)) + 'px';
   }
   /** Shell-like keys in the message box: Up/Down walk through what you sent before, Ctrl+C stops, Esc clears. */
   onKey(e) {

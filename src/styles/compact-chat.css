@@ -1,6 +1,6 @@
 /* ---- Compact chat header: the conversation gets the room. Same fonts, colours and mood. ---- */
 body[data-sel]:not([data-sel='']) .agent:not(.collapsed) { --row: 52px; }
-body[data-sel]:not([data-sel='']) .agent:not(.collapsed) .a-row .name { font-size: 32px; }
+body[data-sel]:not([data-sel='']) .agent:not(.collapsed) .a-row .name { font-size: 28px; }
 body[data-sel]:not([data-sel='']) .agent:not(.collapsed) .a-row .tag { top: 2px; }
 .a-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'modes meta' 'models models'; gap: 6px 12px; align-items: center; padding: 0 0 6px; }
 .a-bar .modes { grid-area: modes; gap: 14px; }
@@ -20,3 +20,10 @@ body[data-sel]:not([data-sel='']) .agent:not(.collapsed) .a-row .tag { top: 2px;
 /* the shortcut hint stays on one line and gives way to the learning buttons */
 .c-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 9.5px var(--mono); letter-spacing: .04em; color: var(--mute); }
 .agent.learning .c-hint { display: none; }
+
+/* While one chat is open, the other agents shrink to a slim strip so the open chat gets the height. */
+body[data-sel]:not([data-sel='']) .agent.collapsed { --row: 30px; }
+body[data-sel]:not([data-sel='']) .agent.collapsed .a-row { grid-template-columns: 26px 1fr auto; opacity: 0.7; }
+body[data-sel]:not([data-sel='']) .agent.collapsed .a-row .name { font-size: 17px; }
+body[data-sel]:not([data-sel='']) .agent.collapsed .a-row .tag,
+body[data-sel]:not([data-sel='']) .agent.collapsed .a-row .spark { display: none; }

@@ -11,7 +11,7 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
   const ask = (msg) => { if (!connected()) { notify('Connect to the local server first.'); return false; } send(msg); return true; };
   function inspect(kind, extra = {}) {
     if (!ask({ t: kind, request: ++request, ...extra })) return;
-    preview = null; $('#attach-context').disabled = true;
+    preview = null; $('#attach-context').disabled = true; $('#inspect-editor').disabled = true;
     $('#inspect-status').textContent = 'Loading…';
     $('#inspect-content').textContent = '';
   }
@@ -33,6 +33,10 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
   $('#inspect-diff').addEventListener('click', () => { tab = 'diff'; load(); });
   $('#diff-mode').addEventListener('change', load);
   $('#inspect-refresh').addEventListener('click', load);
+  $('#inspect-editor').addEventListener('click', () => {
+    if (!preview || preview.kind !== 'file' || preview.cwd !== getRepo()) return notify('Choose a file first.');
+    ask({ t: 'open-editor', source: 'repo', path: preview.path });
+  });
   $('#attach-context').addEventListener('click', () => {
     if (!preview || preview.cwd !== getRepo()) return notify('Refresh the preview for the current repository.');
     const text = `${preview.kind === 'file' ? 'File' : 'Git diff'}: ${preview.path || preview.mode}\n\n${preview.text}`;
@@ -133,7 +137,7 @@ export function createLocalTools({ send, connected, getRepo, getAgents, setDraft
         for (const e of msg.entries) row(`${e.directory ? '▸ ' : ''}${e.name}`, e.path, e.directory);
         $('#inspect-status').textContent = msg.truncated ? 'Showing the first 300 entries.' : 'Choose a text file to preview.';
       } else {
-        preview = msg; $('#inspect-location').textContent = msg.path || `Git diff · ${msg.mode}`;
+        preview = msg; $('#inspect-location').textContent = msg.path || `Git diff · ${msg.mode}`; $('#inspect-editor').disabled = msg.kind !== 'file';
         $('#inspect-content').textContent = msg.text; $('#attach-context').disabled = false;
         $('#inspect-status').textContent = msg.kind === 'file' ? `${msg.bytes.toLocaleString()} bytes · read-only` : 'Read-only diff';
       }
