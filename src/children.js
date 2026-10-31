@@ -169,7 +169,7 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
     $('.child-form').hidden = false; $('.child-picker-row').hidden = true; $('.child-context').hidden = true;
     setTitle(id, 'New task'); $('.child-state').textContent = 'new task';
     const provider = $('.child-form [name="provider"]');
-    provider.value = panels[id]?.name === 'Claude' ? 'codex' : 'claude';
+    provider.value = panels[id]?.provider === 'claude' ? 'codex' : 'claude';
     renderModelOptions(provider.value);
     $('.child-form textarea').focus();
   }

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 
 const fixture2 = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
 import { planGroups, fileStem, nameFiles } from '../server/structure/plan.mjs';
@@ -456,7 +457,7 @@ test('through the workspace: clone marks a project eligible, an opened folder is
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-ws-structure-'));
   const repo = path.join(root, 'r'); fs.mkdirSync(repo);
   const specs2 = Object.fromEntries(['claude', 'codex'].map((p) => [p, { file: process.execPath, args: [fixture2, p] }]));
-  const w = createWorkspace({ root, cwd: repo, specs: specs2, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs: specs2, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
   t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   assert.deepEqual([w.structureStatus().origin, w.structureStatus().eligible, w.structureStatus().enabled], ['opened', false, false]);
   w.saveSettings({ structure: { enabled: true, minLines: 80 } });

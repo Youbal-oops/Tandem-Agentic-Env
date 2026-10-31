@@ -263,3 +263,43 @@
   color: var(--c);
 }
 
+
+/* Shown while there are no agents yet: pick a connection type, optionally name it. */
+.empty-agents {
+  margin: 18px 4px;
+  padding: 20px 22px;
+  border: 1px solid var(--faint);
+  border-radius: 14px;
+  background: rgba(8, 12, 24, 0.55);
+}
+.empty-agents[hidden] {
+  display: none;
+}
+.empty-agents h2 {
+  margin: 0 0 6px;
+  font: italic 400 26px/1.1 var(--serif);
+}
+.empty-agents p {
+  margin: 0 0 14px;
+  color: var(--mute);
+}
+.empty-agents form {
+  display: grid;
+  gap: 12px;
+}
+.empty-agents label {
+  display: grid;
+  gap: 4px;
+}
+.empty-agents label small {
+  color: var(--mute);
+}
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+body.no-agents .roster-help {
+  display: none;
+}

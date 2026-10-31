@@ -8,6 +8,7 @@ import { onReady, beginImplement, finishImplement, freshCheckpoint, isConfirm, i
 import { appendEntry, clearJournal, entryToMarkdown, journalPrompt, parseJournal, readEntries } from '../server/learning/journal.mjs';
 import { workflowPrompt } from '../server/learning/workflow.mjs';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
 const specs = Object.fromEntries(['claude', 'codex'].map((p) => [p, { file: process.execPath, args: [fixture, p] }]));
@@ -109,7 +110,7 @@ test('the full cycle in a workspace: confirm, implement, lock again, journal, an
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-cycle-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
   const seen = [];
-  const w = createWorkspace({ root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast: (m) => { if (m.t === 'checkpoint') seen.push(`${m.agent}:${m.checkpoint.stage}${m.checkpoint.designConfirmed ? '+' : ''}`); } });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast: (m) => { if (m.t === 'checkpoint') seen.push(`${m.agent}:${m.checkpoint.stage}${m.checkpoint.designConfirmed ? '+' : ''}`); } });
   t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   const replies = (id) => w.snapshot()[id].events.filter((e) => e.k === 'msg').map((e) => e.text);
   const idle = (id) => !w.snapshot()[id].meta.busy;

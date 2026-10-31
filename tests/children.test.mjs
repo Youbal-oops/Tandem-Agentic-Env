@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 import { pluginStateDirs } from '../server/children.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
@@ -15,7 +16,7 @@ function setup(t) {
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
   const pluginRoot = path.join(root, 'plugin');
   const events = [];
-  const options = { root, cwd: repo, specs, pluginRoots: [pluginRoot], childPollMs: 60000, broadcast: (m) => events.push(m) };
+  const options = { initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [pluginRoot], childPollMs: 60000, broadcast: (m) => events.push(m) };
   const w = createWorkspace(options);
   w.saveSettings({ agents: { pingMain: false } }); // these tests count the main chat's events
   const workspaces = [w];

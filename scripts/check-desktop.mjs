@@ -60,9 +60,9 @@ try {
     return res.ok && await res.json();
   }, 'packaged server startup');
   assert.equal(session.local.cwd, workspace);
-  assert.equal(session.agents.length, 2);
+  assert.equal(session.agents.length, 0, 'a new workspace starts with no pre-named agents');
   assert.ok(fs.existsSync(path.join(workspace, '.tandem', 'PROJECT_CONTEXT.md')));
-  console.log('PASS packaged server, agents, isolated data and shared project context');
+  console.log('PASS packaged server, empty start, isolated data and shared project context');
   const html = await (await fetch(origin)).text();
   assert.match(html, /id="setup-dialog"/);
   for (const [, asset] of html.matchAll(/(?:src|href)="(\/assets\/[^"#]+)"/g)) {
@@ -103,7 +103,7 @@ try {
   await command('Runtime.enable');
   // Reload after enabling exception capture so startup errors cannot slip past.
   await command('Page.enable'); await command('Page.reload');
-  await eventually(() => evaluate(`document.querySelector('#setup-dialog')?.open && document.querySelectorAll('.agent[data-agent]').length >= 2`), 'renderer initialization', 30000);
+  await eventually(() => evaluate(`document.querySelector('#setup-dialog')?.open && !document.querySelector('#empty-agents').hidden && document.querySelectorAll('.agent[data-agent]').length === 0`), 'renderer initialization', 30000);
   const safety = await evaluate(`({ require: typeof require, process: typeof process })`);
   assert.deepEqual(safety, { require: 'undefined', process: 'undefined' });
   await evaluate(`document.querySelector('#finish-setup').click(); true`);
@@ -111,7 +111,11 @@ try {
   assert.equal(await evaluate(`localStorage.getItem('tandem:setup-complete')`), '1');
   assert.deepEqual(errors, [], `Renderer errors: ${errors.join('\n')}`);
   console.log('PASS real renderer startup, onboarding and browser isolation');
-  const agent = session.agents[0];
+  // Add the first agent the way a user does: pick a connection type in the empty-state card (no name, so it takes the connection's).
+  await evaluate(`{ const form = document.querySelector('#quick-agent'); form.provider.value = 'claude'; form.requestSubmit(); }`);
+  await eventually(() => evaluate(`document.querySelector('#empty-agents').hidden && document.querySelectorAll('.agent[data-agent]').length === 1`), 'first agent added from the empty state');
+  const agent = (await (await fetch(`${origin}/api/session`)).json()).agents[0];
+  assert.equal(agent.name, 'Claude');
   const panel = `document.querySelector(${JSON.stringify(`#chat-${agent.id}`)})`;
   await evaluate(`{
     const textarea = ${panel}.querySelector('textarea');

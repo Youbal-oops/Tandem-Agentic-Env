@@ -4,12 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 
 function setup(t, fetchImpl) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-test-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
   const messages = [];
-  const w = createWorkspace({ root, cwd: repo, specs: { claude: null, codex: null }, broadcast: (m) => messages.push(m), fetchImpl });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs: { claude: null, codex: null }, broadcast: (m) => messages.push(m), fetchImpl });
   t.after(() => { w.closeAll(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return { w, root, repo, messages };
 }
@@ -23,7 +24,7 @@ test('notes are isolated by repo, survive restart and reject stale saves', (t) =
   w.switchRepo(repo); assert.equal(w.localState().notes, 'First repo decisions');
   assert.deepEqual(w.localState().recent.slice(0, 2), [w.cwd, fs.realpathSync(next)]);
   w.closeAll();
-  const restored = createWorkspace({ root, cwd: repo, specs: {}, broadcast() {} });
+  const restored = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs: {}, broadcast() {} });
   t.after(() => restored.closeAll()); assert.equal(restored.localState().notes, 'First repo decisions');
 });
 test('stop all aborts API requests and preserves their conversations', async (t) => {
@@ -58,7 +59,7 @@ test('CLI planets keep independent settings and restore after restart', (t) => {
   assert.equal(w.snapshot().codex.meta.modelPref, null);
   assert.equal(w.snapshot()[c.id].meta.effort, 'medium');
   w.closeAll();
-  const restored = createWorkspace({ root, cwd: repo, specs: {}, broadcast() {} });
+  const restored = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs: {}, broadcast() {} });
   t.after(() => restored.closeAll());
   assert.equal(restored.snapshot()[c.id].meta.modelPref, 'test-model');
   assert.equal(restored.snapshot()[c.id].meta.mode, 'edit');
@@ -134,7 +135,7 @@ test('each repository keeps its own chats when switching away, back and across a
   assert.equal(w.snapshot()[c.id].events.filter((e) => e.k === 'user').length, 1);
   w.switchRepo(next);
   w.closeAll();
-  const restored = createWorkspace({ root, cwd: repo, specs: {}, broadcast() {}, fetchImpl: async () => ({}) });
+  const restored = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs: {}, broadcast() {}, fetchImpl: async () => ({}) });
   t.after(() => restored.closeAll());
   assert.equal(restored.cwd, fs.realpathSync(next));
   restored.switchRepo(repo);

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 import { MARKER, askedToWrite, checkText, mergeChecklist, parseGrep, scanTodos, todoPrompt } from '../server/learning/todo.mjs';
 import { editorLaunch } from '../server/launcher.mjs';
 
@@ -90,7 +91,7 @@ function workspace(t) {
   fs.writeFileSync(path.join(repo, 'a.js'), 'export function f() {\n  // TODO(you): the logic\n}\n');
   git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'x');
   const sent = [];
-  const w = createWorkspace({ root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast: (m) => sent.push(m) });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast: (m) => sent.push(m) });
   t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return { w, sent };
 }

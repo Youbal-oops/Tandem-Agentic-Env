@@ -1,5 +1,6 @@
 // Plain colour/look tables shared by the 3D scene and the text-only (lite) UI. No three.js here, so lite mode never loads it.
-export const AGENT_LOOK = {
+/** Starting points for a planet's look, by provider. These are not planets: a workspace starts with none. */
+export const PROVIDER_LOOK = {
   claude: {
     name: 'Claude',
     hex: '#ffb25a',
@@ -23,6 +24,8 @@ export const AGENT_LOOK = {
     spin: 0.12,
   },
 };
+/** The look of each planet that exists now, by agent id. Filled in as agents are added. */
+export const AGENT_LOOK = {};
 /** A colour pulled toward black (toward = 0) or white (toward = 1) by `amount`, so one hue can make a whole planet palette. */
 export function shade(hex, toward, amount) {
   const n = parseInt(hex.slice(1), 16);

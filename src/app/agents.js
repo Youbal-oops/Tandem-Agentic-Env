@@ -1,24 +1,23 @@
 // The agents in the UI: a chat panel per planet, events and meta arriving from the server, what each planet
 // is drawn doing, and which agent is selected.
 
-import { AGENT_LOOK, shade } from '../looks.js';
+import { AGENT_LOOK, PROVIDER_LOOK, shade } from '../looks.js';
 import { ChatPanel, EDIT_TOOLS } from '../chat.js';
 import { $ } from './state.js';
 
 export function initAgents(app) {
   const { AGENTS, NAMES, CODES, MODES, MODEL_PRESETS, configs, panels, act, warned, awaiting, ui } = app;
-  const other = (id) => AGENTS.find((a) => a !== id);
+  const providerLook = (provider) => PROVIDER_LOOK[provider === 'claude' ? 'claude' : 'codex'];
 
   // ---------------------------------------------------------------- panels
   function createPanel(id, provider = id) {
     awaiting[id] = new Set();
     act[id] = { chars: 0, rate: 0, spark: new Array(56).fill(0), tps: 0 };
     warned[id] = {};
-    if (!$(`#chat-${id}`)) { const el = document.createElement('section'); el.id = `chat-${id}`; $('#left').append(el); }
+    if (!$(`#chat-${id}`)) { const el = document.createElement('section'); el.id = `chat-${id}`; $('#left').insertBefore(el, $('#left-resize')); }
     panels[id] = new ChatPanel($(`#chat-${id}`), {
       id,
       name: NAMES[id],
-      otherName: NAMES[other(id)],
       modes: MODES[provider] || [{ id: 'read', label: 'Chat only', hint: 'No local file or shell tools' }],
       provider,
       number: AGENTS.indexOf(id) + 1,
@@ -50,8 +49,6 @@ export function initAgents(app) {
     panels[id].setTodos(ui.todos[id]);
   }
 
-  for (const id of AGENTS) createPanel(id);
-
   app.reconcile = function reconcile(next) {
     const { scene, info, childChats, labelEls } = app;
     for (const id of [...AGENTS]) if (!next.some((a) => a.id === id)) {
@@ -63,14 +60,17 @@ export function initAgents(app) {
       if (!AGENTS.includes(c.id)) {
         AGENTS.push(c.id);
         const colors = ['#ffb25a', '#74e6ff', '#bda1ff', '#7ee0a3', '#ff8faf', '#ffe181', '#83a8ff', '#efadff'];
-        const hex = colors[i % colors.length];
+        // The original Claude and Codex planets (saved without a style) keep their own colours and orbits, whatever their place in the list.
+        const original = !Number.isInteger(c.style) && c.provider === c.id ? PROVIDER_LOOK[c.id] : null;
+        const hex = original ? original.hex : colors[i % colors.length];
         // The server gives every planet it adds a random style (and sometimes a ring); the colours come from the planet's own hue.
-        const style = Number.isInteger(c.style) ? c.style : AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'].style;
-        const ring = Number.isInteger(c.ring) ? c.ring : typeof c.ring === 'boolean' ? Number(c.ring) : AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'].ring;
-        AGENT_LOOK[c.id] = { ...AGENT_LOOK[c.provider === 'claude' ? 'claude' : 'codex'], style, ring, name: c.name, hex, rim: hex, palette: [shade(hex, 0, 0.82), shade(hex, 0, 0.5), hex, shade(hex, 1, 0.82)], orbit: { a: 150 + i * 76, b: 138 + i * 70, tilt: 0.03, speed: 0.07 / (1 + i * 0.3), phase: i * 2.4 }, radius: 18 };
+        const style = Number.isInteger(c.style) ? c.style : providerLook(c.provider).style;
+        const ring = Number.isInteger(c.ring) ? c.ring : typeof c.ring === 'boolean' ? Number(c.ring) : providerLook(c.provider).ring;
+        AGENT_LOOK[c.id] = original ? { ...original, name: c.name }
+          : { ...providerLook(c.provider), style, ring, name: c.name, hex, rim: hex, palette: [shade(hex, 0, 0.82), shade(hex, 0, 0.5), hex, shade(hex, 1, 0.82)], orbit: { a: 150 + i * 76, b: 138 + i * 70, tilt: 0.03, speed: 0.07 / (1 + i * 0.3), phase: i * 2.4 }, radius: 18 };
         scene.addPlanet(c.id, AGENT_LOOK[c.id]);
         createPanel(c.id, c.provider);
-        const el = document.createElement('div'); el.className = 'pl'; el.dataset.agent = c.id; el.innerHTML = '<b></b><small>idle</small>'; $('b', el).textContent = c.name; $('#plabels').append(el); labelEls[c.id] = el;
+        const el = document.createElement('div'); el.className = 'pl'; el.dataset.agent = c.id; el.innerHTML = '<b></b><small>idle</small>'; $('b', el).textContent = c.name; el.style.color = hex; $('#plabels').append(el); labelEls[c.id] = el;
       }
       panels[c.id].root.style.setProperty('--c', AGENT_LOOK[c.id].hex);
       panels[c.id].setConversation(c.conversationId);
@@ -79,6 +79,8 @@ export function initAgents(app) {
     info.setAgents(next, AGENT_LOOK);
     if (ui.sel && !AGENTS.includes(ui.sel)) select(null);
     select(ui.sel);
+    $('#empty-agents').hidden = AGENTS.length > 0;
+    document.body.classList.toggle('no-agents', !AGENTS.length);
     app.renderAgentList();
     childChats?.mountParents();
   };

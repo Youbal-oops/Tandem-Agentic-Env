@@ -26,9 +26,9 @@ export const MODES = {
 
 export function createApp() {
   return {
-    AGENTS: ['claude', 'codex'],
-    NAMES: { claude: 'Claude', codex: 'Codex' },
-    CODES: { claude: 'CLD', codex: 'CDX' },
+    AGENTS: [], // a workspace starts with no agents; they are added as the user connects them
+    NAMES: {},
+    CODES: {},
     MODES,
     // Claude accepts these aliases; Codex model names change often, so it offers its default plus a custom name.
     MODEL_PRESETS: { claude: ['opus', 'sonnet', 'haiku'], codex: [], gemini: [] },
@@ -37,7 +37,7 @@ export function createApp() {
     panels: {},
     act: {}, // per-agent activity: chars, rate, spark, tps
     warned: {}, // which context/limit warnings were already logged
-    awaiting: { claude: new Set(), codex: new Set() },
+    awaiting: {},
     ui: { sel: null, hidden: false, demo: false, connected: false, learning: false, todoMode: false, todos: {}, checkpoints: {} },
     bootAt: Date.now(),
     repoPath: '',

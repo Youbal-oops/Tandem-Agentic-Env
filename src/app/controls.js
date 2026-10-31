@@ -25,6 +25,13 @@ export function initControls(app) {
   const openTool = (t) => (app.net.open ? app.net.send({ t, source: ui.sel || 'repo' }) : app.showNotice('Connect to the server first.'));
   $('#btn-terminal').addEventListener('click', () => openTool('open-terminal'));
   $('#btn-editor').addEventListener('click', () => openTool('open-editor'));
+  // Each agent has its own browser window; this brings the selected agent's (or the only agent's) forward.
+  $('#btn-browser').addEventListener('click', () => {
+    const id = ui.sel || (app.AGENTS.length === 1 ? app.AGENTS[0] : null);
+    if (!id) return app.showNotice('Select an agent first: each agent has its own browser window.');
+    if (!app.net.open) return app.showNotice('Connect to the server first.');
+    app.net.send({ t: 'show-browser', source: id });
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey) {
@@ -38,7 +45,7 @@ export function initControls(app) {
     }
     if (!e.altKey || e.ctrlKey || e.metaKey) return;
     const k = e.key.toLowerCase();
-    const actions = { 1: () => app.select('claude'), 2: () => app.select('codex'), 0: () => app.select(null), h: () => app.setHidden(!ui.hidden), d: () => app.setDemo(!ui.demo), k: () => scene.sky(SKY[skyN++ % SKY.length]) };
+    const actions = { ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [n, () => { if (app.AGENTS[n - 1]) app.select(app.AGENTS[n - 1]); }])), 0: () => app.select(null), h: () => app.setHidden(!ui.hidden), d: () => app.setDemo(!ui.demo), k: () => scene.sky(SKY[skyN++ % SKY.length]) };
     if (actions[k]) {
       e.preventDefault();
       actions[k]();

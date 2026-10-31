@@ -57,7 +57,7 @@ export function initConnection(app) {
         setOffline(false);
         if (ui.todoMode) app.setTodoMode(true); // look for the checklist again now that the server is reachable
         app.childChats?.setOffline(false);
-        info.log({ agent: 'claude', kind: 'info', text: 'connected to the Tandem server' });
+        info.log({ agent: 'tandem', kind: 'info', text: 'connected to the Tandem server' });
       } else if (kind === 'closed') {
         app.githubReset();
         ui.connected = false;
@@ -118,7 +118,9 @@ export function initConnection(app) {
   app.setDemo = function setDemo(on) {
     if (on === ui.demo) return;
     const { scene, info, childChats } = app;
-    if (on && (AGENTS.length !== 2 || AGENTS.some((a) => !['claude', 'codex'].includes(a)))) { app.showNotice('Demo is available with the original Claude and Codex planets.'); return; }
+    // The demo plays with its own two planets, so it works however many (or few) real agents there are. Turning it off asks the server for the real ones again.
+    if (on && app.isCloning()) { app.showNotice('Wait for the repository clone to finish before starting the demo.'); return; }
+    if (on) app.reconcile([{ id: 'claude', name: 'Claude', provider: 'claude', available: true }, { id: 'codex', name: 'Codex', provider: 'codex', available: true }]);
     ui.demo = on;
     childChats.close();
     childChats.replace(on ? [{ id: 'demo-child', parentId: 'codex', provider: 'claude', title: 'Review the settings change', updatedAt: Date.now(),
@@ -155,7 +157,7 @@ export function initConnection(app) {
       if (ui.connected) {
         setConn('ok', 'live · localhost');
         app.net.send({ t: 'sync' });
-      } else setConn('bad', 'offline');
+      } else { setConn('bad', 'offline'); app.reconcile([]); } // no server to ask: drop the demo planets
       setOffline(!ui.connected);
     }
   };

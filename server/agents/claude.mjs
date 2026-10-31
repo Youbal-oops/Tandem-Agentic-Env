@@ -8,7 +8,13 @@ import { cleanEnv, stringifyContent, trimDeep, trunc } from './util.mjs';
 
 /** `ctx` supplies the shared pieces: cwd, specs, environment, denyTool, summarize and the event helpers. */
 export function createClaude(ctx) {
-  const { cwd, specs, environment, denyTool, summarize, put, delta, note, fail, fx, pushMeta, endTurnCleanup, planFromTool } = ctx;
+  const { cwd, specs, environment, mcp, denyTool, summarize, put, delta, note, fail, fx, pushMeta, endTurnCleanup, planFromTool } = ctx;
+
+  /** Tandem's own tools as an MCP server, added next to whatever MCP servers the user already has. */
+  function mcpArgs() {
+    const m = mcp();
+    return m ? ['--mcp-config', JSON.stringify({ mcpServers: { tandem: { command: m.command, args: m.args, env: m.env } } })] : [];
+  }
 
   function ensure(a) {
     if (a.proc) return a.proc;
@@ -19,6 +25,7 @@ export function createClaude(ctx) {
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
+      ...mcpArgs(),
       '--permission-prompt-tool', 'stdio',
       '--permission-mode', CLAUDE_MODE_FLAG[a.mode],
     ];

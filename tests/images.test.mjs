@@ -78,7 +78,7 @@ test('API images survive history and restart without storing base64 in conversat
 });
 test('child follow-ups forward images to their independent CLI thread', async t => {
   const { root, attachment, onClose } = setup(t);
-  const workspace = createWorkspace({ root, cwd: process.cwd(), specs: { codex: { file: process.execPath, args: [fixture, 'codex'] } }, broadcast() {} });
+  const workspace = createWorkspace({ initialAgents: [{ id: 'codex', name: 'Codex', provider: 'codex' }], root, cwd: process.cwd(), specs: { codex: { file: process.execPath, args: [fixture, 'codex'] } }, broadcast() {} });
   workspace.saveSettings({ agents: { pingMain: false } });
   onClose(() => workspace.closeAll());
   const child = workspace.childAction({ t: 'child-create', agent: 'codex', provider: 'codex', text: 'Review' });

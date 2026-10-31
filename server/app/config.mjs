@@ -14,7 +14,6 @@ export const PORT = Number(process.env.TANDEM_PORT || 4317);
 export const UI_DEV_PORT = 5173;
 export const TOKEN = crypto.randomBytes(24).toString('hex');
 export const MAX_TEXT = 40000;
-export const AGENT_IDS = ['claude', 'codex'];
 
 const hosts = new Set([PORT, UI_DEV_PORT].flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`]));
 export const origins = new Set([...hosts].map((h) => `http://${h}`));

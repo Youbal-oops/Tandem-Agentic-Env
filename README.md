@@ -10,11 +10,17 @@ It is for people who build with AI and want to learn from it, and for developers
 
 ### Work with several agents at once
 
-- Run multiple coding agents around one selected project, and give each a model of its own. Tandem remembers the last model used for each provider.
+- Tandem starts with no agents. You add each one by choosing a connection type (Claude Code, Codex, Gemini CLI or an API model) and, if you like, naming it; a blank name takes the connection's own name ("Claude", then "Claude 2"). Run up to eight around one selected project, and give each a model of its own. Tandem remembers the last model used for each provider.
 - Every CLI agent and every Tandem-created subagent gets an isolated git worktree and branch, where Git is available.
 - Each subagent can open in its own window, and the main agent is told when one finishes. A context graph for each running subagent shows in the right-hand panel.
 - A shared `.tandem/PROJECT_CONTEXT.md` is created in every project. All agents receive it, so they start from the same picture.
 - Reopen saved conversations from **history** beside **new chat**. Chats stay grouped by project and agent, with their model settings and subagent chats. CLI conversations resume from that CLI's own thread history.
+
+### Agents can build, test and browse
+
+- Claude Code and Codex agents get Tandem's own tools over MCP: list and run the project's `package.json` scripts (build, test, lint), start and stop a dev server, and use a browser window of their own to open a page, read it, click, type, take a screenshot and read its console and failed requests.
+- Each agent's browser is a separate window with its own empty session (no cookies or logins from elsewhere), limited to http and https. The **Browser** button brings the selected agent's window forward. The browser needs the desktop app; the build and test tools work anywhere.
+- Tools that run scripts or start servers are refused while an agent is in a read-only mode (including learning mode before you approve). Turn the whole set off in Settings → Subagents. Gemini CLI and API agents do not get these tools yet.
 
 ### Learn while the project gets built
 
@@ -40,7 +46,7 @@ It is for people who build with AI and want to learn from it, and for developers
 
 ### Also included
 
-- A 3D solar-system view of your agents, with **Lite** (text only) and **Eco** (lower frame rate) modes for slower computers.
+- A 3D solar-system view of your agents (it starts with just the sun), with **Lite** (text only) and **Eco** (lower frame rate) modes for slower computers.
 - **Demo** replays a scripted session without using any quota.
 - **Settings → Structure** (off by default, only for projects cloned or created in Tandem) builds a separate git worktree and branch with big JS/TS/Python/CMake/PowerShell files split into smaller component files. Each original path re-exports its pieces. It is plain code, uses no tokens, and never changes your files in place.
 

@@ -10,7 +10,7 @@ import { API_SERVICES, PLANET_RINGS, PLANET_STYLES } from '../server/app/service
 function setup(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-test-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
-  const w = createWorkspace({ root, cwd: repo, specs: { claude: null, codex: null }, broadcast() {} });
+  const w = createWorkspace({ initialAgents: [{ id: 'claude', name: 'Claude', provider: 'claude' }, { id: 'codex', name: 'Codex', provider: 'codex' }], root, cwd: repo, specs: { claude: null, codex: null }, broadcast() {} });
   t.after(() => { w.closeAll(); fs.rmSync(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return { w, root, repo };
 }
@@ -18,10 +18,28 @@ const models = (ids) => async () => ({ ok: true, json: async () => ({ data: ids.
 const gemini = { key: 'cli:gemini', provider: 'gemini', name: 'Gemini' };
 const openrouter = { key: 'api:openrouter', provider: 'api', service: 'openrouter', name: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1/chat/completions', keyEnv: 'OPENROUTER_API_KEY', model: 'openai/gpt-4o' };
 
-test('the two starting planets keep their own looks; every other planet gets a random saved style', (t) => {
-  const { w } = setup(t);
-  const [claude, codex] = w.configs();
-  assert.equal(claude.style, undefined); assert.equal(codex.style, undefined);
+test('a workspace starts with no planets, and names default to the connection and stay unique', (t) => {
+  const { root, repo } = setup(t);
+  const empty = createWorkspace({ root: fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-empty-')), cwd: repo, specs: {}, broadcast() {} });
+  t.after(() => empty.closeAll());
+  assert.deepEqual(empty.configs(), []);
+  assert.equal(empty.add({ provider: 'claude' }).name, 'Claude');
+  assert.equal(empty.add({ provider: 'claude' }).name, 'Claude 2');
+  assert.equal(empty.add({ provider: 'claude', name: 'Reviewer' }).name, 'Reviewer');
+  assert.equal(empty.add({ provider: 'api', service: 'openrouter', model: 'm', endpoint: 'http://localhost:1234' }).name, 'OpenRouter');
+  for (const c of empty.configs()) empty.remove(c.id); // the last planet can be removed too
+  assert.deepEqual(empty.configs(), []);
+  void root;
+});
+
+test('planets saved by older versions keep their own looks; every new planet gets a random saved style', (t) => {
+  const { w, root, repo } = setup(t);
+  assert.ok(w.configs().every((c) => Number.isInteger(c.style)), 'planets made now always get a style');
+  // A planet saved by an older version has the original id and no style: it is restored with its fixed look.
+  const old = createWorkspace({ root: fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-legacy-')), cwd: repo, specs: {}, broadcast() {} });
+  t.after(() => old.closeAll());
+  assert.equal(old.add({ id: 'claude', provider: 'claude', name: 'Claude' }, { events: [] }).style, undefined);
+  void root;
   const seen = new Set(), rings = new Set();
   for (let i = 0; i < 40; i++) {
     const c = w.add({ provider: 'api', model: 'm', endpoint: 'http://localhost:1234', id: `p${i}` });

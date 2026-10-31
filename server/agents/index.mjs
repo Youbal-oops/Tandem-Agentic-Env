@@ -22,7 +22,7 @@ import { quietKill } from './util.mjs';
 
 export { MODES, validModel };
 
-export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex', 'gemini'], environment = {}, taskInstructions = '', getInstructions = () => '', denyTool = () => null }) {
+export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex', 'gemini'], environment = {}, taskInstructions = '', mcp = () => null, getInstructions = () => '', denyTool = () => null }) {
   const { rel, summarize } = createSummarizer(cwd);
   const agents = {};
   for (const id of providers) {
@@ -60,7 +60,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
   const fx = (a, name) => broadcast({ t: 'fx', agent: a.id, name });
 
   // Shared by the two adapters.
-  const ctx = { cwd, specs, environment, denyTool, broadcast, agents, rel, summarize, fx, pushMeta };
+  const ctx = { cwd, specs, environment, mcp, denyTool, broadcast, agents, rel, summarize, fx, pushMeta };
   Object.assign(ctx, createEvents(ctx));
   const { put, note, fail, endTurnCleanup, reindex } = ctx;
   const claude = createClaude(ctx);
@@ -85,7 +85,8 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
     // The global prompt goes first, once per session and again whenever its rendered text changes.
     const global = String(getInstructions(id) || '').trim();
     if (global && global !== a.promptSent) { text = `[Standing instructions from the user, apply for this whole session]\n${global}\n\n[Task]\n${text}`; a.promptSent = global; }
-    if (taskInstructions) text += '\n\n' + taskInstructions;
+    const extra = typeof taskInstructions === 'function' ? taskInstructions() : taskInstructions;
+    if (extra) text += '\n\n' + extra;
     a.turnNo += 1;
     a.busy = true;
     pushMeta(a);

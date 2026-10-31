@@ -11,7 +11,7 @@
 // ·  agents/  (Claude and Codex adapters)  ·  learning/  (learning mode)  ·  the small modules beside it.
 
 import path from 'node:path';
-import { AGENT_IDS, HOST, PORT, ROOT } from './app/config.mjs';
+import { HOST, PORT, ROOT } from './app/config.mjs';
 import { modelChoices, specs } from './app/binaries.mjs';
 import { createDelegation } from './app/delegation.mjs';
 import { createGitStatus } from './app/git-status.mjs';
@@ -27,6 +27,7 @@ import { createLaunchRoutes } from './app/routes/launch.mjs';
 import { createImageStore } from './images.mjs';
 import { createRepoService } from './repos.mjs';
 import { createWorkspace } from './workspace.mjs';
+import { createTools } from './tools/index.mjs';
 
 const hub = createHub();
 const delegation = createDelegation();
@@ -42,7 +43,12 @@ const clone = { get: () => cloneState, set: (state) => { cloneState = state; hub
 const snapshot = ({ clone: withClone = false } = {}) => ({ t: 'snapshot', agents: agents.snapshot(), configs: agents.configs(), children: agents.children(), git: gitStatus.current, ...(withClone ? { clone: cloneState } : {}) });
 const workDir = (id) => agents.workDirs().find((d) => d.id === (id || 'repo')) || agents.workDirs()[0];
 
-const server = createHttpServer({ agents, images, delegationKeys: delegation.keys, gitStatus, getClone: clone.get, modelChoices, services: API_SERVICES });
+// Tandem's own tools for agents: build and test scripts, and a browser (when running inside the desktop app).
+delegation.setToolsEnabled(() => agents.settings().agents.tools);
+const tools = createTools({ cwdFor: (id) => workDir(id).cwd, guard: (id, name) => agents.toolGuard(id, name) });
+agents.onRemoved = (id) => tools.release(id);
+
+const server = createHttpServer({ agents, images, delegationKeys: delegation.keys, tools, gitStatus, getClone: clone.get, modelChoices, services: API_SERVICES });
 const connectRoutes = createConnectRoutes({ hub, snapshot, agents });
 attachWebSocket(server, {
   hub,
@@ -52,13 +58,14 @@ attachWebSocket(server, {
     connectRoutes,
     createRepoRoutes({ agents, hub, gitStatus, repoService, clone, snapshot }),
     createPushRoutes({ agents, gitStatus, workDir }),
-    createLaunchRoutes({ workDir }),
+    createLaunchRoutes({ workDir, tools }),
     createAgentRoutes({ agents, hub, snapshot }),
   ),
 });
 gitStatus.start();
 
 function shutdown() {
+  tools.closeAll();
   agents.closeAll();
 }
 process.on('exit', shutdown);
@@ -71,7 +78,7 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) {
 
 server.listen(PORT, HOST, () => {
   console.log(`Tandem API  http://${HOST}:${PORT}   (agents work in: ${agents.cwd})`);
-  for (const id of [...AGENT_IDS, 'gemini']) console.log(`  ${id.padEnd(7)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: More → Connect agents)'}`);
+  for (const id of ['claude', 'codex', 'gemini']) console.log(`  ${id.padEnd(7)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: More → Connect agents)'}`);
   console.log('Dev UI      http://localhost:5173  (npm run dev)');
   // Once the server is up, give any connection that is already set up (and has no planet yet) its own planet.
   if (!process.env.TANDEM_NO_AUTOSCAN) connectRoutes.scan();

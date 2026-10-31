@@ -18,7 +18,7 @@ function readBody(req, res, limit) {
   });
 }
 
-export function createHttpServer({ agents, images, delegationKeys, gitStatus, getClone, modelChoices, services = [] }) {
+export function createHttpServer({ agents, images, delegationKeys, tools, gitStatus, getClone, modelChoices, services = [] }) {
   function uploadImage(req, res) {
     if (!safeEqual(String(req.headers.authorization || '').replace(/^Bearer /, ''), TOKEN)) { res.writeHead(403).end('Forbidden'); return; }
     const chunks = []; let size = 0;
@@ -62,6 +62,26 @@ export function createHttpServer({ agents, images, delegationKeys, gitStatus, ge
         else throw new Error('Unknown job action.');
       }
       json(res, 200, { id: result.id, title: result.title, busy: result.meta.busy, status: result.meta.status, ...(m.action === 'result' ? { events: result.events } : {}) });
+    } catch (e) { json(res, 400, { error: e.message }); }
+  }
+
+  /** `tandem-tools-mcp.mjs` calls this: list Tandem's tools, or run one for the agent that owns the key. */
+  async function toolsApi(req, res) {
+    if (req.method !== 'POST') { res.writeHead(405).end(); return; }
+    const bearer = String(req.headers.authorization || '').replace(/^Bearer /, '');
+    const owner = agents.configs().find((c) => {
+      const auth = delegationKeys.get(c.id);
+      return auth?.conversationId === c.conversationId && safeEqual(auth.key, bearer);
+    });
+    if (!owner) { res.writeHead(403).end('Forbidden'); return; }
+    const body = await readBody(req, res, 256 * 1024);
+    if (body === null) return;
+    try {
+      const m = JSON.parse(body);
+      if (!agents.settings().agents.tools) throw new Error('Tandem tools are switched off in Settings.');
+      if (m.action === 'list') json(res, 200, { tools: tools.list() });
+      else if (m.action === 'call') json(res, 200, await tools.call(owner.id, String(m.name), m.arguments));
+      else throw new Error('Unknown tools action.');
     } catch (e) { json(res, 400, { error: e.message }); }
   }
 
@@ -114,6 +134,7 @@ export function createHttpServer({ agents, images, delegationKeys, gitStatus, ge
     if (url.pathname === '/api/images' && req.method === 'POST') return uploadImage(req, res);
     if (url.pathname.startsWith('/api/images/') && ['GET', 'HEAD'].includes(req.method)) return readImage(req, res, url);
     if (url.pathname === '/api/jobs') return jobs(req, res);
+    if (url.pathname === '/api/tools') return toolsApi(req, res);
     if (url.pathname === '/api/session') return session(res);
     serveUi(req, res, url);
   });

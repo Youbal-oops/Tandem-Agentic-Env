@@ -24,8 +24,9 @@ export class InfoPanel {
     this.root = root;
     this.onSelect = onSelect;
     this.sel = null;
-    this.m = { claude: null, codex: null };
-    this.hist = { claude: [], codex: [] };
+    this.ids = [];
+    this.m = {};
+    this.hist = {};
     this.git = null;
     this.kids = {};
     this.logCount = 0;
@@ -36,19 +37,20 @@ export class InfoPanel {
       <h2 id="r-title">The <em>codebase</em></h2>
       <p class="blurb" id="r-blurb"></p>
       <div id="r-body"></div>
-      <div class="kicker log-k">Log <span class="legend"><button data-f="all" class="on">all</button><button data-f="claude">claude</button><button data-f="codex">codex</button></span></div>
+      <div class="kicker log-k">Log <span class="legend"></span></div>
       <div id="r-log" class="logbox"></div>`;
     this.body = root.querySelector('#r-body');
     this.logBox = root.querySelector('#r-log');
+    this.legend = root.querySelector('.legend');
     this.filter = 'all';
-    root.querySelectorAll('.legend button').forEach((b) =>
-      b.addEventListener('click', () => {
-        this.filter = b.dataset.f;
-        root.querySelectorAll('.legend button').forEach((x) => x.classList.toggle('on', x === b));
-        this.logBox.dataset.filter = this.filter;
-      }),
-    );
-    this.logBox.dataset.filter = 'all';
+    this.legend.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      this.filter = b.dataset.f;
+      this.drawLegend();
+      for (const line of this.logBox.children) this.filterLine(line);
+    });
+    this.drawLegend();
     this.logBox.addEventListener('click', (e) => {
       const line = e.target.closest('.ln');
       if (line) this.onSelect(line.dataset.agent);
@@ -96,7 +98,18 @@ export class InfoPanel {
     this.ids = configs.map((a) => a.id);
     for (const a of configs) { NAME[a.id] = a.name; HEX[a.id] = looks[a.id].hex; this.hist[a.id] ||= []; }
     for (const id of Object.keys(this.m)) if (!this.ids.includes(id)) delete this.m[id];
+    if (this.filter !== 'all' && !this.ids.includes(this.filter)) this.filter = 'all';
+    this.drawLegend();
+    for (const line of this.logBox.children) this.filterLine(line);
     this.queue();
+  }
+  /** "all" plus one button per agent, so the log can be narrowed to whichever agents exist. */
+  drawLegend() {
+    const button = (f, text) => `<button data-f="${esc(f)}" class="${this.filter === f ? 'on' : ''}">${esc(text)}</button>`;
+    this.legend.innerHTML = this.ids.length > 1 ? button('all', 'all') + this.ids.map((id) => button(id, String(NAME[id]).toLowerCase())).join('') : '';
+  }
+  filterLine(el) {
+    el.classList.toggle('filtered', this.filter !== 'all' && el.dataset.agent !== this.filter);
   }
   /** Redraw soon, but at most four times a second: meta updates arrive many times a second while an agent streams. */
   queue() {
@@ -116,8 +129,9 @@ export class InfoPanel {
     const el = document.createElement('div');
     el.className = `ln ${kind}`;
     el.dataset.agent = agent;
-    el.style.setProperty('--c', HEX[agent]);
-    el.innerHTML = `<time>${ts}</time><i></i><b>${esc(NAME[agent])}</b><span>${esc(text)}</span>`;
+    el.style.setProperty('--c', HEX[agent] || '#9aa3b8');
+    el.innerHTML = `<time>${ts}</time><i></i><b>${esc(NAME[agent] || 'Tandem')}</b><span>${esc(text)}</span>`;
+    this.filterLine(el);
     const stick = this.logBox.scrollHeight - this.logBox.scrollTop - this.logBox.clientHeight < 40;
     this.logBox.appendChild(el);
     while (this.logBox.children.length > 240) this.logBox.firstChild.remove();
@@ -160,7 +174,7 @@ export class InfoPanel {
   }
 
   gauges() {
-    const rows = (this.ids || ['claude', 'codex'])
+    const rows = this.ids
       .map((id) => {
         const m = this.m[id];
         const c = m?.stats?.ctx;
@@ -177,7 +191,7 @@ export class InfoPanel {
   }
 
   limits() {
-    const rows = (this.ids || ['claude', 'codex'])
+    const rows = this.ids
       .map((id) => {
         const l = this.m[id]?.stats?.limits || {};
         const one = (label, x) =>
@@ -263,11 +277,11 @@ export class InfoPanel {
     const sel = this.sel;
     this.root.querySelector('#r-focus').textContent = sel ? `following ${esc(NAME[sel])}` : 'system overview';
     this.root.querySelector('#r-title').innerHTML = sel ? `<em style="color:${HEX[sel]}">${esc(NAME[sel])}</em>,<br />up close` : `The <em>codebase</em>`;
-    const busy = (this.ids || ['claude', 'codex']).filter((a) => this.m[a]?.busy || (this.kids[a] || []).some((k) => k.busy)).map((a) => NAME[a]);
+    const busy = this.ids.filter((a) => this.m[a]?.busy || (this.kids[a] || []).some((k) => k.busy)).map((a) => NAME[a]);
     this.root.querySelector('#r-blurb').textContent = busy.length
       ? `${busy.join(' and ')} ${busy.length > 1 ? 'are' : 'is'} working right now.`
       : 'do fish live in space?.';
-    const detail = sel ? this.agentDetail(sel) : (this.ids || ['claude', 'codex']).map((a) => this.agentDetail(a)).join('');
+    const detail = sel ? this.agentDetail(sel) : this.ids.map((a) => this.agentDetail(a)).join('');
     const html = this.gauges() + this.limits() + detail + `<section class="project">${this.project()}</section>`;
     this.lastRender = performance.now();
     if (html === this.lastHtml) return; // nothing changed: leave the DOM (and the scroll position) alone

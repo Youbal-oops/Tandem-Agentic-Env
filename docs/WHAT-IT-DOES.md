@@ -37,7 +37,7 @@ Electron window  ->  local server (127.0.0.1:4317)  ->  agent CLIs (claude, code
   - A shield shows the permission mode.
   - Small moons are running tools, and large moons are subagents.
   - Edits fly into the sun as light, and flares mark errors and approval requests.
-- **Left: the agent chats.** Each has its own message box, model picker, effort, and mode.
+- **Left: the agent chats.** Each has its own message box, model picker, effort, and mode. With no agents yet, a card asks for a connection type and an optional name.
 - **Right: the info panel.** It shows usage, what the agents are doing, and the project's git state.
 - **Top bar:** System, Workspace, Set up, Files/Diff, Review, Terminal, Editor, Push, Connect agents, Settings, Learn profile, Learning journal, Prompt, Notes, Export conversations, Stop all, Lite, Eco, Demo, Sky, Hide panels.
 - **Lite** turns the 3D scene off. **Eco** lowers the frame rate and effects.
@@ -50,6 +50,14 @@ Electron window  ->  local server (127.0.0.1:4317)  ->  agent CLIs (claude, code
 - **API models:** any Chat Completions-compatible endpoint. They are chat-only, with no file or shell tools. The key comes from a named environment variable, never from the UI.
 - All of them are turned into one event stream: messages, tool calls, approvals and results. Tool calls are labelled read, search, shell, edit, web and so on, so the UI looks the same for every agent.
 - Full access (no sandbox) exists for Codex and Gemini. It is off unless you switch it on in Settings and then confirm per agent.
+
+## 4b. Tandem tools for agents (`server/tools/`, `scripts/tandem-tools-mcp.mjs`, `desktop/browser.cjs`)
+
+- Claude Code and Codex are started with a `tandem` MCP server (a small stdio script that calls the local `/api/tools` endpoint with the conversation key). Claude gets it through `--mcp-config`, Codex through `-c mcp_servers.tandem...` overrides. Gemini and API agents do not get it yet.
+- Tools: `project_commands`, `run_script`, `dev_server_start/status/stop` (only scripts named in package.json, run in the agent's worktree, output capped), and `browser_open/snapshot/click/type/screenshot/console/close`.
+- The browser is one Electron window per agent with its own in-memory session, http/https only, no downloads or permission prompts, driven with DevTools-protocol input. A plain `node server` run has no browser and says so.
+- `run_script` and `dev_server_start` are refused when the agent is in a read-only mode (Claude/Gemini plan, Codex read-only), because these tools run outside the CLI's own sandbox. Settings → Subagents turns the tools off.
+- Not yet checked against a real Codex or Claude model run: the launch arguments are tested with protocol fixtures only.
 
 ## 5. Subagents (`server/children.mjs`, `scripts/tandem-job.mjs`)
 
@@ -139,5 +147,5 @@ Electron window  ->  local server (127.0.0.1:4317)  ->  agent CLIs (claude, code
 
 ## Open questions I could not settle from the code
 
-- Whether Gemini is a full peer in the 3D scene and info panel. Those views only name Claude and Codex.
+- Whether Gemini is a full peer in the 3D scene and info panel. Those views only name Claude and Codex, and Gemini does not get Tandem's tools yet.
 - Whether the Demo and Sky buttons belong in a release.

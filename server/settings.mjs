@@ -25,10 +25,11 @@ export function cleanStructure(input, current = STRUCTURE_SETTINGS) {
   };
 }
 
-export const AGENT_DEFAULTS = Object.freeze({ pingMain: true, allowFull: false });
+export const AGENT_DEFAULTS = Object.freeze({ pingMain: true, allowFull: false, tools: true });
 export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({
   pingMain: typeof input?.pingMain === 'boolean' ? input.pingMain : current.pingMain,
   allowFull: typeof input?.allowFull === 'boolean' ? input.allowFull : current.allowFull,
+  tools: typeof input?.tools === 'boolean' ? input.tools : current.tools, // Tandem's browser, build and test tools for agents
 });
 
 export function createSettings({ saved }) {

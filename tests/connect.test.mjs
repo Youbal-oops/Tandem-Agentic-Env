@@ -6,6 +6,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 import { createConnect, terminalLaunch } from '../server/connect.mjs';
 import { cleanAgents } from '../server/settings.mjs';
 
@@ -16,7 +17,7 @@ const waitFor = async (check) => { const end = Date.now() + 8000; while (!check(
 function setup(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-connect-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
-  const w = createWorkspace({ root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
   t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return w;
 }
@@ -72,8 +73,10 @@ test('subagents can never be set to full access', async (t) => {
 });
 
 test('settings clean the agent options', () => {
-  assert.deepEqual(cleanAgents({ allowFull: 'yes', pingMain: false }), { pingMain: false, allowFull: false });
+  assert.deepEqual(cleanAgents({ allowFull: 'yes', pingMain: false }), { pingMain: false, allowFull: false, tools: true });
   assert.equal(cleanAgents({ allowFull: true }).allowFull, true);
+  assert.equal(cleanAgents({ tools: false }).tools, false, 'the tools switch can be turned off');
+  assert.equal(cleanAgents({ tools: 'no' }, { pingMain: true, allowFull: false, tools: false }).tools, false, 'a bad value keeps the current one');
 });
 
 test('sign-in opens a terminal window running the CLI login, quoted for each platform', () => {

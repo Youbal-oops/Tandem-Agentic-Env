@@ -3,7 +3,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
+const { createBrowserHost } = require('./browser.cjs');
+
 let window;
+let browserHost;
 const smokeTest = process.argv.includes('--tandem-smoke-test');
 if (process.env.TANDEM_DATA_ROOT) {
   fs.mkdirSync(process.env.TANDEM_DATA_ROOT, { recursive: true });
@@ -11,6 +14,7 @@ if (process.env.TANDEM_DATA_ROOT) {
 }
 
 async function start() {
+  if (secondCopy) return;
   const appRoot = app.isPackaged ? path.join(process.resourcesPath, 'app') : path.join(__dirname, '..');
   const workspace = path.join(app.getPath('documents'), 'Tandem Workspace');
   fs.mkdirSync(workspace, { recursive: true });
@@ -18,6 +22,10 @@ async function start() {
   process.env.TANDEM_DATA_ROOT ||= app.getPath('userData');
   process.env.TANDEM_JOB_SCRIPT_ROOT = appRoot;
   process.env.TANDEM_CWD ||= workspace;
+
+  // The server runs in this process, so it can use the agents' browser windows through this bridge (see browser.cjs).
+  browserHost = createBrowserHost();
+  globalThis.tandemDesktop = { browser: browserHost };
 
   // Dynamic ESM imports need a file URL on Windows; a raw C:\\ path is treated
   // as an unsupported URL scheme by Electron's loader.
@@ -41,7 +49,7 @@ async function start() {
   });
   // The pop-outs get the same rules, and may not open further windows of their own.
   app.on('web-contents-created', (_event, contents) => {
-    if (contents === window.webContents) return;
+    if (contents === window.webContents || browserHost.creating) return; // the agents' browser windows follow their own rules
     contents.setWindowOpenHandler(({ url }) => { if (!isAppUrl(url)) shell.openExternal(url); return { action: 'deny' }; });
     contents.on('will-navigate', (event, url) => { if (!isAppUrl(url)) { event.preventDefault(); shell.openExternal(url); } });
   });
@@ -59,6 +67,11 @@ async function start() {
   }
   if (!loaded) throw new Error('Tandem’s local server did not start.');
 }
+
+// One Tandem at a time: a second launch would fight the first for the server's port, so it brings the first forward instead.
+const secondCopy = !smokeTest && !app.requestSingleInstanceLock();
+if (secondCopy) app.quit();
+else app.on('second-instance', () => { if (window) { if (window.isMinimized()) window.restore(); window.focus(); } });
 
 app.whenReady().then(start).catch((error) => {
   console.error(error);

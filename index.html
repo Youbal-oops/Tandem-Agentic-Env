@@ -11,8 +11,6 @@
     <div id="vignette"></div>
 
     <div id="plabels">
-      <div class="pl" data-agent="claude"><b>Claude</b><small>idle</small></div>
-      <div class="pl" data-agent="codex"><b>Codex</b><small>idle</small></div>
       <div class="sl"><b id="sl-repo">repo</b><small id="sl-git">the codebase</small></div>
     </div>
 
@@ -32,6 +30,7 @@
           <button id="btn-review" title="See what the agents changed, with their notes, in a separate window">Review</button>
           <button id="btn-terminal" title="Open a terminal window in the selected agent's worktree, or the repository (Ctrl+`)">Terminal <kbd>Ctrl+`</kbd></button>
           <button id="btn-editor" title="Open the selected agent's worktree, or the repository, in VS Code (Ctrl+E)">Editor <kbd>Ctrl+E</kbd></button>
+          <button id="btn-browser" title="Bring the selected agent's browser window forward. Agents open it themselves when they test the app.">Browser</button>
           <button id="btn-push" title="Review changes and push to a tandem/&lt;repo&gt; branch on origin">Push</button>
           <details class="toolbar-more"><summary>More <span>⌄</span></summary><div class="toolbar-menu">
           <button id="btn-connect" title="Install and sign in to Claude Code, Codex or Gemini without a terminal">Connect agents</button>
@@ -55,8 +54,16 @@
     <aside id="left">
       <div class="kicker"><span>Agents</span><button id="btn-learning" class="learn-switch" type="button" aria-pressed="false" title="Learning mode: main agents stay read-only until you approve each step">Learning <b>off</b></button><span id="cwd" title="Folder the agents work in"></span></div>
       <p class="roster-help">Select a planet or a row to open its chat.<br />Click the sun to change repositories.</p>
-      <section id="chat-claude"></section>
-      <section id="chat-codex"></section>
+      <section id="empty-agents" class="empty-agents">
+        <h2>Add your first agent</h2>
+        <p>Pick how it connects. Give it a name if you like; otherwise it takes the name of the connection.</p>
+        <form id="quick-agent">
+          <label>Connection<select name="provider" id="quick-provider"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label>
+          <label>Name <small>(optional)</small><input name="name" maxlength="32" placeholder="e.g. Reviewer" autocomplete="off" /></label>
+          <button type="submit" class="primary">Add agent</button>
+        </form>
+        <div class="empty-actions"><button id="quick-find" type="button">Find connections on this computer</button><button id="quick-install" type="button">Install or sign in…</button></div>
+      </section>
       <div id="left-resize" role="separator" aria-orientation="vertical" aria-label="Resize chat panel" title="Drag to resize · double-click to reset"></div>
     </aside>
 
@@ -66,7 +73,7 @@
     <footer id="ticker">
       <span class="lbl">Work board</span>
       <div id="ticker-items"><span class="idle">Quiet. Click a planet, or pick an agent, to start.</span></div>
-      <span class="keys"><b>Alt+1</b> Claude <b>Alt+2</b> Codex <b>Esc</b> overview</span>
+      <span class="keys"><b>Alt+1…8</b> agent <b>Esc</b> overview</span>
     </footer>
     <div id="notice" role="status" hidden></div>
     <dialog id="workspace-dialog">
@@ -103,7 +110,7 @@
       <div class="form-row"><button id="open-connect" type="button">Install or sign in to agents…</button><button id="scan-connections" type="button">Find connections</button><span>Every connection that is ready gets its own planet automatically.</span></div>
       <form id="agent-form">
         <h3>Add a planet</h3>
-        <div class="form-row"><label>Name<input name="name" required maxlength="32" placeholder="Reviewer" /></label><label>Connection<select name="provider" id="agent-provider"><option value="codex">Codex CLI</option><option value="claude">Claude Code CLI</option><option value="gemini">Gemini CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label></div>
+        <div class="form-row"><label>Name <small>(optional)</small><input name="name" maxlength="32" placeholder="Defaults to the connection" /></label><label>Connection<select name="provider" id="agent-provider"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label></div>
         <label>Model<input name="model" list="api-model-options" placeholder="Default for CLI; required for API" /></label>
         <datalist id="api-model-options"></datalist>
         <div id="api-fields" hidden>
@@ -177,7 +184,8 @@
             <label class="check"><input type="checkbox" id="set-child-window"> Open each subagent in its own window, on the right of the screen</label>
             <label class="check"><input type="checkbox" id="set-ping-main"> Tell the main agent when a subagent finishes</label>
             <label class="check"><input type="checkbox" id="set-allow-full"> Allow full access mode for Codex and Gemini (no sandbox)</label>
-            <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself. Full access lets an agent use the internet and change anything on this computer, not only the project: it is off until you allow it here, then chosen per agent with a warning. Subagents never get it.</p>
+            <label class="check"><input type="checkbox" id="set-tools"> Give Claude Code and Codex Tandem's browser, build and test tools</label>
+            <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself. Full access lets an agent use the internet and change anything on this computer, not only the project: it is off until you allow it here, then chosen per agent with a warning. Subagents never get it. The tools let an agent run your package.json scripts (build, test, a dev server) and open a browser window of its own to check the running app; they refuse to run scripts while the agent is in a read-only mode.</p>
           </section>
           <section data-panel="structure" hidden>
             <h3>Standardize structure</h3>

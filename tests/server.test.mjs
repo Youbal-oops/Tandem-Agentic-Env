@@ -42,12 +42,24 @@ async function boot(t) {
   return { base, port, session, ws, send, wait, log, repo, remote, root };
 }
 
+/** The server starts empty; add the Claude and Codex planets a test needs. */
+async function addStarters(send, wait) {
+  send({ t: 'addagent', config: { id: 'claude', provider: 'claude' } });
+  send({ t: 'addagent', config: { id: 'codex', provider: 'codex' } });
+  await wait((m) => m.t === 'snapshot' && m.configs.length === 2);
+}
+
 test('the session handshake and the UI shell come from the real server', async (t) => {
   const { base, session } = await boot(t);
   assert.deepEqual(Object.keys(session.modes).sort(), ['claude', 'codex', 'gemini']);
   assert.equal(session.local.learningMode, false);
-  assert.deepEqual(session.local.checkpoints, { claude: { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false }, codex: { stage: 'build', ready: false, readyNote: '', designConfirmed: false, skipped: false } });
+  assert.deepEqual(session.agents, [], 'a new workspace starts with no pre-named agents');
+  assert.deepEqual(session.local.checkpoints, {});
   const status = (host) => new Promise((resolve, reject) => http.get(`${base}/`, { headers: { Host: host } }, (res) => { res.resume(); resolve(res.statusCode); }).on('error', reject));
+  const tools = (init) => fetch(`${base}/api/tools`, { ...init, headers: { 'Content-Type': 'application/json', ...init.headers } }).then((r) => r.status);
+  assert.equal(await tools({ method: 'GET', headers: {} }), 405, 'the tools endpoint only takes POST');
+  assert.equal(await tools({ method: 'POST', headers: { Authorization: 'Bearer wrong' }, body: '{"action":"list"}' }), 403, 'no tools without an agent conversation key');
+  assert.equal(await tools({ method: 'POST', headers: {}, body: '{"action":"list"}' }), 403);
   assert.equal(await status('evil.example'), 403, 'a wrong Host header is refused (DNS rebinding)');
   assert.equal(await status(new URL(base).host), 200);
   const bad = new WebSocket(`ws://127.0.0.1:${new URL(base).port}/ws?token=nope`, { headers: { Origin: base } });
@@ -56,7 +68,8 @@ test('the session handshake and the UI shell come from the real server', async (
 
 test('learning mode, the checkpoint stage and the journal travel over the socket', async (t) => {
   const { send, wait, log } = await boot(t);
-  assert.equal((await wait((m) => m.t === 'snapshot')).configs.length, 2);
+  assert.equal((await wait((m) => m.t === 'snapshot')).configs.length, 0);
+  await addStarters(send, wait);
   send({ t: 'learningmode', on: true });
   const lp = await wait((m) => m.t === 'learnerprofile' && m.learningMode === true);
   assert.equal(lp.learnerProfile.level, 'familiar');
@@ -71,6 +84,8 @@ test('learning mode, the checkpoint stage and the journal travel over the socket
 
 test('push dialog works through the real server', async (t) => {
   const { send, wait, log, remote } = await boot(t);
+  await addStarters(send, wait);
+  log.length = 0;
   send({ t: 'pushinfo', source: 'repo' });
   const info = await wait((m) => m.t === 'pushinfo');
   assert.equal(info.branch, 'tandem/repo');

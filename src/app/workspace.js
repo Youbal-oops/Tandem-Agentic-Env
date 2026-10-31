@@ -94,7 +94,7 @@ export function initWorkspace(app) {
       label.textContent = `${NAMES[id]} · ${configs[id]?.provider || id} · ${panels[id].state[1]}`;
       label.style.color = AGENT_LOOK[id].hex;
       const remove = document.createElement('button'); remove.textContent = 'Remove';
-      remove.disabled = AGENTS.length < 2 || !!panels[id].meta.busy;
+      remove.disabled = !!panels[id].meta.busy;
       remove.addEventListener('click', () => { if (confirm(`Remove ${NAMES[id]} and its conversation? Export first if you need a copy.`)) app.net.send({ t: 'removeagent', agent: id }); });
       row.append(label, remove); list.append(row);
     }
@@ -148,14 +148,33 @@ export function initWorkspace(app) {
   let services = [];
   app.setServices = (list) => {
     services = Array.isArray(list) ? list : [];
-    const select = $('#agent-provider');
-    select.querySelectorAll('option[data-service]').forEach((o) => o.remove());
-    const custom = select.querySelector('option[value="api"]');
-    for (const s of services) {
-      const o = document.createElement('option'); o.value = `api:${s.id}`; o.dataset.service = s.id; o.textContent = `${s.name} API`;
-      select.insertBefore(o, custom);
+    for (const select of [$('#agent-provider'), $('#quick-provider')]) {
+      select.querySelectorAll('option[data-service]').forEach((o) => o.remove());
+      const custom = select.querySelector('option[value="api"]');
+      for (const s of services) {
+        const o = document.createElement('option'); o.value = `api:${s.id}`; o.dataset.service = s.id; o.textContent = `${s.name} API`;
+        select.insertBefore(o, custom);
+      }
     }
   };
+  // The empty state: pick a connection type and (optionally) a name. A CLI is added straight away; an API needs an endpoint and
+  // model, so it carries the choice over to the full form in the Workspace dialog.
+  $('#quick-agent').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!app.net.open) return app.showNotice('Connect to the server first.');
+    const { provider, name } = Object.fromEntries(new FormData(e.target));
+    if (provider === 'api' || provider.startsWith('api:')) {
+      openWorkspaceTab('agents');
+      $('#agent-provider').value = provider;
+      $('#agent-provider').dispatchEvent(new Event('change'));
+      if (name) $('#agent-form [name="name"]').value = name;
+      return;
+    }
+    app.net.send({ t: 'addagent', config: { provider, name } });
+    e.target.reset();
+  });
+  $('#quick-find').addEventListener('click', () => $('#scan-connections').click());
+  $('#quick-install').addEventListener('click', () => $('#btn-connect').click());
   $('#agent-provider').addEventListener('change', () => {
     const value = $('#agent-provider').value;
     const service = services.find((s) => `api:${s.id}` === value);

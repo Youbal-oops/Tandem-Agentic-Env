@@ -4,7 +4,7 @@ import { $ } from './state.js';
 
 export function initLabels(app) {
   const { AGENTS, panels, ui } = app;
-  app.labelEls = Object.fromEntries(AGENTS.map((a) => [a, $(`.pl[data-agent="${a}"]`)]));
+  app.labelEls = {}; // a name tag is made for each planet as it is added (see agents.js)
   const labelEls = app.labelEls;
   const sunEl = $('.sl');
   const box = new Map();

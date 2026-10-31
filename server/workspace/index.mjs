@@ -24,7 +24,7 @@ import { createPrompt } from './prompt.mjs';
 import { createRepoSwitcher } from './repos.mjs';
 
 // One CLI adapter per planet, so two Codex/Claude planets never share a thread.
-export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch, getAgentContext = () => ({}), pluginRoots, childPollMs }) {
+export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch, getAgentContext = () => ({}), pluginRoots, childPollMs, initialAgents = [] }) {
   const dir = path.join(root, '.tandem');
   const file = path.join(dir, 'workspace.json');
   let saved = {};
@@ -125,12 +125,22 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     a.cli.send(provider, text);
   }
 
+  const PROVIDER_NAMES = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
+  /** The name a planet gets when the user leaves it blank: the connection's own name. */
+  const defaultName = (input) => (input.service && serviceById(String(input.service))?.name.replace(/ \(local\)$/, '')) || PROVIDER_NAMES[input.provider] || 'Agent';
+  /** "Claude", then "Claude 2", "Claude 3" ... so two planets of one kind never share a name. */
+  function uniqueName(base) {
+    const taken = new Set([...entries.values()].map((a) => a.config.name.toLowerCase()));
+    if (!taken.has(base.toLowerCase())) return base;
+    for (let n = 2; ; n++) { const next = `${base.slice(0, 28)} ${n}`; if (!taken.has(next.toLowerCase())) return next; }
+  }
+
   function add(input, state) {
     if (entries.size >= 8) throw new Error('Up to eight planets per workspace.');
     const provider = input.provider;
     if (!['claude', 'codex', 'gemini', 'api'].includes(provider)) throw new Error('Choose Claude CLI, Codex CLI, Gemini CLI or a compatible API.');
     const config = { id: input.id || `${provider}-${crypto.randomBytes(4).toString('hex')}`, provider,
-      name: String(input.name || provider).trim().slice(0, 32), model: input.model || null,
+      name: String(input.name || '').trim().slice(0, 32) || uniqueName(defaultName(input)), model: input.model || null,
       conversationId: input.conversationId || crypto.randomUUID() };
     if (!/^[a-z][a-z0-9-]{0,50}$/.test(config.id) || entries.has(config.id)) throw new Error('Invalid or duplicate agent ID.');
     if (config.model && !validModel(config.model)) throw new Error('Invalid model name.');
@@ -143,8 +153,8 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (input.service && serviceById(String(input.service))) config.service = String(input.service);
       if (config.keyEnv && !/^[A-Z][A-Z0-9_]{0,79}$/.test(config.keyEnv)) throw new Error('Enter an environment variable name, not an API key.');
     }
-    // The two starting planets keep their own looks; every other planet gets a random style (and sometimes a ring) that is saved with it.
-    if (!['claude', 'codex'].includes(config.id)) {
+    // Planets saved by older versions without a style (the original Claude and Codex) keep their fixed looks; every new planet gets a random style (and sometimes a ring) that is saved with it.
+    if (!state || input.style !== undefined || !['claude', 'codex'].includes(config.id)) {
       config.style = Number.isInteger(input.style) && input.style >= 0 && input.style < PLANET_STYLES ? input.style : crypto.randomInt(PLANET_STYLES);
       // Legacy saved planets stored a yes/no ring; that becomes the first ring look. Otherwise about three in seven have no ring.
       const ring = input.ring === true ? 1 : input.ring;
@@ -186,11 +196,10 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     return added;
   }
 
-  const defaults = [{ id: 'claude', name: 'Claude', provider: 'claude' }, { id: 'codex', name: 'Codex', provider: 'codex' }];
-  for (const row of saved.agents || defaults.map((config) => ({ config }))) {
+  // A new workspace starts with no planets: the user picks a connection type for each one. `initialAgents` lets a caller seed some.
+  for (const row of saved.agents || initialAgents.map((config) => ({ config }))) {
     try { add(row.config, row.state); } catch (e) { console.error('Could not restore agent:', e.message); }
   }
-  if (!entries.size) for (const c of defaults) add(c);
   // Planets that already exist count as seen, so only connections that appear later are added automatically.
   for (const a of entries.values()) { const k = connectionKey(a.config); if (k) seenConnections.add(k); }
   ctx.loading = false;
@@ -212,7 +221,21 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     /** Folders the user can push from, or open in a terminal or editor: the repository, then each agent's own worktree. */
     workDirs: () => [{ id: 'repo', name: 'Repository', cwd: ctx.workingDir }, ...(ctx.structureTree && fs.existsSync(ctx.structureTree) ? [{ id: 'structure', name: 'Structured tree', cwd: ctx.structureTree }] : []), ...[...entries.values()].filter((a) => a.cli).map((a) => ({ id: a.config.id, name: a.config.name, cwd: a.cwd }))],
     configs: () => [...entries.values()].map((a) => ({ ...a.config, available: !!snapshot()[a.config.id].meta.available })),
-    snapshot, add, autoConnect, remove: repos.remove, switchRepo: repos.switchRepo,
+    snapshot, add, autoConnect,
+    /** Set by the server: called with an agent id when that agent's folder is gone, so what it started (dev server, browser) is stopped. */
+    onRemoved: null,
+    remove(id) { repos.remove(id); this.onRemoved?.(id); },
+    switchRepo(next, reserved) { const ids = [...entries.keys()]; repos.switchRepo(next, reserved); for (const id of ids) this.onRemoved?.(id); },
+    /**
+     * A refusal for a Tandem tool that changes things (runs a script, starts a process) when the agent is in a read-only mode.
+     * The CLIs cannot enforce this themselves: Tandem's tools run outside their sandboxes.
+     */
+    toolGuard(id) {
+      const a = entries.get(id);
+      if (!a?.cli) return 'Unknown agent.';
+      const mode = a.cli.snapshot()[a.config.provider].meta.mode;
+      return ['plan', 'read'].includes(mode) ? `${a.config.name} is in a read-only mode, so it may not run scripts or start servers. Ask the user to switch it to Edit mode.` : null;
+    },
     chatHistory: history.chatHistory, reopenChat: history.reopenChat,
     children: () => children.snapshot(),
     pollChildren: () => children.poll(),
@@ -272,7 +295,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (ctx.repoChanging) throw new Error('A repository clone is already running.');
       if (repos.busy()) throw new Error('Stop all running agents before cloning and opening a repository.');
       ctx.repoChanging = true;
-      try { return await work((next) => repos.switchRepo(next, true)); }
+      try { return await work((next) => this.switchRepo(next, true)); }
       finally { ctx.repoChanging = false; }
     },
     action(m) {

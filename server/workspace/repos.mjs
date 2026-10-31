@@ -20,7 +20,6 @@ export function createRepoSwitcher(ctx) {
   function remove(id) {
     const a = ctx.entries.get(id);
     if (!a) return;
-    if (ctx.entries.size === 1) throw new Error('Keep at least one planet.');
     if (ctx.snapshot()[id].meta.busy || ctx.children().snapshot().some((c) => c.parentId === id && c.meta.busy)) throw new Error('Stop this agent and its child tasks before removing it.');
     fs.writeFileSync(path.join(archives(), `${Date.now()}-${id}.json`), JSON.stringify({ cwd: ctx.workingDir, config: a.config, conversation: ctx.snapshot()[id] }));
     ctx.history.saveConversation(a);

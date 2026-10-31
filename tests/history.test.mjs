@@ -5,12 +5,13 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 
 function setup(t, specs = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-history-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
   const requests = [], workspaces = [];
-  const options = { root, cwd: repo, specs, broadcast() {}, fetchImpl: async (_, request) => {
+  const options = { initialAgents: STARTERS, root, cwd: repo, specs, broadcast() {}, fetchImpl: async (_, request) => {
     requests.push(JSON.parse(request.body));
     return { ok: true, json: async () => ({ choices: [{ message: { content: 'Reply' } }] }) };
   } };

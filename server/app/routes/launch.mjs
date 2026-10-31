@@ -3,7 +3,7 @@
 import { createLauncher } from '../../launcher.mjs';
 import { repoPath } from '../../inspect.mjs';
 
-export function createLaunchRoutes({ workDir, launcher = createLauncher() }) {
+export function createLaunchRoutes({ workDir, tools, launcher = createLauncher() }) {
   const reply = (conn, text) => conn.send({ t: 'notice', text });
   return {
     handlers: {
@@ -11,6 +11,10 @@ export function createLaunchRoutes({ workDir, launcher = createLauncher() }) {
         const dir = workDir(m.source);
         try { const { using } = await launcher.openTerminal(dir.cwd); reply(conn, `Opened ${using} in ${dir.name}.`); }
         catch (e) { reply(conn, `Could not open a terminal: ${e.message}`); }
+      },
+      /** Bring an agent's own browser window forward (it opens when the agent first opens a page). */
+      'show-browser': async (m, conn) => {
+        try { await tools.show(String(m.source)); } catch (e) { reply(conn, e.message); }
       },
       'open-editor': async (m, conn) => {
         const dir = workDir(m.source);

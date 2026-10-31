@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 import { applyNotes, delegationIn, freshBehavior, learnerNotes, loadBehavior, loadSkills, observedLines, readyIn, trackMessage } from '../server/learning/understanding.mjs';
 import { workflowPrompt } from '../server/learning/workflow.mjs';
 
@@ -86,7 +87,7 @@ const checkpoint = (w, id) => w.localState().checkpoints[id];
 function setup(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-understanding-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
-  const w = createWorkspace({ root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
   t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return { w, root, repo };
 }
@@ -145,7 +146,7 @@ test('what the agent concludes about the person is kept, saved and passed to eve
   w.saveLearnerProfile({ familiar: 'JS', learning: '', level: 'new' });
   assert.equal(w.localState().learnerProfile.skills.React.level, 'familiar');
   w.closeAll();
-  const again = createWorkspace({ root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
+  const again = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
   t.after(() => again.closeAll());
   assert.equal(again.localState().learnerProfile.skills.React.level, 'familiar');
   assert.ok(again.localState().learnerProfile.behavior.messages >= 1);

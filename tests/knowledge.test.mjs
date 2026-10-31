@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { KNOWN_AT, bump, knownStack, loadCounts, techFromPath, techFromText } from '../server/learning/knowledge.mjs';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
 const specs = Object.fromEntries(['claude', 'codex'].map((p) => [p, { file: process.execPath, args: [fixture, p] }]));
@@ -37,7 +38,7 @@ test('old saved profiles keep what they had, and bad saved data is ignored', () 
 test('the profile picks up a technology from repeated work and uses it in the prompt', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-knowledge-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
-  const w = createWorkspace({ root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
   t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   const replies = () => w.snapshot().codex.events.filter((e) => e.k === 'msg').map((e) => e.text);
   const waitFor = async (check) => { const end = Date.now() + 8000; while (!check()) { if (Date.now() > end) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 20)); } };

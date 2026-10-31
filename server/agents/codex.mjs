@@ -8,7 +8,7 @@ import { cleanEnv, trimDeep, trunc } from './util.mjs';
 
 /** `ctx` supplies the shared pieces: cwd, specs, environment, rel, agents and the event helpers. */
 export function createCodex(ctx) {
-  const { cwd, specs, environment, rel, agents, put, fail, pushMeta, endTurnCleanup } = ctx;
+  const { cwd, specs, environment, mcp, rel, agents, put, fail, pushMeta, endTurnCleanup } = ctx;
 
   /** Pull context size and account limits from Codex's own session records. */
   function poll(a) {
@@ -56,10 +56,20 @@ export function createCodex(ctx) {
   const idlePoll = setInterval(() => agents.codex && !agents.codex.busy && poll(agents.codex), 30000);
   idlePoll.unref();
 
+  /** Tandem's own tools as an MCP server, given to Codex as config overrides (TOML values; JSON strings and arrays are valid TOML). */
+  function mcpArgs() {
+    const m = mcp();
+    if (!m) return [];
+    const toml = (v) => JSON.stringify(v);
+    return ['-c', `mcp_servers.tandem.command=${toml(m.command)}`, '-c', `mcp_servers.tandem.args=${toml(m.args)}`,
+      '-c', `mcp_servers.tandem.env={ ${Object.entries(m.env).map(([k, v]) => `${k} = ${toml(v)}`).join(', ')} }`];
+  }
+
   function send(a, text, images = []) {
     const args = [...specs.codex.args, 'exec', '--json', '--skip-git-repo-check', '-C', cwd, '-s', CODEX_SANDBOX[a.mode]];
     if (a.modelPref) args.push('-m', a.modelPref);
     if (a.effort) args.push('-c', `model_reasoning_effort="${a.effort}"`);
+    args.push(...mcpArgs());
     if (a.sessionId) args.push('resume', a.sessionId);
     for (const image of images) args.push('--image', image.path);
     args.push('-');

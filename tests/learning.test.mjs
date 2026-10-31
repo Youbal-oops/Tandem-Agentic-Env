@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
+import { STARTERS } from './fixtures/starters.mjs';
 import { detectStack } from '../server/learning/stack.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
@@ -23,7 +24,7 @@ const satisfy = async (w, id) => {
 function setup(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-learning-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
-  const w = createWorkspace({ root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
+  const w = createWorkspace({ initialAgents: STARTERS, root, cwd: repo, specs, pluginRoots: [path.join(root, 'plugin')], childPollMs: 60000, broadcast() {} });
   t.after(async () => { w.closeAll(); await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 }); });
   return { w, repo, root };
 }

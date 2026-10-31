@@ -397,8 +397,7 @@
   font-size: 10.5px;
   line-height: 1.65;
 }
-.logbox[data-filter='claude'] .ln[data-agent='codex'],
-.logbox[data-filter='codex'] .ln[data-agent='claude'] {
+.logbox .ln.filtered {
   display: none;
 }
 .ln {

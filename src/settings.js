@@ -5,14 +5,14 @@ const $ = (s) => document.querySelector(s);
 
 export function createSettingsDialog({ send, connected, notify, getAgent }) {
   let saved = { enabled: true, maxLines: 300, maxFiles: 10, hardStop: true, margin: 25 };
-  let savedAgents = { pingMain: true, allowFull: false };
+  let savedAgents = { pingMain: true, allowFull: false, tools: true };
   let reviewWindow = null;
   let touched = false; // true once the user has changed a control; until then the server's values fill the form
   const held = new Set();
 
   const dirty = () => $('#set-review-on').checked !== saved.enabled || Number($('#set-max-lines').value) !== saved.maxLines || Number($('#set-max-files').value) !== saved.maxFiles
     || $('#set-hard-stop').checked !== saved.hardStop || Number($('#set-margin').value) !== saved.margin
-    || $('#set-ping-main').checked !== savedAgents.pingMain || $('#set-allow-full').checked !== savedAgents.allowFull;
+    || $('#set-ping-main').checked !== savedAgents.pingMain || $('#set-allow-full').checked !== savedAgents.allowFull || $('#set-tools').checked !== savedAgents.tools;
   const status = (text) => { $('#settings-status').textContent = text; };
   const refreshStatus = () => status(dirty() ? 'Unsaved changes' : '');
 
@@ -28,8 +28,8 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
 
   function showAgents(agents, force) {
     if (!agents) return;
-    savedAgents = { pingMain: agents.pingMain !== false, allowFull: agents.allowFull === true };
-    if (force || !touched) { $('#set-ping-main').checked = savedAgents.pingMain; $('#set-allow-full').checked = savedAgents.allowFull; }
+    savedAgents = { pingMain: agents.pingMain !== false, allowFull: agents.allowFull === true, tools: agents.tools !== false };
+    if (force || !touched) { $('#set-ping-main').checked = savedAgents.pingMain; $('#set-allow-full').checked = savedAgents.allowFull; $('#set-tools').checked = savedAgents.tools; }
     refreshStatus();
   }
 
@@ -87,7 +87,7 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     if (!Number.isInteger(maxFiles) || maxFiles < 1 || maxFiles > 200) return status('Files must be a whole number from 1 to 200.');
     const margin = Number($('#set-margin').value);
     if (!Number.isInteger(margin) || margin < 5 || margin > 100) return status('The margin must be a whole number from 5 to 100.');
-    send({ t: 'savesettings', settings: { review: { enabled: $('#set-review-on').checked, maxLines, maxFiles, hardStop: $('#set-hard-stop').checked, margin }, agents: { pingMain: $('#set-ping-main').checked, allowFull: $('#set-allow-full').checked } } });
+    send({ t: 'savesettings', settings: { review: { enabled: $('#set-review-on').checked, maxLines, maxFiles, hardStop: $('#set-hard-stop').checked, margin }, agents: { pingMain: $('#set-ping-main').checked, allowFull: $('#set-allow-full').checked, tools: $('#set-tools').checked } } });
     status('Saving…');
   });
   $('#set-learning-mode').addEventListener('change', () => $('#btn-learning').click());

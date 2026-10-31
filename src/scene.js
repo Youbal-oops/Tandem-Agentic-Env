@@ -514,7 +514,6 @@ export function createScene(host) {
     };
   }
 
-  for (const [id, look] of Object.entries(AGENT_LOOK)) addPlanet(id, look);
   // ---------------------------------------------------------------- packets (edit -> star, hand-off comets)
   const packets = [];
   const tmpV = new THREE.Vector3();
