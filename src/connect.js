@@ -1,5 +1,5 @@
 // "Connect agents": see which agent CLIs are installed and signed in, install one with a button, open its
-// sign-in in a real terminal window, and add it as a planet. The server decides what may run; this only asks.
+// sign-in in a real terminal window, and add it as an agent. The server decides what may run; this only asks.
 
 const $ = (s) => document.querySelector(s);
 
@@ -30,13 +30,14 @@ export function createConnectDialog({ send, connected, notify }) {
       else head.append(badge('not installed', 'off'));
       if (c.installed) head.append(c.signedIn === true ? badge('signed in', 'ok') : badge('not signed in', 'warn'));
       const actions = document.createElement('div'); actions.className = 'connect-actions';
-      if (!c.installed) actions.append(button(c.installing || installing === c.id ? 'Installing…' : 'Install', () => {
+      if (!c.installed && !c.pkg) actions.append(badge('install it with its own installer, then Refresh', 'off'));
+      else if (!c.installed) actions.append(button(c.installing || installing === c.id ? 'Installing…' : 'Install', () => {
         if (!connected()) return notify('Connect to the local server first.');
         $('#connect-log').hidden = false; $('#connect-log').textContent = '';
         send({ t: 'connect-install', cli: c.id });
       }, { primary: true, disabled: !!installing || msg.npm === false }));
       if (c.installed && c.signedIn !== true) actions.append(button('Sign in', () => send({ t: 'connect-login', cli: c.id }), { primary: true }));
-      if (c.installed) actions.append(button('Add as a planet', () => send({ t: 'addagent', config: { name: c.name.replace(/ CLI$| Code$/, ''), provider: c.id } })));
+      if (c.installed) actions.append(button('Add as an agent', () => send({ t: 'addagent', config: { name: c.name.replace(/ CLI$| Code$/, ''), provider: c.id } })));
       row.append(head, actions);
       list.append(row);
     }

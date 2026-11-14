@@ -51,7 +51,7 @@ async function addStarters(send, wait) {
 
 test('the session handshake and the UI shell come from the real server', async (t) => {
   const { base, session } = await boot(t);
-  assert.deepEqual(Object.keys(session.modes).sort(), ['claude', 'codex', 'gemini']);
+  assert.deepEqual(Object.keys(session.modes).sort(), ['antigravity', 'claude', 'codex', 'gemini']);
   assert.equal(session.local.learningMode, false);
   assert.deepEqual(session.agents, [], 'a new workspace starts with no pre-named agents');
   assert.deepEqual(session.local.checkpoints, {});

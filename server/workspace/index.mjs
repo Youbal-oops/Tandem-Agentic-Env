@@ -125,7 +125,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     a.cli.send(provider, text);
   }
 
-  const PROVIDER_NAMES = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
+  const PROVIDER_NAMES = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini', antigravity: 'Antigravity' };
   /** The name a planet gets when the user leaves it blank: the connection's own name. */
   const defaultName = (input) => (input.service && serviceById(String(input.service))?.name.replace(/ \(local\)$/, '')) || PROVIDER_NAMES[input.provider] || 'Agent';
   /** "Claude", then "Claude 2", "Claude 3" ... so two planets of one kind never share a name. */
@@ -138,7 +138,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   function add(input, state) {
     if (entries.size >= 8) throw new Error('Up to eight planets per workspace.');
     const provider = input.provider;
-    if (!['claude', 'codex', 'gemini', 'api'].includes(provider)) throw new Error('Choose Claude CLI, Codex CLI, Gemini CLI or a compatible API.');
+    if (!['claude', 'codex', 'gemini', 'antigravity', 'api'].includes(provider)) throw new Error('Choose Claude CLI, Codex CLI, Gemini CLI, Antigravity CLI or a compatible API.');
     const config = { id: input.id || `${provider}-${crypto.randomBytes(4).toString('hex')}`, provider,
       name: String(input.name || '').trim().slice(0, 32) || uniqueName(defaultName(input)), model: input.model || null,
       conversationId: input.conversationId || crypto.randomUUID() };
@@ -306,7 +306,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
       if (m.t === 'implement') return learning.implement(a, { skipDesign: m.skipDesign === true });
       if (m.t === 'confirm-design') return learning.confirmDesign(a);
       if (m.t === 'todo-check') return learning.checkTodos(a);
-      if (m.t === 'mode' && UNSAFE_MODES.has(m.mode) && !settings.agents().allowFull) throw new Error('Full access is switched off. Turn on "Allow full access mode" in Settings → Subagents first.');
+      if (m.t === 'mode' && UNSAFE_MODES.has(m.mode) && !settings.agents().allowFull) throw new Error('Full access is not allowed yet: it runs with no sandbox and no permission prompts. To permit it, turn on "Allow Full access mode" in Settings → Subagents, then pick it again.');
       if (m.t === 'mode') learning.guardMode(a, m.mode);
       if (m.t === 'send') m = { ...m, text: learning.onSend(a, m.text) };
       const attachments = m.t === 'send' ? ctx.images.resolve(m.attachments) : [];

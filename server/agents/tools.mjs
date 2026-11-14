@@ -17,6 +17,13 @@ export const GEMINI_TOOL = {
   grep_search: 'Grep', search_file_content: 'Grep', google_web_search: 'WebSearch', web_fetch: 'WebFetch',
   run_shell_command: 'Shell', write_file: 'Write', replace: 'Edit', write_todos: 'TodoWrite',
 };
+/** Antigravity CLI's tool names, mapped the same way. */
+export const ANTIGRAVITY_TOOL = {
+  read_file: 'Read', view_file: 'Read', list_dir: 'LS', find_by_name: 'Glob', grep_search: 'Grep',
+  search_web: 'WebSearch', read_url_content: 'WebFetch', run_command: 'Shell',
+  write_file: 'Write', write_to_file: 'Write', replace_file_content: 'Edit', multi_replace_file_content: 'MultiEdit', sed_file: 'Edit',
+  notebook_edit: 'NotebookEdit', invoke_subagent: 'Agent', browser_subagent: 'Agent',
+};
 export const toolClass = (name = '') => CLASS_BY_NAME[name] || (/^mcp__|\./.test(name) ? 'mcp' : 'other');
 
 /** Path helpers bound to one working folder: paths inside it are shown relative to it. */

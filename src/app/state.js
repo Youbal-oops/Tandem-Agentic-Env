@@ -11,16 +11,23 @@ export const MODES = {
     { id: 'plan', label: 'Plan', hint: 'Read-only: explores and proposes, changes nothing' },
     { id: 'edit', label: 'Edit', hint: 'Edits files freely, asks before other actions' },
     { id: 'auto', label: 'Auto', hint: 'Claude approves low-risk actions on its own' },
+    { id: 'full', label: 'Full access', hint: 'Runs every command and edit without asking. Not sandboxed: it can reach anything on this computer you can. Needs your permission in Settings.' },
   ],
   codex: [
     { id: 'read', label: 'Read-only', hint: 'Can look around, cannot change files' },
-    { id: 'edit', label: 'Edit', hint: 'Can edit files in this folder, sandboxed' },
-    { id: 'full', label: 'Full access', hint: 'No sandbox: its shell can use the internet and reach anything on this computer. Needs switching on in Settings.' },
+    { id: 'edit', label: 'Edit', hint: 'Sandboxed: can change files and run commands in its own folder, with network access, and nothing outside it' },
+    { id: 'full', label: 'Full access', hint: 'No sandbox: its commands can use the internet and reach anything on this computer you can. Needs your permission in Settings.' },
   ],
   gemini: [
     { id: 'plan', label: 'Plan', hint: 'Read-only: explores and proposes, changes nothing' },
     { id: 'edit', label: 'Edit', hint: 'Edits files freely, asks before other actions' },
-    { id: 'full', label: 'Full access', hint: 'Approves every action itself, including shell commands. Needs switching on in Settings.' },
+    { id: 'full', label: 'Full access', hint: 'Runs every command and edit without asking. Not sandboxed: it can reach anything on this computer you can. Needs your permission in Settings.' },
+  ],
+  antigravity: [
+    { id: 'plan', label: 'Plan', hint: 'Read-only: explores and proposes, changes nothing' },
+    { id: 'edit', label: 'Edit', hint: 'Edits files. Commands are refused: Antigravity has no working sandbox, so running them is Full access' },
+    { id: 'auto', label: 'Auto', hint: 'Antigravity decides which actions are safe to run on its own; anything it would ask about is refused' },
+    { id: 'full', label: 'Full access', hint: 'Runs every command and edit without asking. Not sandboxed: it can reach anything on this computer you can. Needs your permission in Settings.' },
   ],
 };
 
@@ -31,7 +38,7 @@ export function createApp() {
     CODES: {},
     MODES,
     // Claude accepts these aliases; Codex model names change often, so it offers its default plus a custom name.
-    MODEL_PRESETS: { claude: ['opus', 'sonnet', 'haiku'], codex: [], gemini: [] },
+    MODEL_PRESETS: { claude: ['opus', 'sonnet', 'haiku'], codex: [], gemini: [], antigravity: [] },
     CHILD_MODEL_DEFAULTS: {},
     configs: {},
     panels: {},

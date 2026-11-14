@@ -35,8 +35,22 @@ export function readRepoFile(root, relative) {
     if (bytes.includes(0)) throw new Error('Binary files cannot be previewed as text.');
     let text;
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw new Error('This file is not UTF-8 text.'); }
-    return { path: relative, text, bytes: stat.size };
+    return { path: relative, text, bytes: stat.size, mtime: stat.mtimeMs };
   } finally { fs.closeSync(fd); }
+}
+/**
+ * Save an edit made in Tandem's code view. Only an existing text file inside the folder can be written, and only if it
+ * has not changed on disk since it was read (`mtime`), so an agent's newer edit is never silently overwritten.
+ */
+export function writeRepoFile(root, relative, text, mtime) {
+  if (typeof text !== 'string') throw new Error('Nothing to save.');
+  if (Buffer.byteLength(text) > LIMIT) throw new Error('The code view saves text files up to 256 KB.');
+  const file = repoPath(root, relative);
+  const stat = fs.statSync(file);
+  if (!stat.isFile()) throw new Error('Choose a regular text file.');
+  if (typeof mtime === 'number' && Math.abs(stat.mtimeMs - mtime) > 1) throw new Error('This file changed on disk since you opened it. Reload it, then make your edit again.');
+  fs.writeFileSync(file, text);
+  return { path: relative, bytes: Buffer.byteLength(text), mtime: fs.statSync(file).mtimeMs };
 }
 export async function readRepoDiff(root, mode = 'combined') {
   if (!['combined', 'staged', 'unstaged'].includes(mode)) throw new Error('Choose a valid diff mode.');

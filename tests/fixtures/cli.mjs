@@ -18,6 +18,16 @@ if (provider === 'gemini') {
     emit({ type: 'message', role: 'assistant', content: echo(text), delta: true });
     emit({ type: 'result', status: 'success', stats: { input_tokens: 5, output_tokens: 7, duration_ms: 9 } });
   });
+} else if (provider === 'antigravity') {
+  const text = (args.find((x) => x.startsWith('-p=')) || '').slice(3);
+  const step = (s) => emit({ event: 'step_update', step_update: { conversation_id: 'agy-conv-1', ...s } });
+  emit({ event: 'init', conversation_id: 'agy-conv-1', init: { cwd: process.cwd(), tools: [], permission_mode: 'request-review' } });
+  step({ step_index: 0, state: 'DONE', step_type: 'user_input' });
+  step({ step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'replace_file_content', tool_info: { name: 'replace_file_content', parameters: { Path: 'a.txt' } } });
+  step({ step_index: 1, state: 'DONE', step_type: 'tool', tool_name: 'replace_file_content', duration_seconds: 0.5, tool_info: { name: 'replace_file_content', parameters: { Path: 'a.txt' }, output: 'ok' } });
+  step({ step_index: 2, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'Done: ' });
+  step({ step_index: 2, state: 'DONE', step_type: 'agent_response', text_delta: echo(text), usage: { input_tokens: 5, output_tokens: 7, thinking_tokens: 2, cache_read_tokens: 3 } });
+  emit({ event: 'result', result: { conversation_id: 'agy-conv-1', status: 'SUCCESS', response: 'Done: ' + echo(text), duration_seconds: 1.5, ...(text.includes('NEEDS-COMMAND') ? { denied_actions: [{ action: 'command', display_name: 'Bash' }] } : {}) } });
 } else if (provider === 'codex') {
   let text = '';
   process.stdin.on('data', (s) => text += s);

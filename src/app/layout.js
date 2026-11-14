@@ -1,71 +1,96 @@
-// How the screen is divided: the chat panel on the left, the instruments on the right, and the scene between.
-// Both side panels can be dragged wider (double-click a handle to reset). Everything that sits in the middle
-// (the 3D scene's visible area, the child drawer) reads --lw and --rw, so it follows along.
+// How the window is divided: the sidebar on the left, the chat in the middle, and an optional side panel on the right
+// that shows one thing at a time (the code view, activity, or the planet view). The side panel is closed by default,
+// can be dragged wider (double-click the handle to reset), and remembers its width per view.
 
 import { $, clamp } from './state.js';
 
-const LEFT_KEY = 'tandem:left-width';
-const RIGHT_KEY = 'tandem:right-width';
-const saved = (key) => { try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; } };
+const VIEW_KEY = 'tandem:side';
+const RAIL_KEY = 'tandem:rail-hidden';
+const VIEWS = ['review', 'code', 'vscode', 'activity', 'planets'];
+const read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+const write = (key, value) => { try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, String(value)); } catch { /* the choice just will not persist */ } };
 
 export function initLayout(app) {
-  const { ui } = app;
+  let view = null;
+  const wide = () => view === 'code' || view === 'vscode' || view === 'review'; // the two editors want most of the window
+  const widthKey = () => `tandem:side-width:${wide() ? 'code' : 'panel'}`;
+  const listeners = [];
+  /** Call `fn(view, previous)` whenever the side panel changes what it shows. */
+  app.onSide = (fn) => listeners.push(fn);
+  app.sideView = () => view;
 
   function layout() {
+    if (!view) return;
     const vw = window.innerWidth;
-    const left = saved(LEFT_KEY), right = saved(RIGHT_KEY);
-    const lw = vw < 700 ? vw : left ? clamp(340, left, Math.min(1200, vw * 0.7)) : clamp(420, vw * 0.42, 780);
-    // The right panel hides on narrow windows unless the user has chosen a width, and never takes more than the left leaves.
-    const rw = vw <= 900 ? 0 : right ? clamp(300, right, Math.min(760, vw * 0.5, vw - lw - 320)) : vw > 1280 ? clamp(360, vw * 0.22, 460) : 0;
-    const root = document.documentElement.style;
-    root.setProperty('--lw', lw + 'px');
-    root.setProperty('--rw', rw + 'px');
-    app.panelWidths = { left: lw, right: rw };
-    document.body.classList.toggle('no-right', rw === 0);
-    app.scene.setInsets(ui.hidden ? 0 : lw - 40, ui.hidden ? 0 : Math.max(0, rw - 40));
+    const rail = $('#rail').offsetWidth;
+    const saved = Number(read(widthKey())) || 0;
+    const fallback = wide() ? (vw - rail) * 0.6 : 420;
+    // The chat always keeps at least 360px; below that the side panel takes the whole area (see the narrow layout in shell.css).
+    const width = clamp(320, saved || fallback, Math.max(320, vw - rail - 360));
+    document.documentElement.style.setProperty('--side', Math.round(width) + 'px');
   }
   app.layout = layout;
   window.addEventListener('resize', layout);
 
-  /** Drag a handle to resize a panel. `fromEdge` turns the pointer position into a width. */
-  function dragHandle(handle, key, fromEdge) {
-    handle.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      document.body.classList.add('resizing');
-      // Follow the pointer on the window rather than relying on pointer capture, so the drag also ends
-      // cleanly when the pointer is released outside the window or the capture is lost.
-      const move = (ev) => {
-        if (ev.buttons === 0) return stop(); // released somewhere we did not see
-        try { localStorage.setItem(key, String(Math.round(fromEdge(ev.clientX)))); } catch {}
-        layout();
-      };
-      const stop = () => {
-        document.body.classList.remove('resizing');
-        window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); window.removeEventListener('blur', stop);
-      };
-      window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop); window.addEventListener('blur', stop);
-    });
-    handle.addEventListener('dblclick', () => { try { localStorage.removeItem(key); } catch {} layout(); });
-    handle.addEventListener('keydown', (e) => {
-      const step = e.shiftKey ? 60 : 20;
-      const now = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(key === LEFT_KEY ? '--lw' : '--rw')) || 0;
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        const grow = (e.key === 'ArrowRight') === (key === LEFT_KEY);
-        try { localStorage.setItem(key, String(now + (grow ? step : -step))); } catch {}
-        layout();
-      }
-    });
-  }
-  dragHandle($('#left-resize'), LEFT_KEY, (x) => x + 20);
-  dragHandle($('#right-resize'), RIGHT_KEY, (x) => window.innerWidth - x + 20);
-
-  app.setHidden = function setHidden(on) {
-    ui.hidden = on;
-    document.body.classList.toggle('hide-ui', on);
-    $('#btn-ui').classList.toggle('on', on);
-    $('#btn-ui').firstChild.textContent = on ? 'Show panels ' : 'Hide panels ';
+  /** Show one view in the side panel, or close it with `null`. */
+  app.side = function side(next) {
+    if (next && !VIEWS.includes(next)) return;
+    const previous = view;
+    view = next || null;
+    write(VIEW_KEY, view);
+    $('#side').hidden = $('#side-resize').hidden = !view;
+    document.body.dataset.side = view || '';
+    document.querySelectorAll('[data-side-page]').forEach((page) => { page.hidden = page.dataset.sidePage !== view; });
+    $('#side-title').textContent = { review: 'Review', code: 'Code', vscode: 'VS Code', activity: 'Activity', planets: 'Planets' }[view] || '';
+    document.querySelectorAll('[data-side]').forEach((tab) => tab.classList.toggle('on', tab.dataset.side === view));
+    $('#btn-code').classList.toggle('on', view === 'code');
+    $('#btn-activity').classList.toggle('on', view === 'activity');
+    $('#btn-editor').classList.toggle('on', view === 'vscode');
+    $('#btn-review').classList.toggle('on', view === 'review');
     layout();
+    for (const fn of listeners) fn(view, previous);
+  };
+  app.toggleSide = (name) => app.side(view === name ? null : name);
+
+  app.setRail = function setRail(hidden) {
+    document.body.classList.toggle('rail-off', hidden);
+    write(RAIL_KEY, hidden ? '1' : null);
+    layout();
+  };
+  app.railHidden = () => document.body.classList.contains('rail-off');
+
+  // Drag the handle to resize. The pointer is followed on the window, so the drag also ends cleanly when the button is
+  // released outside the window.
+  const handle = $('#side-resize');
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    document.body.classList.add('resizing');
+    const move = (ev) => {
+      if (ev.buttons === 0) return stop();
+      write(widthKey(), Math.round(window.innerWidth - ev.clientX));
+      layout();
+    };
+    const stop = () => {
+      document.body.classList.remove('resizing');
+      for (const type of ['pointermove', 'pointerup', 'pointercancel', 'blur']) window.removeEventListener(type, type === 'pointermove' ? move : stop);
+    };
+    window.addEventListener('pointermove', move);
+    for (const type of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(type, stop);
+  });
+  handle.addEventListener('dblclick', () => { write(widthKey(), null); layout(); });
+  handle.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const now = $('#side').offsetWidth;
+    write(widthKey(), now + (e.key === 'ArrowLeft' ? 1 : -1) * (e.shiftKey ? 60 : 20));
+    layout();
+  });
+
+  /** Put the window back the way it was left: the sidebar, and whichever side view was open. */
+  app.restoreLayout = () => {
+    app.setRail(read(RAIL_KEY) === '1');
+    const saved = read(VIEW_KEY);
+    if (VIEWS.includes(saved)) app.side(saved);
   };
 }

@@ -61,12 +61,17 @@ export function createCodex(ctx) {
     const m = mcp();
     if (!m) return [];
     const toml = (v) => JSON.stringify(v);
-    return ['-c', `mcp_servers.tandem.command=${toml(m.command)}`, '-c', `mcp_servers.tandem.args=${toml(m.args)}`,
+    // `codex exec` cannot ask the user, so without this it refuses every MCP call ("requires approval, but approval policy is never").
+    // Tandem's own tools are checked on Tandem's side (read-only modes are refused there), so they are approved here.
+    return ['-c', 'mcp_servers.tandem.default_tools_approval_mode="approve"', '-c', `mcp_servers.tandem.command=${toml(m.command)}`, '-c', `mcp_servers.tandem.args=${toml(m.args)}`,
       '-c', `mcp_servers.tandem.env={ ${Object.entries(m.env).map(([k, v]) => `${k} = ${toml(v)}`).join(', ')} }`];
   }
 
   function send(a, text, images = []) {
     const args = [...specs.codex.args, 'exec', '--json', '--skip-git-repo-check', '-C', cwd, '-s', CODEX_SANDBOX[a.mode]];
+    // Edit mode is a development sandbox: files only in this agent's own folder, but with the network on, so package installs
+    // and downloads work. (Checked on Windows: Node reaches the internet; curl.exe's Windows TLS does not, inside the sandbox.)
+    if (a.mode === 'edit') args.push('-c', 'sandbox_workspace_write.network_access=true');
     if (a.modelPref) args.push('-m', a.modelPref);
     if (a.effort) args.push('-c', `model_reasoning_effort="${a.effort}"`);
     args.push(...mcpArgs());
@@ -169,7 +174,8 @@ export function createCodex(ctx) {
             break;
           }
           case 'mcp_tool_call':
-            put(a, { k: 'tool', id, name: `${it.server || 'mcp'}.${it.tool || 'tool'}`, summary: '', detail: trimDeep(it.arguments), status: done ? (it.status === 'failed' ? 'error' : 'done') : 'running' });
+            put(a, { k: 'tool', id, name: `${it.server || 'mcp'}.${it.tool || 'tool'}`, summary: '', detail: trimDeep(it.arguments), status: done ? (it.status === 'failed' || it.result?.is_error ? 'error' : 'done') : 'running',
+              output: done ? trunc(it.error?.message || (it.result?.content || []).map((c) => c.text ?? (c.type === 'image' ? '[image]' : '')).join('\n'), MAX_OUT) || undefined : undefined });
             break;
           case 'web_search':
             put(a, { k: 'tool', id, name: 'Search', summary: it.query || '', status: done ? 'done' : 'running' });

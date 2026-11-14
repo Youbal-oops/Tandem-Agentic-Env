@@ -276,11 +276,11 @@ export class InfoPanel {
   render() {
     const sel = this.sel;
     this.root.querySelector('#r-focus').textContent = sel ? `following ${esc(NAME[sel])}` : 'system overview';
-    this.root.querySelector('#r-title').innerHTML = sel ? `<em style="color:${HEX[sel]}">${esc(NAME[sel])}</em>,<br />up close` : `The <em>codebase</em>`;
+    this.root.querySelector('#r-title').innerHTML = sel ? `<em style="color:${HEX[sel]}">${esc(NAME[sel])}</em>` : 'Activity';
     const busy = this.ids.filter((a) => this.m[a]?.busy || (this.kids[a] || []).some((k) => k.busy)).map((a) => NAME[a]);
     this.root.querySelector('#r-blurb').textContent = busy.length
       ? `${busy.join(' and ')} ${busy.length > 1 ? 'are' : 'is'} working right now.`
-      : 'do fish live in space?.';
+      : 'Nothing is running right now.';
     const detail = sel ? this.agentDetail(sel) : this.ids.map((a) => this.agentDetail(a)).join('');
     const html = this.gauges() + this.limits() + detail + `<section class="project">${this.project()}</section>`;
     this.lastRender = performance.now();

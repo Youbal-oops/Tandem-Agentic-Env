@@ -1,5 +1,5 @@
 // The Workspace and Set up dialogs: opening a folder, cloning (from a link or your GitHub account),
-// adding and removing planets, the first-run setup, and exporting the conversations.
+// adding and removing agents, the first-run setup, and exporting the conversations.
 
 import { AGENT_LOOK } from '../looks.js';
 import { $ } from './state.js';
@@ -20,6 +20,7 @@ export function initWorkspace(app) {
     $('#workspace-dialog').showModal();
   }
   app.openWorkspace = openWorkspace;
+  app.openWorkspaceTab = openWorkspaceTab;
   function openWorkspaceTab(tab) {
     openWorkspace();
     document.querySelector(`[data-workspace-tab="${tab}"]`)?.click();
@@ -135,10 +136,7 @@ export function initWorkspace(app) {
     app.showNotice('New project setup is the next Tandem step. For now, choose a new empty folder with Open a folder.');
   }));
   $('#close-workspace').addEventListener('click', () => $('#workspace-dialog').close());
-  $('.sl').style.pointerEvents = 'auto';
-  $('.sl').style.cursor = 'pointer';
-  $('.sl').title = 'Change working repository or manage agents';
-  $('.sl').addEventListener('click', openWorkspace);
+  $('#btn-add-agent').addEventListener('click', () => openWorkspaceTab('agents'));
   $('#repo-form').addEventListener('submit', (e) => {
     e.preventDefault();
     if (!app.net.open) return app.showNotice('Connect to the server first.');

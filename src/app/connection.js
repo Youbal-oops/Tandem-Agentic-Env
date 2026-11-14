@@ -23,15 +23,20 @@ export function initConnection(app) {
     if (!git) return;
     if (app.repoPath && git.cwd && app.repoPath !== git.cwd) {
       app.localTools?.repoChanged();
+      app.code?.repoChanged();
+      app.vscode?.repoChanged();
+      app.team?.repoChanged();
+      app.review?.repoChanged();
       for (const id of AGENTS) { panels[id].ta.value = ''; panels[id].clearAttachments(); panels[id].autosize(); sessionStorage.removeItem(`tandem:draft:${id}`); }
     }
-    $('#sl-repo').textContent = git.repo || 'codebase';
-    $('#sl-git').textContent = git.branch ? `${git.branch} · ${git.changed ? git.changed + ' changed' : 'clean'}` : 'the codebase';
-    $('#cwd').textContent = git.repo ? `…\\${git.repo}` : '';
+    const state = git.branch ? `${git.branch} · ${git.changed ? git.changed + ' changed' : 'clean'}` : 'not a git repository yet';
+    $('#sl-repo').textContent = $('#sun-repo').textContent = git.repo || 'Open a project';
+    $('#sl-git').textContent = $('#sun-git').textContent = state;
     app.repoPath = git.cwd || app.repoPath;
-    $('#cwd').title = app.repoPath;
+    $('#btn-workspace').title = `${app.repoPath}\nClick to change the project folder`;
     $('#repo-path').value = app.repoPath;
     app.info.setGit(git);
+    app.code?.setGit(git);
     app.measure();
   };
 
@@ -46,17 +51,21 @@ export function initConnection(app) {
         app.cloneParent = data.cloneParent || '';
         if (data.clone) app.setCloneStatus(data.clone);
         app.setServices?.(data.services || []);
+        app.teamGuide = data.teamGuide || '';
         app.reconcile(data.agents);
         for (const [provider, models] of Object.entries(data.models || {})) {
           MODEL_PRESETS[provider] = models;
-          for (const id of AGENTS) if (configs[id]?.provider === provider) panels[id].setModels(models);
+          for (const id of AGENTS) if (configs[id]?.provider === provider) panels[id].setModels(models, data.modelLabels?.[provider]);
         }
       } else if (kind === 'open') {
         ui.connected = true;
-        setConn('ok', 'live · localhost');
+        setConn('ok', 'connected');
         setOffline(false);
         if (ui.todoMode) app.setTodoMode(true); // look for the checklist again now that the server is reachable
         app.childChats?.setOffline(false);
+        app.vscode?.online();
+        app.review?.online();
+        app.code?.online();
         info.log({ agent: 'tandem', kind: 'info', text: 'connected to the Tandem server' });
       } else if (kind === 'closed') {
         app.githubReset();
@@ -72,6 +81,10 @@ export function initConnection(app) {
       if (app.chatHistory.receive(msg)) return;
       if (app.childChats?.receive(msg)) return;
       if (app.folderPicker?.receive(msg)) return;
+      if (app.code?.receive(msg)) return;
+      if (app.vscode?.receive(msg)) return;
+      if (app.team?.receive(msg)) return;
+      if (app.review?.receive(msg)) return;
       if (app.localTools?.receive(msg)) return;
       if (app.settingsDialog?.receive(msg)) return;
       if (app.connectDialog?.receive(msg)) return;
@@ -118,7 +131,7 @@ export function initConnection(app) {
   app.setDemo = function setDemo(on) {
     if (on === ui.demo) return;
     const { scene, info, childChats } = app;
-    // The demo plays with its own two planets, so it works however many (or few) real agents there are. Turning it off asks the server for the real ones again.
+    // The demo plays with its own two agents, so it works however many (or few) real agents there are. Turning it off asks the server for the real ones again.
     if (on && app.isCloning()) { app.showNotice('Wait for the repository clone to finish before starting the demo.'); return; }
     if (on) app.reconcile([{ id: 'claude', name: 'Claude', provider: 'claude', available: true }, { id: 'codex', name: 'Codex', provider: 'codex', available: true }]);
     ui.demo = on;
@@ -138,7 +151,7 @@ export function initConnection(app) {
         panels[a].setOffline(false);
         app.onMeta(a, { available: true, busy: false, awaiting: 0 });
       }
-      setConn('', 'demo · no quota used');
+      setConn('', 'demo');
       app.demo = createDemo({
         handle: (agent, ev) => app.onEvent(agent, ev),
         setMeta: (agent, meta) => app.onMeta(agent, meta),
@@ -155,9 +168,9 @@ export function initConnection(app) {
         app.onMeta(a, { busy: false, awaiting: 0, stats: undefined });
       }
       if (ui.connected) {
-        setConn('ok', 'live · localhost');
+        setConn('ok', 'connected');
         app.net.send({ t: 'sync' });
-      } else { setConn('bad', 'offline'); app.reconcile([]); } // no server to ask: drop the demo planets
+      } else { setConn('bad', 'offline'); app.reconcile([]); } // no server to ask: drop the demo agents
       setOffline(!ui.connected);
     }
   };

@@ -64,6 +64,7 @@ export function createConnect({ specs, clis, refresh, emit, home = os.homedir(),
   function install(id) {
     const cli = known(id);
     if (!cli) throw new Error('Unknown agent.');
+    if (!cli.pkg) throw new Error(`${cli.name} is not an npm package. Install it with its own installer, then press Refresh.`);
     if (installing) throw new Error(`Still installing ${clis[installing].name}. Wait for it to finish.`);
     installing = id;
     const out = (kind, text) => emit({ t: 'connect-install', cli: id, kind, text });

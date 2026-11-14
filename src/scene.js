@@ -826,10 +826,14 @@ export function createScene(host) {
   let running = true;
   let pulse = 0;
   let lastRaf = performance.now();
-  document.addEventListener('visibilitychange', () => {
-    running = !document.hidden;
+  let paused = false; // the planet view is not on screen (see setPaused)
+  function setRunning() {
+    const next = !document.hidden && !paused;
+    if (next === running) return;
+    running = next;
     if (running) { lastRaf = performance.now(); loop(); }
-  });
+  }
+  document.addEventListener('visibilitychange', setRunning);
 
   // ---- frame pacing. While you are using Tandem it draws every frame exactly as before (at most 60 a second, so a
   // 120/144 Hz display is not driven twice as hard for nothing). Only when the window is not focused (it is on a
@@ -1172,6 +1176,8 @@ export function createScene(host) {
       if (selected === id) setSelected(null);
     },
     setTopDown(on) { topDown = on; if (!selected) setSelected(null); },
+    /** Stop drawing while the view is hidden, and start again when it is shown. */
+    setPaused(on) { paused = !!on; setRunning(); },
     setEco(on) { ecoMode = on; bloom.enabled = !on && bloomOn; eventsOn = !on; resize(); },
     setSelected,
     setInsets(l, r) {

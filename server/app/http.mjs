@@ -18,7 +18,7 @@ function readBody(req, res, limit) {
   });
 }
 
-export function createHttpServer({ agents, images, delegationKeys, tools, gitStatus, getClone, modelChoices, services = [] }) {
+export function createHttpServer({ agents, images, delegationKeys, tools, gitStatus, getClone, modelChoices, modelLabels = () => ({}), services = [], vscode = null, teamGuide = '' }) {
   function uploadImage(req, res) {
     if (!safeEqual(String(req.headers.authorization || '').replace(/^Bearer /, ''), TOKEN)) { res.writeHead(403).end('Forbidden'); return; }
     const chunks = []; let size = 0;
@@ -91,6 +91,8 @@ export function createHttpServer({ agents, images, delegationKeys, tools, gitSta
       git: gitStatus.current,
       modes: MODES,
       models: modelChoices(),
+      modelLabels: modelLabels(),
+      teamGuide,
       services,
       learningMode: agents.localState().learningMode,
       agents: agents.configs(),
@@ -136,6 +138,7 @@ export function createHttpServer({ agents, images, delegationKeys, tools, gitSta
     if (url.pathname === '/api/jobs') return jobs(req, res);
     if (url.pathname === '/api/tools') return toolsApi(req, res);
     if (url.pathname === '/api/session') return session(res);
+    if (vscode?.handles(url.pathname)) return vscode.proxy(req, res); // the embedded editor, see ../vscode.mjs
     serveUi(req, res, url);
   });
 }

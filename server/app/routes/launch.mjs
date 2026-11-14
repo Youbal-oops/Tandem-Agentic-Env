@@ -3,7 +3,7 @@
 import { createLauncher } from '../../launcher.mjs';
 import { repoPath } from '../../inspect.mjs';
 
-export function createLaunchRoutes({ workDir, tools, launcher = createLauncher() }) {
+export function createLaunchRoutes({ workDir, tools, vscode = null, launcher = createLauncher() }) {
   const reply = (conn, text) => conn.send({ t: 'notice', text });
   return {
     handlers: {
@@ -16,6 +16,14 @@ export function createLaunchRoutes({ workDir, tools, launcher = createLauncher()
       'show-browser': async (m, conn) => {
         try { await tools.show(String(m.source)); } catch (e) { reply(conn, e.message); }
       },
+      /** Start the embedded VS Code if needed and say where it is, for the folder asked for. Asking is the user's go-ahead. */
+      'vscode-open': async (m, conn) => {
+        const dir = workDir(m.source);
+        if (!vscode?.available()) { conn.send({ t: 'vscode', error: 'VS Code was not found on this computer. Install it from code.visualstudio.com, then press Start again.' }); return; }
+        try { await vscode.start(); conn.send({ t: 'vscode', url: vscode.url(dir.cwd), source: dir.id, name: dir.name }); }
+        catch (e) { conn.send({ t: 'vscode', error: e.message }); }
+      },
+      'vscode-stop': (m, conn) => { vscode?.stop(); conn.send({ t: 'vscode', stopped: true }); },
       'open-editor': async (m, conn) => {
         const dir = workDir(m.source);
         try {

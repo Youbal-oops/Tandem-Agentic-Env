@@ -1,8 +1,5 @@
-/* The original look, split by area (see ./styles). The order here is the cascade order. */
-@import './styles/base.css';
-@import './styles/topbar.css';
-@import './styles/scene-labels.css';
-@import './styles/agents.css';
+/* Tandem's look, by area. Text first: system fonts, no images. */
+@import './styles/shell.css';
 @import './styles/chat.css';
-@import './styles/info.css';
-@import './styles/board.css';
+@import './styles/side.css';
+@import './styles/dialogs.css';

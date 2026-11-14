@@ -11,7 +11,7 @@ import { createConnect, terminalLaunch } from '../server/connect.mjs';
 import { cleanAgents } from '../server/settings.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
-const specs = Object.fromEntries(['claude', 'codex', 'gemini'].map((p) => [p, { file: process.execPath, args: [fixture, p] }]));
+const specs = Object.fromEntries(['claude', 'codex', 'gemini', 'antigravity'].map((p) => [p, { file: process.execPath, args: [fixture, p] }]));
 const waitFor = async (check) => { const end = Date.now() + 8000; while (!check()) { if (Date.now() > end) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 20)); } };
 
 function setup(t) {
@@ -50,7 +50,7 @@ test('a Gemini planet streams messages and tools, maps tool names, and resumes i
 
 test('full access is refused until it is allowed in Settings, then reaches Codex as no sandbox', async (t) => {
   const w = setup(t);
-  assert.throws(() => w.action({ t: 'mode', agent: 'codex', mode: 'full' }), /Full access is switched off/);
+  assert.throws(() => w.action({ t: 'mode', agent: 'codex', mode: 'full' }), /Full access is not allowed yet/);
   w.saveSettings({ agents: { allowFull: true, pingMain: false } });
   await w.action({ t: 'mode', agent: 'codex', mode: 'full' });
   assert.equal(w.snapshot().codex.meta.mode, 'full');
@@ -58,6 +58,7 @@ test('full access is refused until it is allowed in Settings, then reaches Codex
   await waitFor(() => w.snapshot().codex.events.some((e) => e.k === 'msg'));
   const echoed = JSON.parse(w.snapshot().codex.events.find((e) => e.k === 'msg').text);
   assert.equal(echoed.args[echoed.args.indexOf('-s') + 1], 'danger-full-access');
+  assert.ok(!echoed.args.includes('sandbox_workspace_write.network_access=true'), 'full access needs no sandbox setting');
   // Turning the permission off drops the agent back to a sandboxed mode.
   await waitFor(() => !w.snapshot().codex.meta.busy);
   w.saveSettings({ agents: { allowFull: false } });
@@ -146,4 +147,89 @@ test('a failed install says why, and sign-in needs the CLI to be installed', asy
   ok.login('codex');
   assert.equal(spawned.at(-1).cmd, 'x-terminal-emulator');
   assert.match(spawned.at(-1).args.at(-1), /'\/bin\/codex' 'x\.js' 'login'/);
+});
+
+test('an Antigravity agent streams its reply and tools, maps tool names, and resumes its conversation', async (t) => {
+  const w = setup(t);
+  w.add({ id: 'agy', name: 'Agy', provider: 'antigravity' });
+  await w.action({ t: 'send', agent: 'agy', text: 'Fix the typo' });
+  await waitFor(() => !w.snapshot().agy.meta.busy && w.snapshot().agy.events.some((e) => e.k === 'turn'));
+  let events = w.snapshot().agy.events;
+  const tool = events.find((e) => e.k === 'tool');
+  assert.deepEqual([tool.name, tool.cls, tool.status, tool.summary, tool.output], ['Edit', 'edit', 'done', 'a.txt', 'ok']);
+  const msgs = events.filter((e) => e.k === 'msg');
+  assert.equal(msgs.length, 1, 'the streamed reply is not repeated from the final result');
+  assert.ok(msgs[0].text.startsWith('Done: '));
+  const first = JSON.parse(msgs[0].text.slice(6));
+  assert.deepEqual(first.args.slice(0, 4), ['--output-format', 'stream-json', '--mode', 'plan'], 'a new agent starts read-only');
+  assert.ok(!first.args.includes('--conversation') && !first.args.includes('--dangerously-skip-permissions'));
+  assert.match(first.text, /Fix the typo/);
+  assert.equal(events.find((e) => e.k === 'turn').ok, true);
+
+  await w.action({ t: 'mode', agent: 'agy', mode: 'edit' });
+  await w.action({ t: 'send', agent: 'agy', text: 'Again' });
+  await waitFor(() => w.snapshot().agy.events.filter((e) => e.k === 'turn').length === 2 && !w.snapshot().agy.meta.busy);
+  events = w.snapshot().agy.events;
+  const second = JSON.parse(events.filter((e) => e.k === 'msg').at(-1).text.slice(6));
+  assert.deepEqual(second.args.slice(second.args.indexOf('--mode'), second.args.indexOf('--mode') + 2), ['--mode', 'accept-edits']);
+  assert.ok(!second.args.includes('--settings') && !second.args.includes('--dangerously-skip-permissions'), 'Edit does not let it run commands');
+  assert.deepEqual(second.args.slice(second.args.indexOf('--conversation'), second.args.indexOf('--conversation') + 2), ['--conversation', 'agy-conv-1']);
+});
+
+test('Antigravity models are read from its list, and it cannot be installed with npm', async () => {
+  const { parseAntigravityModels, CLIS } = await import('../server/app/binaries.mjs');
+  assert.deepEqual(parseAntigravityModels(['gemini-4-argon-high', 'Gemini 4 Argon (High)'].join(String.fromCharCode(9)) + String.fromCharCode(13, 10) + ['claude-opus-5-5-low', 'Claude Opus 5.5 (Low)'].join(String.fromCharCode(9)) + String.fromCharCode(10, 10)), ['gemini-4-argon-high', 'claude-opus-5-5-low']);
+  assert.equal(CLIS.antigravity.pkg, '');
+  const connect = createConnect({ specs: {}, clis: CLIS, refresh() {}, emit() {} });
+  assert.throws(() => connect.install('antigravity'), /not an npm package/);
+});
+
+test('Codex in Edit mode is sandboxed to its folder with the network on; Read-only gets neither', async (t) => {
+  const w = setup(t);
+  const run = async (mode) => {
+    await w.action({ t: 'mode', agent: 'codex', mode });
+    await w.action({ t: 'send', agent: 'codex', text: `check ${mode}` });
+    await waitFor(() => !w.snapshot().codex.meta.busy && w.snapshot().codex.events.filter((e) => e.k === 'msg').some((e) => e.text.includes(`check ${mode}`)));
+    return JSON.parse(w.snapshot().codex.events.filter((e) => e.k === 'msg').at(-1).text).args;
+  };
+  const edit = await run('edit');
+  assert.equal(edit[edit.indexOf('-s') + 1], 'workspace-write');
+  assert.ok(edit.includes('sandbox_workspace_write.network_access=true'));
+  const read = await run('read');
+  assert.equal(read[read.indexOf('-s') + 1], 'read-only');
+  assert.ok(!read.includes('sandbox_workspace_write.network_access=true'));
+});
+
+test('Antigravity says what it was not allowed to do, instead of an empty reply', async (t) => {
+  const w = setup(t);
+  w.add({ id: 'agy', name: 'Agy', provider: 'antigravity' });
+  await w.action({ t: 'mode', agent: 'agy', mode: 'auto' });
+  await w.action({ t: 'send', agent: 'agy', text: 'NEEDS-COMMAND please' });
+  await waitFor(() => !w.snapshot().agy.meta.busy && w.snapshot().agy.events.some((e) => e.k === 'turn'));
+  const err = w.snapshot().agy.events.find((e) => e.k === 'error');
+  assert.match(err.text, /not allowed to run Bash in Auto mode/);
+  assert.match(err.text, /Full access/);
+});
+
+test('every CLI agent has a Full access mode, and none can use it until it is allowed in Settings', async (t) => {
+  const w = setup(t);
+  w.add({ id: 'gem', name: 'Gem', provider: 'gemini' });
+  w.add({ id: 'agy', name: 'Agy', provider: 'antigravity' });
+  for (const id of ['claude', 'codex', 'gem', 'agy']) {
+    assert.throws(() => w.action({ t: 'mode', agent: id, mode: 'full' }), /not allowed yet/, id);
+    assert.notEqual(w.snapshot()[id].meta.mode, 'full', id);
+  }
+  w.saveSettings({ agents: { allowFull: true } });
+  for (const id of ['claude', 'codex', 'gem', 'agy']) {
+    await w.action({ t: 'mode', agent: id, mode: 'full' });
+    assert.equal(w.snapshot()[id].meta.mode, 'full', id);
+  }
+  // Claude is started with permissions bypassed, Antigravity with every prompt skipped.
+  await w.action({ t: 'send', agent: 'agy', text: 'go' });
+  await waitFor(() => !w.snapshot().agy.meta.busy && w.snapshot().agy.events.some((e) => e.k === 'turn'));
+  const args = JSON.parse(w.snapshot().agy.events.filter((e) => e.k === 'msg').at(-1).text.slice(6)).args;
+  assert.ok(args.includes('--dangerously-skip-permissions'));
+  // Taking the permission back drops every agent out of Full access.
+  w.saveSettings({ agents: { allowFull: false } });
+  for (const id of ['claude', 'codex', 'gem', 'agy']) assert.notEqual(w.snapshot()[id].meta.mode, 'full', id);
 });

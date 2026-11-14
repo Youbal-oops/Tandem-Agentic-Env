@@ -8,9 +8,14 @@ It is for people who build with AI and want to learn from it, and for developers
 
 ## What it does
 
+### One Team chat for all your agents
+
+- Tandem opens on **Team**: describe a task and it goes to the right agent on the right model. A dispatcher agent, running on your cheapest model, reads a guide you can edit (Settings → Team) and the live team, and picks who does it and how strong a model it needs: a typo gets Haiku, Flash or GPT-Reserve, a redesign gets Opus, Argon or Astra. If it can't answer, Tandem's built-in rules decide. You can also pick the agent or the task size yourself.
+- Each task runs in that agent's own chat and folder. Its card shows who got it, on which model and why, the result, and the files it changed; each file opens its diff in Review.
+
 ### Work with several agents at once
 
-- Tandem starts with no agents. You add each one by choosing a connection type (Claude Code, Codex, Gemini CLI or an API model) and, if you like, naming it; a blank name takes the connection's own name ("Claude", then "Claude 2"). Run up to eight around one selected project, and give each a model of its own. Tandem remembers the last model used for each provider.
+- Tandem starts with no agents. You add each one by choosing a connection type (Claude Code, Codex, Gemini CLI, Google's Antigravity CLI, or an API model from one of 20 known services or any compatible endpoint) and, if you like, naming it; a blank name takes the connection's own name ("Claude", then "Claude 2"). Run up to eight around one selected project, and give each a model of its own. Tandem remembers the last model used for each provider.
 - Every CLI agent and every Tandem-created subagent gets an isolated git worktree and branch, where Git is available.
 - Each subagent can open in its own window, and the main agent is told when one finishes. A context graph for each running subagent shows in the right-hand panel.
 - A shared `.tandem/PROJECT_CONTEXT.md` is created in every project. All agents receive it, so they start from the same picture.
@@ -18,8 +23,9 @@ It is for people who build with AI and want to learn from it, and for developers
 
 ### Agents can build, test and browse
 
-- Claude Code and Codex agents get Tandem's own tools over MCP: list and run the project's `package.json` scripts (build, test, lint), start and stop a dev server, and use a browser window of their own to open a page, read it, click, type, take a screenshot and read its console and failed requests.
+- Claude Code and Codex agents get Tandem's own tools over MCP: list and run the project's `package.json` scripts (build, test, lint), start and stop a dev server, search the web, download assets (images, fonts, models) into their own folder, and use a browser window of their own to open a page, read it, click, type, take a screenshot and read its console and failed requests.
 - Each agent's browser is a separate window with its own empty session (no cookies or logins from elsewhere), limited to http and https. The **Browser** button brings the selected agent's window forward. The browser needs the desktop app; the build and test tools work anywhere.
+- Codex runs in its own Windows sandbox: in Edit mode it can change files only in its own folder, with the network on. Other agents rely on their permission prompts. **Full access** (no sandbox, no prompts) exists for every agent but stays locked until you allow it in Settings, and Tandem warns you again per agent.
 - Tools that run scripts or start servers are refused while an agent is in a read-only mode (including learning mode before you approve). Turn the whole set off in Settings → Subagents. Gemini CLI and API agents do not get these tools yet.
 
 ### Learn while the project gets built
@@ -33,7 +39,7 @@ It is for people who build with AI and want to learn from it, and for developers
 
 ### Review before anything ships
 
-- **Review** opens a window showing what an agent changed since you last approved, with the agent's own note on each edit. Edit a hunk or ask about it and the agent receives your change. Nothing is written to its folder.
+- **Review** (Ctrl+R) shows every agent's changes since you last approved them, side by side with the agent's own note on each file and the diff with line numbers. Approve a batch, ask about a hunk, or suggest your own version and the agent receives it. Nothing is written to its folder.
 - Agents are given a size budget (default 300 lines, 10 files) and asked to split big requests and stop for review. A cutoff a little above it stops a runaway. Both can be switched off for unattended runs.
 - **Push** opens a dialog where you choose which files to commit, write the message and edit the branch name. Pushes only go to `tandem/...` branches (default `tandem/<repo>`), never by force. Files that look private (`.env`, keys) start unselected.
 
@@ -41,12 +47,13 @@ It is for people who build with AI and want to learn from it, and for developers
 
 - **Connect agents** installs and signs in to Claude Code, Codex and Gemini CLI from the app. Codex and Gemini have an opt-in full access mode (no sandbox), chosen per agent behind a warning.
 - Open a local folder, clone a repo, start a new project, and connect GitHub through the GitHub CLI.
-- Browse files, inspect Git changes, attach images, save notes and export chats.
-- **Terminal** (Ctrl+`) opens your real terminal (Windows Terminal, or PowerShell) in the selected agent's worktree, or the repository. **Editor** (Ctrl+E) opens the same folder in VS Code, or the default app if VS Code is not installed. In Files / Diff, **Open in editor** opens one file.
+- A file explorer in the sidebar shows the repository or any agent's worktree, marks changed files, and opens them in a built-in code editor where you can edit and save.
+- **VS Code** (Ctrl+E) runs the VS Code installed on your computer inside Tandem, with your extensions and its terminal (Ctrl+`). The first start asks you to accept the VS Code Server license and downloads its server component from Microsoft.
+- Attach images, save notes and export chats.
 
 ### Also included
 
-- A 3D solar-system view of your agents (it starts with just the sun), with **Lite** (text only) and **Eco** (lower frame rate) modes for slower computers.
+- An optional 3D solar-system view of your agents (View → Planets). It is off by default and its code is only loaded when you open it; **Eco** lowers its frame rate.
 - **Demo** replays a scripted session without using any quota.
 - **Settings → Structure** (off by default, only for projects cloned or created in Tandem) builds a separate git worktree and branch with big JS/TS/Python/CMake/PowerShell files split into smaller component files. Each original path re-exports its pieces. It is plain code, uses no tokens, and never changes your files in place.
 

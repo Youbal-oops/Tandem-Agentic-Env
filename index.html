@@ -6,78 +6,120 @@
     <title>Tandem</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='5' fill='%23ffd27a'/%3E%3Ccircle cx='7' cy='10' r='3.5' fill='%23ffb25a'/%3E%3Ccircle cx='25' cy='23' r='3.5' fill='%2374e6ff'/%3E%3C/svg%3E" />
   </head>
-  <body data-sel="" class="boot">
-    <div id="stage"></div>
-    <div id="vignette"></div>
+  <body class="boot">
+    <header id="topbar">
+      <button id="btn-rail" class="icon" title="Show or hide the sidebar (Ctrl+\)" aria-label="Show or hide the sidebar">☰</button>
+      <span class="brand">Tandem</span>
+      <nav class="menus" aria-label="Menu">
+        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">File</button><div class="menu-list" role="menu"><button data-click="#btn-workspace">Open project…</button><button id="btn-push" title="Review changes and push to a tandem/&lt;repo&gt; branch on origin">Push changes…</button><hr /><button id="btn-notes">Notes…</button><button id="btn-export">Export conversations</button><hr /><button data-click="#btn-settings">Settings…</button><button data-cmd="close">Close window</button></div></div>
+        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Edit</button><div class="menu-list" role="menu"><button data-cmd="undo">Undo<kbd>Ctrl+Z</kbd></button><button data-cmd="redo">Redo<kbd>Ctrl+Y</kbd></button><hr /><button data-cmd="cut">Cut<kbd>Ctrl+X</kbd></button><button data-cmd="copy">Copy<kbd>Ctrl+C</kbd></button><button data-cmd="paste">Paste<kbd>Ctrl+V</kbd></button><button data-cmd="selectAll">Select all<kbd>Ctrl+A</kbd></button><hr /><button id="btn-prompt" title="Instructions every agent receives at the start of each session">Global prompt…</button></div></div>
+        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">View</button><div class="menu-list" role="menu"><button data-click="#btn-team">Team<kbd>Alt+0</kbd></button><hr /><button data-click="#btn-review">Review<kbd>Ctrl+R</kbd></button><button data-click="#btn-code">Code<kbd>Ctrl+B</kbd></button><button data-click="#btn-editor">VS Code<kbd>Ctrl+E</kbd></button><button data-click="#btn-terminal">Terminal<kbd>Ctrl+`</kbd></button><button data-click="#btn-activity">Activity</button><button id="btn-planets" class="switch" type="button" aria-pressed="false" title="A live 3D view of the agents as planets. Off by default: nothing 3D is loaded until you turn it on.">Planets <b>off</b></button><hr /><button data-click="#btn-rail">Sidebar<kbd>Ctrl+\</kbd></button><button data-cmd="reload">Reload</button></div></div>
+        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Agents</button><div class="menu-list" role="menu"><button data-click="#btn-add-agent">Add an agent…</button><button id="btn-connect" title="Install and sign in to Claude Code, Codex, Gemini or Antigravity without a terminal">Connect agents…</button><button id="btn-browser" title="Bring the selected agent's browser window forward. Agents open it themselves when they test the app.">Agent browser</button><button id="btn-stop-all" title="Stop all running agent sessions">Stop all agents</button><hr /><button id="btn-learning" class="switch" type="button" aria-pressed="false" title="Learning mode: main agents stay read-only until you approve each step">Learning <b>off</b></button><button id="btn-profile" title="What you know and what you want to learn">Learn profile…</button><button id="btn-journal" title="Steps finished in learning mode, kept for the next session">Learning journal…</button><hr /><button id="btn-demo" title="Replay a scripted session without using any quota (Alt+D)">Demo<kbd>Alt+D</kbd></button></div></div>
+        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Help</button><div class="menu-list" role="menu"><button id="btn-setup" title="Set up projects, Git and agents">Set up…</button><button data-cmd="shortcuts">Keyboard shortcuts</button></div></div>
+      </nav>
+      <div class="top-drag"></div>
+      <nav class="top-views" aria-label="Side panel">
+        <button id="btn-review" class="top-view" title="Every agent's changes since you last approved them: files, the agent's own notes and the diff (Ctrl+R)">Review</button><button id="btn-code" class="top-view" title="Browse and edit the project's code (Ctrl+B)">Code</button><button id="btn-editor" class="top-view" title="The real VS Code, with extensions and its terminal, inside Tandem (Ctrl+E)">VS Code</button><button id="btn-terminal" class="top-view" title="VS Code's terminal, inside Tandem (a separate window until VS Code has been started here)">Terminal</button><button id="btn-activity" class="top-view" title="Usage, limits, what each agent is doing, and the log">Activity</button>
+      </nav>
+      <span id="conn" class="conn" title="Connection to the local Tandem server"><i></i><em>connecting</em></span>
+      <button id="btn-settings" class="icon" title="Review limits, learning, appearance and saved text" aria-label="Settings">⚙</button>
+    </header>
+    <div id="shell">
+    <nav id="rail" aria-label="Tandem">
+      <button id="btn-workspace" class="rail-project" title="Change the project folder"><b id="sl-repo">Open a project</b><small id="sl-git">Choose a folder to work in</small></button>
 
-    <div id="plabels">
-      <div class="sl"><b id="sl-repo">repo</b><small id="sl-git">the codebase</small></div>
+      <button id="btn-team" class="rail-item rail-team" title="One chat for the whole team: describe a task and Tandem gives it to the right agent on the right model">Team</button>
+
+      <section class="rail-sec" data-sec="agents">
+        <div class="rail-label"><button class="sec-toggle" type="button" aria-expanded="true">Agents</button><button id="btn-add-agent" class="icon" title="Add an agent" aria-label="Add an agent">+</button></div>
+        <div id="agent-rows" class="sec-body"></div>
+      </section>
+
+      <section class="rail-sec grow" data-sec="files">
+        <div class="rail-label"><button class="sec-toggle" type="button" aria-expanded="true">Files</button><button id="code-refresh" class="icon" title="Refresh" aria-label="Refresh">↻</button></div>
+        <div class="sec-body explorer">
+          <select id="code-source" aria-label="Folder to browse" title="The repository, or one agent's own worktree"></select>
+          <div class="code-modes" role="group" aria-label="File list"><button data-code-tab="files" class="on">Files</button><button data-code-tab="changes">Changes<b id="code-changed"></b></button></div>
+          <nav id="code-tree" aria-label="Files"></nav>
+        </div>
+      </section>
+    </nav>
+
+    <main id="main">
+      <button id="btn-rail-open" class="icon" title="Show the sidebar (Ctrl+\)" aria-label="Show the sidebar" hidden>☰</button>
+      <div id="chats">
+        <section id="team-view" hidden>
+          <header class="a-bar"><div class="a-title"><b>Team</b><span class="a-info">Tandem picks the agent and the model for each task</span></div><div class="chat-meta"><button id="team-clear" title="Clear this list. The agents' own chats are kept.">Clear</button></div></header>
+          <div id="team-feed" class="c-feed" tabindex="-1">
+            <div class="c-empty"><h1>What should the team do?</h1><p>Describe a task. Small jobs go to a small fast model, hard ones to the strongest, and you can overrule the choice below.</p></div>
+          </div>
+          <div class="c-dock">
+            <form id="team-form" class="c-compose">
+              <textarea id="team-text" rows="1" placeholder="Give the team a task…" spellcheck="true" maxlength="40000"></textarea>
+              <div class="c-actions">
+                <div class="model-controls">
+                  <select id="team-agent" aria-label="Who does it" title="Who does it"><option value="">Any agent</option></select>
+                  <select id="team-tier" aria-label="Task size" title="How strong a model this task needs"><option value="">Auto size</option><option value="light">Light: small fast model</option><option value="standard">Standard: workhorse model</option><option value="heavy">Heavy: strongest model</option></select>
+                </div>
+                <span id="team-status" class="c-upload-status" role="status" aria-live="polite"></span>
+                <button class="send" title="Assign (Enter)" aria-label="Assign">↑</button>
+              </div>
+            </form>
+            <p class="c-hint">Enter assigns · Shift+Enter for a new line · each task runs in that agent's own chat and folder</p>
+          </div>
+        </section>
+        <section id="empty-agents" class="hero">
+          <h1>Where should we start?</h1>
+          <p>Add an agent to work on this project. Any mix works: CLI agents that edit code, or chat models over an API.</p>
+          <form id="quick-agent" class="hero-form">
+            <select name="provider" id="quick-provider" aria-label="Connection"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option><option value="api">Other compatible API (custom endpoint)</option></select>
+            <input name="name" maxlength="32" placeholder="Name (optional)" autocomplete="off" aria-label="Name (optional)" />
+            <button type="submit" class="primary">Add agent</button>
+          </form>
+          <div class="chips"><button id="quick-find" type="button">Find connections on this computer</button><button id="quick-install" type="button">Install or sign in…</button></div>
+        </section>
+      </div>
+    </main>
+
+    <div id="side-resize" role="separator" aria-orientation="vertical" aria-label="Resize side panel" tabindex="0" title="Drag to resize · double-click to reset · arrow keys nudge" hidden></div>
+    <aside id="side" hidden>
+      <header class="side-head">
+        <b id="side-title"></b>
+        <button id="side-close" class="icon" title="Close the side panel" aria-label="Close the side panel">×</button>
+      </header>
+      <section id="review-view" data-side-page="review" hidden>
+        <div class="rv-bar"><b id="rv-summary"></b><span id="rv-msg" role="status"></span><button id="rv-refresh" title="Count every agent's changes again">Refresh</button></div>
+        <div class="rv-body"><nav id="rv-list" aria-label="Changed files, by agent"></nav><div id="rv-detail" aria-live="polite"></div></div>
+      </section>
+      <section id="code-view" data-side-page="code" hidden>
+        <div class="code-main">
+          <div id="code-tabs" role="tablist" aria-label="Open files"></div>
+          <div id="code-editor"><p class="code-empty">Open a file from the list to read or edit it.</p></div>
+          <footer class="code-foot"><span id="code-msg" role="status"></span><button id="code-diff" title="The uncommitted changes in this folder, as one diff">Diff</button><button id="code-chat" title="Put this file, or the selected lines, in the selected agent's message box" disabled>Add to chat</button><button id="code-vscode" title="Open this file in VS Code" disabled>VS Code</button><button id="code-save" class="primary" title="Save (Ctrl+S)" disabled>Save</button></footer>
+        </div>
+      </section>
+      <section id="vscode-view" data-side-page="vscode" hidden>
+        <div class="vs-bar"><select id="vs-source" aria-label="Folder to open" title="The repository, or one agent's own worktree"></select><span id="vs-msg" role="status"></span><button id="vs-reload" title="Load the editor again">Reload</button><button id="vs-desktop" title="Open this folder in the desktop VS Code app instead">Desktop app</button><button id="vs-stop" title="Stop the embedded VS Code and free its memory">Stop</button></div>
+        <div id="vs-start" class="vs-start">
+          <h2>VS Code, inside Tandem</h2>
+          <p>This runs the VS Code already installed on this computer and shows it here: the full editor, your extensions, and its terminal (Ctrl+`). Extensions are installed separately from the desktop app, from the Extensions view inside it.</p>
+          <p>The first start downloads VS Code's server component from Microsoft. By starting it you accept the <a href="https://aka.ms/vscode-server-license" target="_blank" rel="noopener noreferrer">Visual Studio Code Server license terms</a>.</p>
+          <button id="vs-go" class="primary">Start VS Code</button>
+        </div>
+        <iframe id="vs-frame" title="VS Code" hidden allow="clipboard-read; clipboard-write"></iframe>
+      </section>
+      <section id="right" data-side-page="activity" hidden></section>
+      <section id="planets-view" data-side-page="planets" hidden>
+        <div id="stage"></div>
+        <div id="plabels"><div class="sl"><b id="sun-repo">repo</b><small id="sun-git">the codebase</small></div></div>
+        <footer class="planet-foot"><span>Each agent is a planet; the sun is the repository.</span><button id="btn-eco" title="Lower the frame rate and effects to save battery">Eco</button><button id="btn-sky" title="Send something across the sky">Sky</button></footer>
+      </section>
+    </aside>
     </div>
 
-    <header id="top">
-      <div class="brand">
-        <h1>T&thinsp;A&thinsp;N&thinsp;D&thinsp;E&thinsp;M</h1>
-        <p>Your local agent workspace</p>
-      </div>
-      <div class="topright">
-        <div class="clock"><span class="k">Local</span><span id="clock">--:--:--</span><span class="k">Session</span><span id="uptime">00:00</span></div>
-        <div class="topbtns">
-          <span id="conn" class="conn"><i></i><em>connecting</em></span>
-          <button id="btn-overview" title="Top-down view of the whole system (Esc)">System <kbd>Esc</kbd></button>
-          <button id="btn-workspace">Workspace</button>
-          <button id="btn-setup" title="Set up projects, Git and agents">Set up</button>
-          <button id="btn-inspect">Files / Diff</button>
-          <button id="btn-review" title="See what the agents changed, with their notes, in a separate window">Review</button>
-          <button id="btn-terminal" title="Open a terminal window in the selected agent's worktree, or the repository (Ctrl+`)">Terminal <kbd>Ctrl+`</kbd></button>
-          <button id="btn-editor" title="Open the selected agent's worktree, or the repository, in VS Code (Ctrl+E)">Editor <kbd>Ctrl+E</kbd></button>
-          <button id="btn-browser" title="Bring the selected agent's browser window forward. Agents open it themselves when they test the app.">Browser</button>
-          <button id="btn-push" title="Review changes and push to a tandem/&lt;repo&gt; branch on origin">Push</button>
-          <details class="toolbar-more"><summary>More <span>⌄</span></summary><div class="toolbar-menu">
-          <button id="btn-connect" title="Install and sign in to Claude Code, Codex or Gemini without a terminal">Connect agents</button>
-          <button id="btn-settings" title="Review limits, learning, appearance and saved text">Settings</button>
-          <button id="btn-profile" title="What you know and what you want to learn">Learn profile</button>
-          <button id="btn-journal" title="Steps finished in learning mode, kept for the next session">Learning journal</button>
-          <button id="btn-prompt" title="Instructions every agent receives at the start of each session">Prompt</button>
-          <button id="btn-notes">Notes</button>
-          <button id="btn-export">Export conversations</button>
-          <button id="btn-stop-all" title="Stop all running agent sessions">Stop all</button>
-          <button id="btn-lite" title="Text only: no 3D scene or animations, for slower computers">Lite</button>
-          <button id="btn-eco" title="Reduce effects for laptop battery">Eco</button>
-          <button id="btn-demo" title="Replay a scripted session without using any quota (Alt+D)">Demo <kbd>Alt+D</kbd></button>
-          <button id="btn-sky" title="Trigger a ship, meteor or comet (Alt+K)">Sky <kbd>Alt+K</kbd></button>
-          <button id="btn-ui" title="Hide the panels (Alt+H)">Hide panels <kbd>Alt+H</kbd></button>
-          </div></details>
-        </div>
-      </div>
-    </header>
-
-    <aside id="left">
-      <div class="kicker"><span>Agents</span><button id="btn-learning" class="learn-switch" type="button" aria-pressed="false" title="Learning mode: main agents stay read-only until you approve each step">Learning <b>off</b></button><span id="cwd" title="Folder the agents work in"></span></div>
-      <p class="roster-help">Select a planet or a row to open its chat.<br />Click the sun to change repositories.</p>
-      <section id="empty-agents" class="empty-agents">
-        <h2>Add your first agent</h2>
-        <p>Pick how it connects. Give it a name if you like; otherwise it takes the name of the connection.</p>
-        <form id="quick-agent">
-          <label>Connection<select name="provider" id="quick-provider"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label>
-          <label>Name <small>(optional)</small><input name="name" maxlength="32" placeholder="e.g. Reviewer" autocomplete="off" /></label>
-          <button type="submit" class="primary">Add agent</button>
-        </form>
-        <div class="empty-actions"><button id="quick-find" type="button">Find connections on this computer</button><button id="quick-install" type="button">Install or sign in…</button></div>
-      </section>
-      <div id="left-resize" role="separator" aria-orientation="vertical" aria-label="Resize chat panel" title="Drag to resize · double-click to reset"></div>
-    </aside>
-
-    <aside id="right"></aside>
-    <div id="right-resize" role="separator" aria-orientation="vertical" aria-label="Resize side panel" tabindex="0" title="Drag to resize · double-click to reset · arrow keys nudge"></div>
-
-    <footer id="ticker">
-      <span class="lbl">Work board</span>
-      <div id="ticker-items"><span class="idle">Quiet. Click a planet, or pick an agent, to start.</span></div>
-      <span class="keys"><b>Alt+1…8</b> agent <b>Esc</b> overview</span>
-    </footer>
     <div id="notice" role="status" hidden></div>
     <dialog id="workspace-dialog">
-      <header><div><span class="eyebrow">SYSTEM SETTINGS</span><h2>Your workspace</h2></div><button id="close-workspace" aria-label="Close settings">Close ×</button></header>
+      <header><div><span class="eyebrow">Project</span><h2>Your workspace</h2></div><button id="close-workspace" aria-label="Close settings">Close ×</button></header>
       <nav class="workspace-tabs" aria-label="Workspace sections"><button type="button" class="on" data-workspace-tab="local">Local folder</button><button type="button" data-workspace-tab="clone">Clone repository</button><button type="button" data-workspace-tab="agents">Agents</button></nav>
       <section data-workspace-page="local">
       <form id="repo-form">
@@ -105,12 +147,12 @@
         <p id="clone-status" role="status" aria-live="polite"></p>
       </form>
       </section><section data-workspace-page="agents" hidden>
-      <div class="settings-heading"><h3>Planets</h3><span>Up to eight independent agents</span></div>
+      <div class="settings-heading"><h3>Agents</h3><span>Up to eight independent agents</span></div>
       <div id="agent-list"></div>
-      <div class="form-row"><button id="open-connect" type="button">Install or sign in to agents…</button><button id="scan-connections" type="button">Find connections</button><span>Every connection that is ready gets its own planet automatically.</span></div>
+      <div class="form-row"><button id="open-connect" type="button">Install or sign in to agents…</button><button id="scan-connections" type="button">Find connections</button><span>Every connection that is ready is added as an agent automatically.</span></div>
       <form id="agent-form">
-        <h3>Add a planet</h3>
-        <div class="form-row"><label>Name <small>(optional)</small><input name="name" maxlength="32" placeholder="Defaults to the connection" /></label><label>Connection<select name="provider" id="agent-provider"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label></div>
+        <h3>Add an agent</h3>
+        <div class="form-row"><label>Name <small>(optional)</small><input name="name" maxlength="32" placeholder="Defaults to the connection" /></label><label>Connection<select name="provider" id="agent-provider"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label></div>
         <label>Model<input name="model" list="api-model-options" placeholder="Default for CLI; required for API" /></label>
         <datalist id="api-model-options"></datalist>
         <div id="api-fields" hidden>
@@ -119,12 +161,12 @@
           <div class="form-row"><button id="detect-api-models" type="button">Detect models</button><span id="api-model-status" role="status"></span></div>
           <p>API chat can review pasted code and replies. It has no local file tools. Hosted APIs use separate billing. Keys stay in the server environment.</p>
         </div>
-        <button type="submit">Add planet</button>
+        <button type="submit" class="primary">Add agent</button>
       </form>
       </section>
     </dialog>
     <dialog id="folder-dialog">
-      <header><div><span class="eyebrow">ON THIS COMPUTER</span><h2>Choose a folder</h2></div><button id="close-folders" aria-label="Close folder browser">Close ×</button></header>
+      <header><div><span class="eyebrow">On this computer</span><h2>Choose a folder</h2></div><button id="close-folders" aria-label="Close folder browser">Close ×</button></header>
       <form id="folder-path-form" class="form-row"><button id="folder-up" type="button" aria-label="Parent folder">↑ Up</button><input id="folder-path" aria-label="Folder path" placeholder="Enter a full folder path" /><button type="submit">Go</button></form>
       <div class="folder-shortcuts"><button id="folder-home">Home</button><button id="folder-current">Current workspace</button><span id="folder-roots"></span></div>
       <input id="folder-search" type="search" placeholder="Filter folders here…" aria-label="Filter folders" />
@@ -132,28 +174,21 @@
       <nav id="folder-list" aria-label="Folders"></nav>
       <footer class="folder-footer"><span id="folder-selection"></span><button id="choose-folder" class="primary" disabled>Use this folder</button></footer>
     </dialog>
-    <dialog id="inspect-dialog" class="wide-dialog">
-      <header><div><span class="eyebrow">LOCAL REPOSITORY</span><h2>Files & changes</h2></div><button id="close-inspect">Close ×</button></header>
-      <div class="inspector-toolbar"><button id="inspect-files" class="on">Files</button><button id="inspect-diff">Git diff</button><select id="diff-mode" aria-label="Diff mode"><option value="combined">Since last commit</option><option value="unstaged">Unstaged</option><option value="staged">Staged</option></select><button id="inspect-refresh">Refresh</button></div>
-      <p id="inspect-location"></p>
-      <div class="inspector-layout"><nav id="file-list" aria-label="Repository files"></nav><div class="file-preview"><p id="inspect-status" role="status"></p><pre id="inspect-content"></pre></div></div>
-      <div class="inspector-toolbar"><select id="context-agent" aria-label="Agent for file context"></select><button id="attach-context" disabled>Add to chat draft</button><button id="inspect-editor" disabled title="Open this file in VS Code">Open in editor</button></div>
-      <p>Preview is read-only. Add a file or diff to a draft to discuss it with an agent; send it when ready.</p>
-    </dialog>
     <dialog id="connect-dialog" class="connect-dialog">
-      <header><div><span class="eyebrow">NO TERMINAL NEEDED</span><h2>Connect agents</h2></div><button id="close-connect">Close ×</button></header>
+      <header><div><span class="eyebrow">No terminal needed</span><h2>Connect agents</h2></div><button id="close-connect">Close ×</button></header>
       <p>Install an agent CLI with one click, then sign in. Sign-in opens a normal terminal window already running the right command; finish it there and press Refresh. Installing runs <b>npm install -g</b> for the official package, which can take a minute.</p>
       <p id="connect-npm" class="connect-warn" hidden>npm was not found, so Tandem cannot install anything. Install Node.js from nodejs.org, restart Tandem, and come back.</p>
       <div id="connect-list"></div>
       <pre id="connect-log" hidden></pre>
       <div class="form-row"><button id="connect-refresh" type="button">Refresh</button><span id="connect-status" role="status"></span></div>
-      <p>Gemini can also be added without its CLI as a chat-only planet (Add a planet → Compatible API chat) using Google's OpenAI-compatible endpoint and a GEMINI_API_KEY in the server environment.</p>
+      <p>Gemini can also be added without its CLI as a chat-only agent (Add an agent → Gemini API) using Google's OpenAI-compatible endpoint and a GEMINI_API_KEY in the server environment.</p>
     </dialog>
     <dialog id="settings-dialog" class="settings-dialog">
-      <header><div><span class="eyebrow">SAVED ON THIS COMPUTER</span><h2>Settings</h2></div><button id="close-settings">Close ×</button></header>
+      <header><div><span class="eyebrow">Saved on this computer</span><h2>Settings</h2></div><button id="close-settings">Close ×</button></header>
       <div class="settings-body">
         <nav class="settings-nav" aria-label="Settings sections">
           <button type="button" data-section="review" class="on">Review &amp; limits</button>
+          <button type="button" data-section="team">Team</button>
           <button type="button" data-section="learning">Learning</button>
           <button type="button" data-section="agents">Subagents</button>
           <button type="button" data-section="structure">Structure</button>
@@ -171,7 +206,15 @@
             <label class="check"><input type="checkbox" id="set-hard-stop"> Cut an agent off if it goes just past the budget</label>
             <div class="form-row"><label>Cutoff margin, %<input type="number" id="set-margin" min="5" max="100" step="5"></label><span id="set-cutoff" role="status"></span></div>
             <p>Agents are told the budget. A big request should be split into components, with a stop and a review after each one. Going over the budget at the end of a job holds that agent's next task until you have approved. The cutoff sits a margin above the budget and is the safety net: an agent that reaches it is stopped mid-job, so expect it in long sessions that ignore the budget. A batch is everything changed since your last approval, added and removed lines both counted. Turn the first switch off, or the cutoff off, to let an agent run on without being interrupted.</p>
-            <div class="form-row"><button id="save-settings" class="primary">Save</button><button id="open-review" type="button">Open Review window</button><span id="settings-status" role="status"></span></div>
+            <div class="form-row"><button id="save-settings" class="primary">Save</button><button id="open-review" type="button">Open Review</button><span id="settings-status" role="status"></span></div>
+          </section>
+          <section data-panel="team" hidden>
+            <h3>Team</h3>
+            <label>Who assigns tasks in the Team chat<select id="set-team-dispatcher"><option value="auto">A dispatcher agent: the cheapest model that answers</option><option value="rules">Tandem's built-in rules: instant, no model</option></select></label>
+            <p>The dispatcher is a small model that reads the guide below and the live list of agents and models, then picks who does each task and on which model. It runs on its own, outside the agents' chats, sees only the guide, the team and your task, and cannot change anything. It adds a few seconds and a little quota to each task. If it cannot answer, or you pick both the agent and the size yourself, Tandem's rules decide instead.</p>
+            <label for="set-team-guide">The dispatcher's guide<textarea id="set-team-guide" rows="14" maxlength="12000" spellcheck="true"></textarea></label>
+            <p>Write it the way you would brief a person: what each kind of model is for, which agent you prefer for which work, anything about cost. The current team and every model's size are added for it automatically.</p>
+            <div class="form-row"><button id="save-team" class="primary" type="button">Save</button><button id="reset-team" type="button">Use the built-in guide</button><span id="team-settings-status" role="status"></span></div>
           </section>
           <section data-panel="learning" hidden>
             <h3>Learning</h3>
@@ -183,9 +226,9 @@
             <h3>Subagents</h3>
             <label class="check"><input type="checkbox" id="set-child-window"> Open each subagent in its own window, on the right of the screen</label>
             <label class="check"><input type="checkbox" id="set-ping-main"> Tell the main agent when a subagent finishes</label>
-            <label class="check"><input type="checkbox" id="set-allow-full"> Allow full access mode for Codex and Gemini (no sandbox)</label>
+            <label class="check"><input type="checkbox" id="set-allow-full"> Allow Full access mode for agents (no sandbox, no permission prompts)</label>
             <label class="check"><input type="checkbox" id="set-tools"> Give Claude Code and Codex Tandem's browser, build and test tools</label>
-            <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself. Full access lets an agent use the internet and change anything on this computer, not only the project: it is off until you allow it here, then chosen per agent with a warning. Subagents never get it. The tools let an agent run your package.json scripts (build, test, a dev server) and open a browser window of its own to check the running app; they refuse to run scripts while the agent is in a read-only mode.</p>
+            <p>A subagent window is only its chat, so it costs almost nothing to keep open. When a subagent finishes, the main agent's chat always gets a line saying so. With the second option on, an idle main agent also receives the result as a message and can carry on; a busy one is left alone and sees the result through its job command. Sending that message uses a little of the main agent's quota, so switch it off if you would rather read results yourself. Full access lets an agent run any command without asking, use the internet and change anything on this computer, not only the project. Only Codex has a real sandbox in its other modes (Edit: its own folder, with network); Claude Code and Gemini rely on their permission prompts, and Antigravity refuses commands outside Full access. Full access is off until you allow it here, and then each agent asks you again, with a warning, when you pick it. Subagents never get it. The tools let an agent run your package.json scripts (build, test, a dev server) and open a browser window of its own to check the running app; they refuse to run scripts while the agent is in a read-only mode.</p>
           </section>
           <section data-panel="structure" hidden>
             <h3>Standardize structure</h3>
@@ -207,21 +250,22 @@
           </section>
           <section data-panel="look" hidden>
             <h3>Appearance</h3>
-            <div class="form-row"><button type="button" data-open="#btn-eco" id="set-eco"></button><button type="button" data-open="#btn-lite" id="set-lite"></button></div>
-            <p>Lite reloads the page. Eco lowers the frame rate and effects to save battery.</p>
+            <label class="check"><input type="checkbox" id="set-planets"> Planet view: a live 3D picture of the agents, in the side panel</label>
+            <label class="check"><input type="checkbox" id="set-eco"> Eco: lower frame rate and fewer effects in the planet view</label>
+            <p>Tandem is text first. The planet view is off until you switch it on, and its 3D code is not loaded before then. With it on, an idle laptop uses more battery.</p>
           </section>
         </div>
       </div>
     </dialog>
     <dialog id="prompt-dialog">
-      <header><div><span class="eyebrow">SAVED ON THIS COMPUTER · ALL AGENTS</span><h2>Global prompt</h2></div><button id="close-prompt">Close ×</button></header>
+      <header><div><span class="eyebrow">Saved on this computer · all agents</span><h2>Global prompt</h2></div><button id="close-prompt">Close ×</button></header>
       <label for="global-prompt">Standing instructions<textarea id="global-prompt" maxlength="8000" rows="10" placeholder="At the start of every session, search my site for context about {{repo}} and read what is relevant before you begin."></textarea></label>
       <label class="check"><input type="checkbox" id="prompt-on" checked /> Send to every agent</label>
       <div class="form-row"><button id="save-prompt">Save prompt</button><span id="prompt-status" role="status"></span></div>
-      <p>Sent with the first message of each session, and again after a repository switch, a new chat or an edit. Applies to Claude, Codex, API planets and subagent chats. Placeholders: {{repo}} folder name, {{path}} full path, {{agent}} the agent's name. Stored in Tandem's local .tandem folder, so set it again on another computer.</p>
+      <p>Sent with the first message of each session, and again after a repository switch, a new chat or an edit. Applies to every agent and subagent chat. Placeholders: {{repo}} folder name, {{path}} full path, {{agent}} the agent's name. Stored in Tandem's local .tandem folder, so set it again on another computer.</p>
     </dialog>
     <dialog id="notes-dialog">
-      <header><div><span class="eyebrow">SAVED ON THIS COMPUTER</span><h2>Repository notes</h2></div><button id="close-notes">Close ×</button></header>
+      <header><div><span class="eyebrow">Saved on this computer</span><h2>Repository notes</h2></div><button id="close-notes">Close ×</button></header>
       <p id="notes-repo"></p>
       <label for="repo-notes">Goals, decisions, next steps<textarea id="repo-notes" maxlength="30000" rows="14" placeholder="Keep a handoff for tomorrow…"></textarea></label>
       <div class="form-row"><button id="save-notes">Save notes</button><span id="notes-status" role="status"></span></div>
@@ -229,7 +273,7 @@
     </dialog>
 
     <dialog id="profile-dialog">
-      <header><div><span class="eyebrow">SAVED LOCALLY · ALL AGENTS</span><h2>Learning profile</h2></div><button id="close-profile">Close ×</button></header>
+      <header><div><span class="eyebrow">Saved locally · all agents</span><h2>Learning profile</h2></div><button id="close-profile">Close ×</button></header>
       <label>Stack you know<textarea id="profile-familiar" maxlength="2000" rows="3" placeholder="React, JavaScript, basic HTML/CSS…"></textarea></label>
       <label>What you want to learn<textarea id="profile-learning" maxlength="2000" rows="3" placeholder="Backend design, databases, testing…"></textarea></label>
       <div class="form-row"><label>Experience<select id="profile-level"><option value="new">New</option><option value="familiar">Familiar</option><option value="confident">Confident</option></select></label><label>Teaching<select id="profile-style"><option value="plain">Plain language</option><option value="examples">Examples</option><option value="diagrams">Diagrams</option><option value="questions">Guiding questions</option></select></label><label>Checkpoints<select id="profile-checkpoints"><option value="light">Light</option><option value="normal">Normal</option><option value="frequent">Frequent</option></select></label></div>
@@ -239,7 +283,7 @@
       <p>Learning mode applies to main agents only. When it is on they stay read-only and work through four checkpoints with you: <b>Build</b> (you reason first), <b>Design</b> (you confirm it), <b>Implement</b> (nothing changes until you press <b>Approve &amp; implement</b>) and <b>Report</b>. Each finished step is saved to the learning journal. Teaching is tuned to your experience level and style. The profile, repository stack and journal are sent only while learning mode is on. Subagent chats are not affected.</p>
     </dialog>
     <dialog id="push-dialog" class="push-dialog">
-      <header><div><span class="eyebrow">ORIGIN · TANDEM BRANCH</span><h2>Push your work</h2></div><button id="close-push">Close ×</button></header>
+      <header><div><span class="eyebrow">Origin · Tandem branch</span><h2>Push your work</h2></div><button id="close-push">Close ×</button></header>
       <div class="form-row push-target">
         <label>From<select id="push-source"></select></label>
         <label>To branch<span class="branch-input"><b id="push-prefix">tandem/</b><input id="push-branch" maxlength="80" spellcheck="false" aria-label="Branch name after tandem/" /></span></label>
@@ -253,7 +297,7 @@
       <p class="push-note">Only <b>tandem/…</b> branches can be pushed to, and never by force. If another agent pushed to the same branch first, git will refuse and you merge before trying again.</p>
     </dialog>
     <dialog id="journal-dialog" class="journal-dialog">
-      <header><div><span class="eyebrow">THIS PROJECT · .tandem/LEARNING.md</span><h2>Learning journal</h2></div><button id="close-journal">Close ×</button></header>
+      <header><div><span class="eyebrow">This project · .tandem/LEARNING.md</span><h2>Learning journal</h2></div><button id="close-journal">Close ×</button></header>
       <p>What you decided and learned, step by step. Agents in learning mode are reminded of the latest entries, so each session builds on the last. It is a plain Markdown file in the project's <b>.tandem</b> folder, kept out of Git by default.</p>
       <div id="journal-list"></div>
       <details class="learning-doc"><summary>learning.md: what was built, explained for you</summary><pre id="doc-learning"></pre></details>
@@ -262,7 +306,7 @@
       <div class="form-row"><button id="journal-clear">Clear journal</button></div>
     </dialog>
     <dialog id="setup-dialog" class="setup-dialog">
-      <header><div><span class="eyebrow">TANDEM SETUP</span><h2>Make this your dev space</h2></div><button id="close-setup">Close ×</button></header>
+      <header><div><span class="eyebrow">Tandem setup</span><h2>Make this your dev space</h2></div><button id="close-setup">Close ×</button></header>
       <p class="setup-lede">Pick where your project lives, then connect whichever models you want to work with. Tandem keeps the project context, learning profile and work flow in one place.</p>
       <section class="setup-section"><span class="kicker">1 · PROJECT</span><div class="setup-grid"><button data-setup="folder"><b>Open a folder</b><small>Use a project already on this computer</small></button><button data-setup="clone"><b>Clone from GitHub</b><small>Use your GitHub account or a public link</small></button><button data-setup="new"><b>New project</b><small>Create a fresh local Git project</small></button></div></section>
       <section class="setup-section"><span class="kicker">2 · CONNECTIONS</span><div class="setup-grid"><button data-setup="github"><b>GitHub</b><small id="setup-github">Connect to browse and clone repositories</small></button><button data-setup="agents"><b>Agents & models</b><small id="setup-agents">Choose Claude, Codex, local or API models</small></button><button data-setup="profile"><b>Learn profile</b><small>Tell Tandem what you know and want to learn</small></button></div></section>

@@ -1,7 +1,0 @@
-/* Added on top of the original look, one file per feature. They only extend it: same fonts, colours and mood. */
-@import './compact-chat.css';
-@import './push.css';
-@import './subagents.css';
-@import './learning.css';
-@import './panels.css';
-@import './scrollbars.css';

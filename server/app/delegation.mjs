@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { APP_ROOT, HOST, PORT } from './config.mjs';
 
 const TOOLS_INSTRUCTIONS = `[Tandem tools]
-You have Tandem's own tools (the "tandem" MCP server): project_commands, run_script (build, test, lint), dev_server_start / dev_server_status / dev_server_stop, and a browser of your own: browser_open, browser_snapshot, browser_click, browser_type, browser_screenshot, browser_console, browser_close. To check your work, run the project's tests and build with run_script, start the dev server, open it in the browser and look at the page. The user can see your browser window.
+You have Tandem's own tools (the "tandem" MCP server): project_commands, run_script (build, test, lint), dev_server_start / dev_server_status / dev_server_stop, and a browser of your own: browser_open, browser_snapshot, browser_click, browser_type, browser_screenshot, browser_console, browser_close, plus web_search and download_asset (save images, fonts or other files from the web into your folder). To check your work, run the project's tests and build with run_script, start the dev server, open it in the browser and look at the page. The user can see your browser window.
 
 `;
 

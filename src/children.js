@@ -1,5 +1,4 @@
 import { ChatPanel } from './chat.js';
-import './children.css';
 
 const MODES = {
   claude: [{ id: 'plan', label: 'Plan', hint: 'Read-only' }, { id: 'ask', label: 'Ask', hint: 'Ask before changes' }, { id: 'edit', label: 'Edit', hint: 'Allow file edits' }, { id: 'auto', label: 'Auto', hint: 'Claude checks actions' }],
@@ -102,7 +101,6 @@ export function createChildChats({ panels, send, selectParent, notice, isDemo, m
         forward: (text) => { const parent = panels[c.parentId]; if (!parent) return; parent.setDraft(`Follow-up from ${name(c.provider)} — ${c.title}:\n\n${text}`); close(); selectParent(c.parentId); },
       } });
       root.style.setProperty('--c', color(c.provider)); root.classList.add('on');
-      const row = root.querySelector('.a-row'); row.removeAttribute('role'); row.removeAttribute('tabindex'); row.removeAttribute('title');
       root.querySelector('.c-new').hidden = true;
       v = { panel, signatures: new Map() }; views.set(c.id, v);
     }

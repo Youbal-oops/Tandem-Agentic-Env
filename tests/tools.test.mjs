@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRunner } from '../server/tools/runner.mjs';
 import { createTools } from '../server/tools/index.mjs';
+import { createWeb } from '../server/tools/web.mjs';
 import { createWorkspace } from '../server/workspace.mjs';
 import { createDelegation } from '../server/app/delegation.mjs';
 import { STARTERS } from './fixtures/starters.mjs';
@@ -41,9 +42,10 @@ test('only package.json scripts run, and their output and exit code come back', 
 });
 
 test('a dev server is started once per agent, reports its address and stops', async (t) => {
-  const dir = project(t, { dev: node("console.log('ready on http://localhost:5555/'); setInterval(() => {}, 1000)") });
+  // Stop the server before its folder is deleted: hooks run in the order they were added, and Windows will not delete a folder a live process is using.
   const runner = createRunner();
   t.after(() => runner.closeAll());
+  const dir = project(t, { dev: node("console.log('ready on http://localhost:5555/'); setInterval(() => {}, 1000)") });
   const started = await runner.startServer('a', dir, 'dev');
   assert.equal(started.url, 'http://localhost:5555/');
   assert.equal(runner.serverStatus('a').running, true);
@@ -130,6 +132,7 @@ test('Claude and Codex are started with the tandem MCP server only while the too
 
   const codex = await lastArgs('codex', 'hello', 1);
   assert.ok(codex.args.some((a) => a.startsWith('mcp_servers.tandem.command=')), 'codex gets the server');
+  assert.ok(codex.args.includes('mcp_servers.tandem.default_tools_approval_mode="approve"'), 'codex exec cannot ask, so the tools are pre-approved');
   const env = codex.args.find((a) => a.startsWith('mcp_servers.tandem.env='));
   assert.match(env, /TANDEM_TOOLS_URL = "http:\/\/127\.0\.0\.1:\d+\/api\/tools"/);
   assert.match(env, /TANDEM_TOOLS_TOKEN = "[0-9a-f]{48}"/);
@@ -150,4 +153,48 @@ test('Claude and Codex are started with the tandem MCP server only while the too
   assert.match(w.toolGuard('codex'), /read-only/);
   w.action({ t: 'mode', agent: 'codex', mode: 'edit' });
   assert.equal(w.toolGuard('codex'), null);
+});
+
+test('downloads stay inside the agent folder, keep existing files, and only fetch web addresses', async (t) => {
+  const dir = tmp(t, 'tandem-dl-');
+  const files = http.createServer((req, res) => {
+    if (req.url === '/logo.png') { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(Buffer.from([137, 80, 78, 71])); }
+    else if (req.url === '/big') { res.writeHead(200, { 'Content-Length': String(60 * 1024 * 1024) }); res.end(); }
+    else res.writeHead(404).end();
+  });
+  await new Promise((r) => files.listen(0, '127.0.0.1', r));
+  t.after(() => files.close());
+  const base = `http://127.0.0.1:${files.address().port}`;
+  const tools = createTools({ cwdFor: () => dir, getBridge: () => undefined, guard: (id) => (id === 'locked' ? 'read-only mode' : null) });
+
+  const ok = await tools.call('a', 'download_asset', { url: `${base}/logo.png`, path: 'assets/img/logo.png' });
+  assert.equal(ok.isError, undefined, ok.content[0].text);
+  assert.deepEqual(JSON.parse(ok.content[0].text).path, 'assets/img/logo.png');
+  assert.deepEqual([...fs.readFileSync(path.join(dir, 'assets/img/logo.png'))], [137, 80, 78, 71]);
+  assert.match((await tools.call('a', 'download_asset', { url: `${base}/logo.png`, path: 'assets/img/logo.png' })).content[0].text, /already exists/);
+  assert.equal((await tools.call('a', 'download_asset', { url: `${base}/logo.png`, path: 'assets/img/logo.png', overwrite: true })).isError, undefined);
+  for (const p of ['../escape.png', '/abs.png', 'C:/abs.png', 'a/../../b.png', '.git/hooks/x', '.tandem/x']) assert.equal((await tools.call('a', 'download_asset', { url: `${base}/logo.png`, path: p })).isError, true, p);
+  for (const url of ['file:///C:/x', 'ftp://x/y', 'nope']) assert.equal((await tools.call('a', 'download_asset', { url, path: 'x.bin' })).isError, true, url);
+  assert.match((await tools.call('a', 'download_asset', { url: `${base}/missing`, path: 'm.png' })).content[0].text, /404/);
+  assert.match((await tools.call('a', 'download_asset', { url: `${base}/big`, path: 'big.bin' })).content[0].text, /limit is 50 MB/);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['assets'], 'failed downloads leave nothing behind');
+  assert.equal((await tools.call('locked', 'download_asset', { url: `${base}/logo.png`, path: 'z.png' })).content[0].text, 'read-only mode', 'read-only modes cannot add files');
+});
+
+test('web search returns titles, real addresses and summaries from the results page', async () => {
+  const html = `<div class="result"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fguitar%3Fa%3D1&amp;rut=x">Free <b>guitar</b> model</a>
+    <a class="result__snippet" href="x">A &amp; B textures for a guitar</a></div>
+    <div class="result"><a class="result__a" href="https://duckduckgo.com/y.js?ad=1">Advert</a></div>
+    <div class="result"><a class="result__a" href="https://other.org/page">Other</a><a class="result__snippet">Second hit</a></div>`;
+  const asked = [];
+  const tools = createTools({ cwdFor: () => os.tmpdir(), web: createWeb({ fetchImpl: async (url) => (asked.push(url), { ok: true, text: async () => html }) }) });
+  const out = JSON.parse((await tools.call('a', 'web_search', { query: 'guitar 3d model' })).content[0].text);
+  assert.match(asked[0], /q=guitar%203d%20model/);
+  assert.deepEqual(out.results, [
+    { title: 'Free guitar model', url: 'https://example.com/guitar?a=1', snippet: 'A & B textures for a guitar' },
+    { title: 'Other', url: 'https://other.org/page', snippet: 'Second hit' },
+  ]);
+  const empty = createTools({ cwdFor: () => os.tmpdir(), web: createWeb({ fetchImpl: async () => ({ ok: true, text: async () => '<html></html>' }) }) });
+  assert.match((await empty.call('a', 'web_search', { query: 'x' })).content[0].text, /No results/);
+  assert.equal((await empty.call('a', 'web_search', { query: ' ' })).isError, true);
 });

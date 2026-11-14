@@ -1,6 +1,6 @@
 // Small helpers for text and for the agent child processes.
 
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 
 export const trunc = (s, n) => {
   s = String(s ?? '');
@@ -25,7 +25,10 @@ export function killTree(proc) {
   if (!proc || proc.exitCode !== null || !proc.pid) return;
   if (process.platform === 'win32') {
     proc.stdin?.end();
-    execFile('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { windowsHide: true }, (err) => { if (err && proc.exitCode === null) proc.kill(); });
+    // Synchronous on purpose: called while Tandem or a test is shutting down, an asynchronous taskkill never runs and the
+    // whole tree (npm, cmd and the real server under it) is left running.
+    try { execFileSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 }); }
+    catch { if (proc.exitCode === null) proc.kill(); }
   }
   else proc.kill('SIGTERM');
 }

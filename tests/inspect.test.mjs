@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { listRepoFiles, readRepoFile, readRepoDiff } from '../server/inspect.mjs';
+import { listRepoFiles, readRepoFile, readRepoDiff, writeRepoFile } from '../server/inspect.mjs';
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-inspect-'));
   const repo = path.join(root, 'repo'); fs.mkdirSync(repo);
@@ -42,4 +42,20 @@ test('staged and unstaged diffs use the real git repository', async (t) => {
   assert.match((await readRepoDiff(repo, 'unstaged')).text, /\+working/);
   assert.match((await readRepoDiff(repo, 'combined')).text, /-original/);
   await assert.rejects(readRepoDiff(repo, 'arbitrary'), /valid diff/);
+});
+
+test('the code view saves an existing file, and refuses one that changed on disk or lies outside', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-save-'));
+  try {
+    fs.writeFileSync(path.join(root, 'a.txt'), 'one');
+    const read = readRepoFile(root, 'a.txt');
+    const saved = writeRepoFile(root, 'a.txt', 'two', read.mtime);
+    assert.equal(fs.readFileSync(path.join(root, 'a.txt'), 'utf8'), 'two');
+    assert.equal(saved.bytes, 3);
+    assert.throws(() => writeRepoFile(root, 'a.txt', 'three', read.mtime - 5000), /changed on disk/);
+    assert.throws(() => writeRepoFile(root, 'new.txt', 'x'), /ENOENT/);
+    assert.throws(() => writeRepoFile(root, '../a.txt', 'x'), /outside/);
+    assert.throws(() => writeRepoFile(root, 'a.txt', 'x'.repeat(300 * 1024)), /256 KB/);
+    assert.equal(fs.readFileSync(path.join(root, 'a.txt'), 'utf8'), 'two');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,5 +1,5 @@
-// The agents in the UI: a chat panel per planet, events and meta arriving from the server, what each planet
-// is drawn doing, and which agent is selected.
+// The agents in the UI: a chat panel and a sidebar row per agent, events and meta arriving from the server, which agent
+// is selected, and (only while the planet view is on) what each planet is drawn doing.
 
 import { AGENT_LOOK, PROVIDER_LOOK, shade } from '../looks.js';
 import { ChatPanel, EDIT_TOOLS } from '../chat.js';
@@ -12,15 +12,15 @@ export function initAgents(app) {
   // ---------------------------------------------------------------- panels
   function createPanel(id, provider = id) {
     awaiting[id] = new Set();
-    act[id] = { chars: 0, rate: 0, spark: new Array(56).fill(0), tps: 0 };
+    act[id] = { chars: 0, rate: 0, tps: 0 };
     warned[id] = {};
-    if (!$(`#chat-${id}`)) { const el = document.createElement('section'); el.id = `chat-${id}`; $('#left').insertBefore(el, $('#left-resize')); }
+    if (!$(`#chat-${id}`)) { const el = document.createElement('section'); el.id = `chat-${id}`; $('#chats').append(el); }
     panels[id] = new ChatPanel($(`#chat-${id}`), {
       id,
       name: NAMES[id],
       modes: MODES[provider] || [{ id: 'read', label: 'Chat only', hint: 'No local file or shell tools' }],
       provider,
-      number: AGENTS.indexOf(id) + 1,
+      rowHost: $('#agent-rows'),
       models: MODEL_PRESETS[provider] || [],
       handlers: {
         effort: (effort) => (ui.demo ? onMeta(id, { effort }) : app.net.send({ t: 'effort', agent: id, effort })),
@@ -28,7 +28,7 @@ export function initAgents(app) {
         send: (text, attachments) => (ui.demo ? app.demo.respond(id, text) : app.net.send({ t: 'send', agent: id, text, attachments })),
         stop: () => app.net.send({ t: 'stop', agent: id }),
         mode: (mode) => {
-          if (mode === 'full' && !ui.demo && !confirm('Full access removes the sandbox. This agent can run any command, use the internet and change anything on this computer your account can, not just this project. Tandem cannot undo that.\n\nSwitch to Full access?')) return;
+          if (mode === 'full' && !ui.demo && !confirm(`Full access for ${NAMES[id]}: no sandbox and no permission prompts. It can run any command, use the internet and change or delete anything on this computer your account can, not just this project. Tandem cannot undo that.\n\nSwitch ${NAMES[id]} to Full access?`)) return;
           if (ui.demo) onMeta(id, { mode }); else app.net.send({ t: 'mode', agent: id, mode });
         },
         newChat: () => (ui.demo ? (panels[id].reset([]), onMeta(id, { busy: false })) : app.net.send({ t: 'newchat', agent: id })),
@@ -40,7 +40,7 @@ export function initAgents(app) {
         implement: (skipDesign) => (ui.demo ? app.showNotice('Turn off Demo to use learning mode.') : app.net.send({ t: 'implement', agent: id, ...(skipDesign ? { skipDesign: true } : {}) })),
         confirmDesign: () => (ui.demo ? app.showNotice('Turn off Demo to use learning mode.') : app.net.send({ t: 'confirm-design', agent: id })),
         forward: (text) => forward(id, text),
-        focus: () => select(ui.sel === id ? null : id),
+        focus: () => { app.team?.hide(); select(id); },
       },
     });
     panels[id].setLearning(ui.learning);
@@ -50,9 +50,9 @@ export function initAgents(app) {
   }
 
   app.reconcile = function reconcile(next) {
-    const { scene, info, childChats, labelEls } = app;
+    const { info, childChats } = app;
     for (const id of [...AGENTS]) if (!next.some((a) => a.id === id)) {
-      panels[id].root.remove(); delete panels[id]; labelEls[id]?.remove(); delete labelEls[id]; scene.removePlanet(id);
+      panels[id].destroy(); delete panels[id]; app.planets.remove(id);
       AGENTS.splice(AGENTS.indexOf(id), 1); delete configs[id];
     }
     next.forEach((c, i) => {
@@ -68,17 +68,21 @@ export function initAgents(app) {
         const ring = Number.isInteger(c.ring) ? c.ring : typeof c.ring === 'boolean' ? Number(c.ring) : providerLook(c.provider).ring;
         AGENT_LOOK[c.id] = original ? { ...original, name: c.name }
           : { ...providerLook(c.provider), style, ring, name: c.name, hex, rim: hex, palette: [shade(hex, 0, 0.82), shade(hex, 0, 0.5), hex, shade(hex, 1, 0.82)], orbit: { a: 150 + i * 76, b: 138 + i * 70, tilt: 0.03, speed: 0.07 / (1 + i * 0.3), phase: i * 2.4 }, radius: 18 };
-        scene.addPlanet(c.id, AGENT_LOOK[c.id]);
         createPanel(c.id, c.provider);
-        const el = document.createElement('div'); el.className = 'pl'; el.dataset.agent = c.id; el.innerHTML = '<b></b><small>idle</small>'; $('b', el).textContent = c.name; el.style.color = hex; $('#plabels').append(el); labelEls[c.id] = el;
+        app.planets.add(c.id);
       }
       panels[c.id].root.style.setProperty('--c', AGENT_LOOK[c.id].hex);
+      panels[c.id].row.style.setProperty('--c', AGENT_LOOK[c.id].hex);
       panels[c.id].setConversation(c.conversationId);
       onMeta(c.id, { available: c.available ?? true });
     });
     info.setAgents(next, AGENT_LOOK);
-    if (ui.sel && !AGENTS.includes(ui.sel)) select(null);
-    select(ui.sel);
+    select(ui.sel && AGENTS.includes(ui.sel) ? ui.sel : null);
+    app.code?.setAgents(next);
+    app.code?.online();
+    app.review?.setAgents(next);
+    app.team?.setAgents(next);
+    app.vscode?.setAgents(next);
     $('#empty-agents').hidden = AGENTS.length > 0;
     document.body.classList.toggle('no-agents', !AGENTS.length);
     app.renderAgentList();
@@ -114,34 +118,6 @@ export function initAgents(app) {
     setTimeout(() => panels[to].focusInput(), 700);
   }
 
-  // ---------------------------------------------------------------- activity: sparklines + tokens/sec
-  function drawSpark(id) {
-    const ctx = panels[id].spark;
-    const { width: w, height: h } = ctx.canvas;
-    ctx.clearRect(0, 0, w, h);
-    const col = AGENT_LOOK[id].hex;
-    const values = act[id].spark;
-    const pts = values.map((v, i) => [(i / (values.length - 1)) * w, h - 4 - (Math.log10(1 + v) / 3.4) * (h - 10)]);
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, col + '66');
-    g.addColorStop(1, col + '00');
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    pts.forEach(([x, y]) => ctx.lineTo(x, y));
-    ctx.lineTo(w, h);
-    ctx.closePath();
-    ctx.fillStyle = g;
-    ctx.fill();
-    ctx.beginPath();
-    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 10;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
   /** Everything the planet needs to draw an agent, derived from the latest meta. */
   function status(id) {
     const m = panels[id].meta;
@@ -171,7 +147,7 @@ export function initAgents(app) {
     };
   }
   function syncScene(id) {
-    app.scene.setStatus(id, status(id));
+    if (app.planets.on) app.scene.setStatus(id, status(id));
   }
   app.syncScene = syncScene;
 
@@ -198,15 +174,14 @@ export function initAgents(app) {
     }
   }
 
+  // Tokens per second, for the planet view only. Nothing runs here while that view is off.
   setInterval(() => {
+    if (!app.planets.on) return;
     for (const id of AGENTS) {
       const a = act[id];
       a.rate = a.rate * 0.55 + a.chars * 4 * 0.45; // chars per second
       a.tps = a.rate / 4;
-      a.spark.push(a.rate);
-      a.spark.shift();
       a.chars = 0;
-      drawSpark(id);
       syncScene(id);
     }
   }, 250);
@@ -232,6 +207,7 @@ export function initAgents(app) {
   function onEvent(id, ev, replay = false) {
     const { info, scene } = app;
     panels[id].apply(ev, replay);
+    if (!replay) app.team?.onEvent(id, ev);
     if (ev.k === 'delta') act[id].chars += ev.text.length;
     if (ev.k === 'tool') {
       const d = panels[id].entries.get(ev.id)?.data || ev;
@@ -241,9 +217,6 @@ export function initAgents(app) {
       app.logTool(id, d, replay);
       if (!replay) {
         act[id].chars += 20;
-        const what = `${d.name || 'tool'} ${d.summary || ''}`.trim().slice(0, 70);
-        const state = d.status === 'awaiting' ? 'awaiting' : d.status === 'done' ? 'done' : d.status === 'error' ? 'error' : d.status === 'denied' ? 'denied' : 'running';
-        if (d.name) app.boardSet(`${id}:${ev.id}`, id, `${NAMES[id]} › ${what}`, state);
         if (d.status === 'done' && (EDIT_TOOLS.has(d.name) || (d.cls === 'edit'))) scene.workPacket(id);
         if (d.status === 'awaiting' && !was) scene.fx(id, 'ask');
       }
@@ -252,7 +225,6 @@ export function initAgents(app) {
       info.log({ agent: id, kind: 'info', text: `you › ${ev.text.replace(/\s+/g, ' ').slice(0, 80)}`, at: replay ? ev.at : Date.now() });
     } else if (ev.k === 'turn') {
       info.log({ agent: id, kind: ev.ok === false ? 'err' : 'ok', text: `turn ${ev.ok === false ? 'failed' : 'done'}${ev.ms ? ' in ' + (ev.ms / 1000).toFixed(1) + 's' : ''}${ev.cost ? ' · $' + ev.cost.toFixed(3) : ''}`, at: replay ? ev.at : Date.now() });
-      if (!replay) app.boardSet(`${id}:turn:${ev.id}`, id, `${NAMES[id]} › finished a task`, ev.ok === false ? 'error' : 'done');
     } else if (ev.k === 'error') {
       info.log({ agent: id, kind: 'err', text: ev.text.split('\n')[0].slice(0, 120), at: replay ? ev.at : Date.now() });
     } else if (ev.k === 'note') {
@@ -271,20 +243,22 @@ export function initAgents(app) {
   app.onMeta = onMeta;
 
   // ---------------------------------------------------------------- selection
+  /** Open one agent's chat. There is always one open while any agent exists: `null` keeps the current one, or falls back to the first. */
   function select(id) {
     if (id && !panels[id]) return;
+    if (!id) id = (ui.sel && panels[ui.sel] ? ui.sel : AGENTS[0]) || null;
+    const changed = id !== ui.sel;
     app.childChats?.parentSelected(id);
-    ui.sel = id || null;
+    ui.sel = id;
     document.body.dataset.sel = ui.sel || '';
-    if (id && ui.todoMode && app.net?.open && configs[id]?.provider !== 'api') app.net.send({ t: 'todos', agent: id }); // the checklist follows the code you edit elsewhere
+    if (id && changed && ui.todoMode && app.net?.open && configs[id]?.provider !== 'api') app.net.send({ t: 'todos', agent: id }); // the checklist follows the code you edit elsewhere
     for (const a of AGENTS) {
       panels[a].root.classList.toggle('on', a === ui.sel);
-      panels[a].root.classList.toggle('collapsed', a !== ui.sel);
+      panels[a].row.classList.toggle('on', a === ui.sel);
+      panels[a].row.setAttribute('aria-current', String(a === ui.sel));
     }
-    app.scene.setSelected(ui.sel);
     app.info.setSelected(ui.sel);
-    if (ui.sel) setTimeout(() => { panels[ui.sel]?.focusInput(); panels[ui.sel]?.root.scrollIntoView({ block: 'nearest' }); }, 500);
-    else document.activeElement?.blur?.();
+    if (ui.sel && changed && !document.querySelector('dialog[open]')) requestAnimationFrame(() => { panels[ui.sel]?.autosize(); panels[ui.sel]?.focusInput(); });
   }
   app.select = select;
 

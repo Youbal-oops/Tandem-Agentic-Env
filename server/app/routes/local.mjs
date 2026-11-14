@@ -2,15 +2,18 @@
 
 import os from 'node:os';
 import { listFolders } from '../../folders.mjs';
-import { listRepoFiles, readRepoDiff, readRepoFile } from '../../inspect.mjs';
+import { listRepoFiles, readRepoDiff, readRepoFile, writeRepoFile } from '../../inspect.mjs';
 
-export function createLocalRoutes({ agents, hub, snapshot }) {
+export function createLocalRoutes({ agents, hub, snapshot, workDir = () => ({ cwd: agents.cwd }) }) {
   const inspect = (kind) => async (m, conn) => {
-    const cwd = agents.cwd;
+    // `source` picks the folder: the repository, or one agent's worktree (where that agent's edits actually are).
+    const source = typeof m.source === 'string' && m.source ? m.source : 'repo';
+    const cwd = source === 'repo' ? agents.cwd : workDir(source).cwd;
     try {
-      const data = kind === 'files' ? listRepoFiles(cwd, m.path || '') : kind === 'file' ? readRepoFile(cwd, m.path) : await readRepoDiff(cwd, m.mode);
-      conn.send({ t: 'inspect', request: m.request, kind, cwd, ...data });
-    } catch (e) { conn.send({ t: 'inspect', request: m.request, cwd, error: e.message }); }
+      const data = kind === 'files' ? listRepoFiles(cwd, m.path || '') : kind === 'file' ? readRepoFile(cwd, m.path)
+        : kind === 'save' ? writeRepoFile(cwd, m.path, m.text, m.mtime) : await readRepoDiff(cwd, m.mode);
+      conn.send({ t: 'inspect', request: m.request, kind, cwd, source, ...data });
+    } catch (e) { conn.send({ t: 'inspect', request: m.request, kind, cwd, source, path: typeof m.path === 'string' ? m.path : '', error: e.message }); }
   };
 
   return {
@@ -60,6 +63,7 @@ export function createLocalRoutes({ agents, hub, snapshot }) {
       files: inspect('files'),
       file: inspect('file'),
       diff: inspect('diff'),
+      savefile: inspect('save'),
     },
   };
 }

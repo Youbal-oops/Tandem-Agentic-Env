@@ -3,10 +3,9 @@
 
 const $ = (s) => document.querySelector(s);
 
-export function createSettingsDialog({ send, connected, notify, getAgent }) {
+export function createSettingsDialog({ send, connected, notify, openReview = () => {}, getAgents = () => [], defaultGuide = () => '' }) {
   let saved = { enabled: true, maxLines: 300, maxFiles: 10, hardStop: true, margin: 25 };
   let savedAgents = { pingMain: true, allowFull: false, tools: true };
-  let reviewWindow = null;
   let touched = false; // true once the user has changed a control; until then the server's values fill the form
   const held = new Set();
 
@@ -43,9 +42,33 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     sync();
   }
 
+  // ---- Team: who assigns tasks, and the dispatcher's guide. An empty saved guide means the built-in one.
+  let savedTeam = { dispatcher: 'auto', guide: '' };
+  let teamTouched = false;
+  function teamOptions() {
+    const select = $('#set-team-dispatcher'); const value = teamTouched ? select.value : savedTeam.dispatcher;
+    select.querySelectorAll('option[data-agent]').forEach((o) => o.remove());
+    for (const a of getAgents()) { const o = Object.assign(document.createElement('option'), { value: a.id, textContent: `Always ${a.name}, on its cheapest model` }); o.dataset.agent = a.id; select.append(o); }
+    select.value = [...select.options].some((o) => o.value === value) ? value : 'auto';
+  }
+  function showTeam(team, force) {
+    if (!team) return;
+    savedTeam = { dispatcher: team.dispatcher || 'auto', guide: team.guide || '' };
+    if (force || !teamTouched) { teamTouched = false; teamOptions(); $('#set-team-guide').value = savedTeam.guide || defaultGuide(); $('#team-settings-status').textContent = savedTeam.guide ? 'Using your guide' : 'Using the built-in guide'; }
+  }
+  for (const id of ['#set-team-dispatcher', '#set-team-guide']) $(id).addEventListener('input', () => { teamTouched = true; $('#team-settings-status').textContent = 'Unsaved changes'; });
+  $('#save-team').addEventListener('click', () => {
+    if (!connected()) return notify('Connect to the local server first.');
+    const text = $('#set-team-guide').value.trim();
+    send({ t: 'savesettings', settings: { team: { dispatcher: $('#set-team-dispatcher').value, guide: text === defaultGuide().trim() ? '' : text } } });
+    $('#team-settings-status').textContent = 'Saving…';
+  });
+  $('#reset-team').addEventListener('click', () => { $('#set-team-guide').value = defaultGuide(); teamTouched = true; $('#team-settings-status').textContent = 'Built-in guide restored. Press Save to keep it.'; });
+
   function labels() {
-    $('#set-eco').textContent = `Eco mode: ${$('#btn-eco').classList.contains('on') ? 'on' : 'off'}`;
-    $('#set-lite').textContent = `Lite mode: ${$('#btn-lite').classList.contains('on') ? 'on' : 'off'}`;
+    teamOptions();
+    $('#set-eco').checked = $('#btn-eco').classList.contains('on');
+    $('#set-planets').checked = $('#btn-planets').getAttribute('aria-pressed') === 'true';
     const learn = $('#btn-learning').getAttribute('aria-pressed') === 'true';
     $('#set-learning-mode').checked = learn;
     $('#set-todo-mode').checked = $('#profile-todo-mode').checked;
@@ -57,18 +80,10 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     document.querySelectorAll('#settings-dialog [data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== name; });
   }
 
-  function openReview() {
-    const id = getAgent();
-    const url = `/review.html?agent=${encodeURIComponent(id || '')}`;
-    if (reviewWindow && !reviewWindow.closed) { reviewWindow.focus(); return; }
-    reviewWindow = window.open(url, 'tandem-review', 'popup=yes,width=1180,height=820');
-    if (!reviewWindow) notify('The browser blocked the pop-out window. Allow pop-ups for Tandem, then try again.');
-  }
-
   function badge() {
     const btn = $('#btn-review');
     btn.classList.toggle('attention', held.size > 0);
-    btn.textContent = held.size ? `Review (${held.size} held)` : 'Review';
+    btn.textContent = held.size ? `Review (${held.size} waiting)` : 'Review';
   }
 
   $('#btn-settings').addEventListener('click', () => { if (!connected()) return notify('Connect to the local server first.'); labels(); section('review'); $('#settings-dialog').showModal(); send({ t: 'localstate' }); });
@@ -91,6 +106,8 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     status('Saving…');
   });
   $('#set-learning-mode').addEventListener('change', () => $('#btn-learning').click());
+  $('#set-eco').addEventListener('change', () => $('#btn-eco').click());
+  $('#set-planets').addEventListener('change', () => { $('#settings-dialog').close(); $('#btn-planets').click(); });
   $('#set-todo-mode').addEventListener('change', () => $('#profile-todo-mode').click());
   $('#set-child-window').addEventListener('change', (e) => { try { localStorage.setItem('tandem:child-window', String(e.target.checked)); } catch { /* the choice just will not persist */ } });
   $('#set-ping-main').addEventListener('input', touch);
@@ -99,13 +116,12 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
     if (e.target.checked && !confirm('Allow full access mode? An agent in this mode runs without a sandbox: it can use the internet and change anything on this computer your account can reach. You still choose it per agent, and Tandem asks again each time.')) e.target.checked = false;
     sync();
   });
-  $('#btn-review').addEventListener('click', openReview);
-  $('#open-review').addEventListener('click', openReview);
+  $('#open-review').addEventListener('click', () => { $('#settings-dialog').close(); openReview(); });
 
   return {
     /** Server messages: settings arrive on their own, inside local state, and as review updates. */
     receive(msg) {
-      if (msg.t === 'settings') { touched = false; show(msg.settings?.review, true); showAgents(msg.settings?.agents, true); status('Saved'); return true; }
+      if (msg.t === 'settings') { touched = false; show(msg.settings?.review, true); showAgents(msg.settings?.agents, true); showTeam(msg.settings?.team, true); status('Saved'); return true; }
       if (msg.t === 'review') {
         const r = msg.review;
         if (r.held && !held.has(r.agent)) notify(`${r.agent} needs your review: ${r.reason}.`);
@@ -115,6 +131,6 @@ export function createSettingsDialog({ send, connected, notify, getAgent }) {
       }
       return false;
     },
-    local(settings) { show(settings?.review, false); showAgents(settings?.agents, false); },
+    local(settings) { show(settings?.review, false); showAgents(settings?.agents, false); showTeam(settings?.team, false); },
   };
 }

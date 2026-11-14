@@ -26,11 +26,17 @@ export function combineRoutes(...parts) {
   };
 }
 
-export function attachWebSocket(server, { hub, routes, snapshot }) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 128 * 1024 });
+export function attachWebSocket(server, { hub, routes, snapshot, vscode = null }) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
 
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, 'http://localhost');
+    // The embedded editor's own sockets: same Host and Origin rules, then VS Code checks its connection token itself.
+    if (vscode?.handles(url.pathname)) {
+      if (hostOk(req) && req.headers.origin !== undefined && origins.has(req.headers.origin)) vscode.upgrade(req, socket, head);
+      else { socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); }
+      return;
+    }
     const ok =
       url.pathname === '/ws' &&
       hostOk(req) &&

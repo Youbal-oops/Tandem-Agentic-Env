@@ -1,15 +1,7 @@
 // A subagent in its own window: just its conversation, over the same server connection. There is no 3D
 // scene here, so opening it costs a chat panel and nothing else.
 
-import '@fontsource/playfair-display/400-italic.css';
-import '@fontsource/inter/400.css';
-import '@fontsource/jetbrains-mono/400.css';
-import '@fontsource/jetbrains-mono/500.css';
 import './style.css';
-import './workspace.css';
-import './styles/features.css';
-import './children.css';
-import './styles/child-window.css';
 import { ChatPanel } from './chat.js';
 import { createNet } from './net.js';
 
@@ -46,7 +38,6 @@ function build(c) {
   } });
   root.style.setProperty('--c', c.provider === 'claude' ? 'var(--claude)' : 'var(--codex)');
   root.classList.add('on');
-  const row = root.querySelector('.a-row'); row.removeAttribute('role'); row.removeAttribute('tabindex'); row.removeAttribute('title');
   root.querySelector('.c-new').hidden = true;
   return p;
 }

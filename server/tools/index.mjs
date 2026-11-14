@@ -5,13 +5,14 @@
 // the shell puts on globalThis before the server starts. Without it (a plain `node server` run) the browser tools say so.
 
 import { createRunner } from './runner.mjs';
+import { createWeb, webUrl } from './web.mjs';
 
 const str = (description) => ({ type: 'string', description });
 const ref = { type: 'integer', description: 'The number of an element from browser_snapshot.' };
 const obj = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 
 /** Tools that can change files or start processes. They are refused while an agent is in a read-only mode. */
-export const MUTATING_TOOLS = new Set(['run_script', 'dev_server_start']);
+export const MUTATING_TOOLS = new Set(['run_script', 'dev_server_start', 'download_asset']);
 
 const TOOLS = [
   { name: 'project_commands', description: 'List the build, test and other scripts from this project\'s package.json, and which package manager it uses.', inputSchema: obj() },
@@ -21,6 +22,10 @@ const TOOLS = [
     inputSchema: obj({ script: str('Script name from project_commands, usually dev or start.'), args: { type: 'array', items: { type: 'string' } } }, ['script']) },
   { name: 'dev_server_status', description: 'Say whether your dev server is running, its address and its recent output.', inputSchema: obj() },
   { name: 'dev_server_stop', description: 'Stop your dev server.', inputSchema: obj() },
+  { name: 'web_search', description: 'Search the web and get back titles, addresses and short summaries. Open a result with browser_open to read it, or save a file from one with download_asset.',
+    inputSchema: obj({ query: str('What to search for.'), max_results: { type: 'integer', description: 'How many results (default 8, at most 15).' } }, ['query']) },
+  { name: 'download_asset', description: 'Download a file (an image, font, model, data file) from a web address into your folder. The path is relative to your folder, for example assets/logo.png. Existing files are kept unless overwrite is true. At most 50 MB.',
+    inputSchema: obj({ url: str('The address of the file.'), path: str('Where to save it, relative to your folder.'), overwrite: { type: 'boolean', description: 'Replace a file that is already there.' } }, ['url', 'path']) },
   { name: 'browser_open', description: 'Open a web page (http or https, including localhost) in your own Tandem browser window.', inputSchema: obj({ url: str('The address to open.') }, ['url']) },
   { name: 'browser_snapshot', description: 'Read the current page: its text, and a numbered list of the links, buttons and fields you can use with browser_click and browser_type.', inputSchema: obj() },
   { name: 'browser_click', description: 'Click an element from the latest browser_snapshot.', inputSchema: obj({ ref }, ['ref']) },
@@ -37,7 +42,7 @@ const fail = (message) => ({ isError: true, content: [{ type: 'text', text: Stri
  * `cwdFor(agentId)` gives the folder an agent works in. `guard(agentId, toolName)` returns a refusal message or null.
  * `getBridge()` returns the desktop shell's browser, if there is one.
  */
-export function createTools({ cwdFor, guard = () => null, getBridge = () => globalThis.tandemDesktop?.browser, runner = createRunner() }) {
+export function createTools({ cwdFor, guard = () => null, getBridge = () => globalThis.tandemDesktop?.browser, runner = createRunner(), web = createWeb() }) {
   const browser = () => {
     const b = getBridge();
     if (!b) throw new Error('The browser tools need the Tandem desktop app (npm run desktop, or the installed app). This server is running without it.');
@@ -57,6 +62,8 @@ export function createTools({ cwdFor, guard = () => null, getBridge = () => glob
     dev_server_start: async (id, a) => runner.startServer(id, cwdFor(id), a.script, { args: a.args }),
     dev_server_status: async (id) => runner.serverStatus(id),
     dev_server_stop: async (id) => runner.stopServer(id),
+    web_search: async (id, a) => web.search(a.query, a.max_results),
+    download_asset: async (id, a) => web.download(cwdFor(id), webUrl(a.url), a.path, { overwrite: a.overwrite === true }),
     browser_open: async (id, a) => browser().open(id, cleanUrl(a.url)),
     browser_snapshot: async (id) => browser().snapshot(id),
     browser_click: async (id, a) => browser().click(id, Number(a.ref)),

@@ -33,9 +33,13 @@ async function start() {
   window = new BrowserWindow({
     show: !smokeTest,
     width: 1440, height: 940, minWidth: 980, minHeight: 700,
-    backgroundColor: '#07111f',
+    backgroundColor: '#131314',
+    // Tandem's top bar (index.html) is the title bar: no separate menu row, and the window buttons sit over its right end.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#1b1c1d', symbolColor: '#c4c7c5', height: 44 },
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
+  window.removeMenu();
   const appUrl = `http://127.0.0.1:${Number(process.env.TANDEM_PORT || 4317)}`;
   const isAppUrl = (url) => { try { return new URL(url).origin === appUrl; } catch { return false; } };
   // Only Tandem's own pop-out pages may open a window: the review window and a subagent's chat.

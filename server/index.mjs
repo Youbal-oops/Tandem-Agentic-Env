@@ -12,7 +12,7 @@
 
 import path from 'node:path';
 import { HOST, PORT, ROOT } from './app/config.mjs';
-import { modelChoices, specs } from './app/binaries.mjs';
+import { modelCatalog, modelChoices, modelLabels, specs } from './app/binaries.mjs';
 import { createDelegation } from './app/delegation.mjs';
 import { createGitStatus } from './app/git-status.mjs';
 import { createHttpServer } from './app/http.mjs';
@@ -24,6 +24,8 @@ import { createLocalRoutes } from './app/routes/local.mjs';
 import { createPushRoutes } from './app/routes/push.mjs';
 import { createRepoRoutes } from './app/routes/repos.mjs';
 import { createLaunchRoutes } from './app/routes/launch.mjs';
+import { createVscode, defaultDataDir } from './vscode.mjs';
+import { DEFAULT_GUIDE, createDispatcher } from './team-dispatch.mjs';
 import { createImageStore } from './images.mjs';
 import { createRepoService } from './repos.mjs';
 import { createWorkspace } from './workspace.mjs';
@@ -48,18 +50,20 @@ delegation.setToolsEnabled(() => agents.settings().agents.tools);
 const tools = createTools({ cwdFor: (id) => workDir(id).cwd, guard: (id, name) => agents.toolGuard(id, name) });
 agents.onRemoved = (id) => tools.release(id);
 
-const server = createHttpServer({ agents, images, delegationKeys: delegation.keys, tools, gitStatus, getClone: clone.get, modelChoices, services: API_SERVICES });
+const vscode = createVscode({ dataDir: defaultDataDir(ROOT) });
+const server = createHttpServer({ vscode, teamGuide: DEFAULT_GUIDE, agents, images, delegationKeys: delegation.keys, tools, gitStatus, getClone: clone.get, modelChoices, modelLabels, services: API_SERVICES });
 const connectRoutes = createConnectRoutes({ hub, snapshot, agents });
 attachWebSocket(server, {
+  vscode,
   hub,
   snapshot,
   routes: combineRoutes(
-    createLocalRoutes({ agents, hub, snapshot }),
+    createLocalRoutes({ agents, hub, snapshot, workDir }),
     connectRoutes,
     createRepoRoutes({ agents, hub, gitStatus, repoService, clone, snapshot }),
     createPushRoutes({ agents, gitStatus, workDir }),
-    createLaunchRoutes({ workDir, tools }),
-    createAgentRoutes({ agents, hub, snapshot }),
+    createLaunchRoutes({ workDir, tools, vscode }),
+    createAgentRoutes({ agents, hub, snapshot, modelCatalog, dispatcher: createDispatcher({ specs }) }),
   ),
 });
 gitStatus.start();
@@ -67,6 +71,7 @@ gitStatus.start();
 function shutdown() {
   tools.closeAll();
   agents.closeAll();
+  vscode.stop();
 }
 process.on('exit', shutdown);
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) {
@@ -78,7 +83,7 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) {
 
 server.listen(PORT, HOST, () => {
   console.log(`Tandem API  http://${HOST}:${PORT}   (agents work in: ${agents.cwd})`);
-  for (const id of ['claude', 'codex', 'gemini']) console.log(`  ${id.padEnd(7)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: More → Connect agents)'}`);
+  for (const id of ['claude', 'codex', 'gemini', 'antigravity']) console.log(`  ${id.padEnd(11)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: More → Connect agents)'}`);
   console.log('Dev UI      http://localhost:5173  (npm run dev)');
   // Once the server is up, give any connection that is already set up (and has no planet yet) its own planet.
   if (!process.env.TANDEM_NO_AUTOSCAN) connectRoutes.scan();

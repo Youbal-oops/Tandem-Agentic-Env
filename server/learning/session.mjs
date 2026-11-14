@@ -14,7 +14,7 @@ import { applyNotes, delegationIn, delegationNote, learnerNotes, loadBehavior, l
 import { workflowPrompt } from './workflow.mjs';
 import { TODO_IMPLEMENT_TEXT, askedToWrite, askedToWriteNote, checkText, mergeChecklist, scanTodos, todoPrompt } from './todo.mjs';
 
-const READ_ONLY = { claude: 'plan', codex: 'read', gemini: 'plan' };
+const READ_ONLY = { claude: 'plan', codex: 'read', gemini: 'plan', antigravity: 'plan' };
 const LEVELS = ['new', 'familiar', 'confident'];
 const STYLES = ['plain', 'examples', 'diagrams', 'questions'];
 const PACES = ['light', 'normal', 'frequent'];

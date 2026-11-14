@@ -32,21 +32,31 @@ export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({
   tools: typeof input?.tools === 'boolean' ? input.tools : current.tools, // Tandem's browser, build and test tools for agents
 });
 
+/** Team chat: `dispatcher` is 'auto' (the cheapest agent that answers), 'rules' (no model, instant) or one agent's id. An empty guide means the built-in one. */
+export const TEAM_DEFAULTS = Object.freeze({ dispatcher: 'auto', guide: '' });
+export const cleanTeam = (input, current = TEAM_DEFAULTS) => ({
+  dispatcher: typeof input?.dispatcher === 'string' && /^(auto|rules|[a-z][a-z0-9-]{0,50})$/.test(input.dispatcher) ? input.dispatcher : current.dispatcher,
+  guide: typeof input?.guide === 'string' ? input.guide.slice(0, 12000) : current.guide,
+});
+
 export function createSettings({ saved }) {
   let review = cleanReview(saved.settings?.review);
   let agents = cleanAgents(saved.settings?.agents);
   let structure = cleanStructure(saved.settings?.structure);
+  let team = cleanTeam(saved.settings?.team);
   return {
     review: () => review,
     agents: () => agents,
     structure: () => structure,
-    state: () => ({ review, agents, structure }),
+    team: () => team,
+    state: () => ({ review, agents, structure, team }),
     save(input) {
       if (!input || typeof input !== 'object') throw new Error('Invalid settings.');
       if (input.review !== undefined) review = cleanReview(input.review, review);
       if (input.agents !== undefined) agents = cleanAgents(input.agents, agents);
       if (input.structure !== undefined) structure = cleanStructure(input.structure, structure);
-      return { review, agents, structure };
+      if (input.team !== undefined) team = cleanTeam(input.team, team);
+      return { review, agents, structure, team };
     },
   };
 }

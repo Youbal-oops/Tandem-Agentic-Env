@@ -16,19 +16,20 @@ import { createEvents } from './events.mjs';
 import { createClaude } from './claude.mjs';
 import { createCodex } from './codex.mjs';
 import { createGemini } from './gemini.mjs';
+import { createAntigravity } from './antigravity.mjs';
 import { buildMeta, freshStats } from './stats.mjs';
 import { createSummarizer } from './tools.mjs';
 import { quietKill } from './util.mjs';
 
 export { MODES, validModel };
 
-export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex', 'gemini'], environment = {}, taskInstructions = '', mcp = () => null, getInstructions = () => '', denyTool = () => null }) {
+export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex', 'gemini', 'antigravity'], environment = {}, taskInstructions = '', mcp = () => null, getInstructions = () => '', denyTool = () => null }) {
   const { rel, summarize } = createSummarizer(cwd);
   const agents = {};
   for (const id of providers) {
     agents[id] = {
       id,
-      mode: id === 'claude' ? 'ask' : id === 'gemini' ? 'plan' : 'read',
+      mode: id === 'claude' ? 'ask' : id === 'gemini' || id === 'antigravity' ? 'plan' : 'read',
       busy: false,
       sessionId: null,
       model: null,
@@ -66,6 +67,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
   const claude = createClaude(ctx);
   const codex = createCodex(ctx);
   const gemini = createGemini(ctx);
+  const antigravity = createAntigravity(ctx);
 
   /** Stop the process quietly (no failed-turn report). Claude restarts with new flags and resumes its session. */
   function dropProcess(a) {
@@ -96,6 +98,8 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
         proc.stdin.write(JSON.stringify({ type: 'user', message: { role: 'user', content: claudeContent(text, images) } }) + '\n');
       } else if (id === 'gemini') {
         gemini.send(a, text, images);
+      } else if (id === 'antigravity') {
+        antigravity.send(a, text, images);
       } else {
         codex.send(a, text, images);
       }
