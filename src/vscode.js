@@ -16,7 +16,7 @@ export function createVscodePanel({ send, connected, getSelected, isOpen }) {
 
   function renderSources() {
     const select = $('#vs-source');
-    select.replaceChildren(Object.assign(document.createElement('option'), { value: 'repo', textContent: 'Repository' }));
+    select.replaceChildren(Object.assign(document.createElement('option'), { value: 'repo', textContent: 'Repository' }), Object.assign(document.createElement('option'), { value: 'shared', textContent: 'Shared folder (all agents)' }));
     for (const a of agents) select.append(Object.assign(document.createElement('option'), { value: a.id, textContent: `${a.name}'s worktree` }));
     if (![...select.options].some((o) => o.value === source)) source = 'repo';
     select.value = source;
@@ -74,7 +74,7 @@ export function createVscodePanel({ send, connected, getSelected, isOpen }) {
       if (agreed() && !shownUrl && !waiting) open();
     },
     /** Show another folder: the explorer's choice. Reloads the editor if it is running. */
-    setSource(src) { if (src === source || !(src === 'repo' || agents.some((a) => a.id === src))) return; source = src; renderSources(); if (shownUrl) open(); },
+    setSource(src) { if (src === source || !(src === 'repo' || src === 'shared' || agents.some((a) => a.id === src))) return; source = src; renderSources(); if (shownUrl) open(); },
     /** The server became reachable: start the editor now if the panel was opened before that. */
     online() { if (isOpen() && agreed() && !shownUrl && !waiting) open(); },
     setAgents(list) {

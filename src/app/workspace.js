@@ -121,6 +121,8 @@ export function initWorkspace(app) {
   $('#btn-workspace').addEventListener('click', openWorkspace);
   $('#btn-setup').addEventListener('click', () => $('#setup-dialog').showModal());
   $('#close-setup').addEventListener('click', () => $('#setup-dialog').close());
+  // Closing the walkthrough any way at all (Close, Esc, "I'm ready") means it has been seen: it must not come back at every launch.
+  $('#setup-dialog').addEventListener('close', () => { try { localStorage.setItem('tandem:setup-complete', '1'); } catch { /* shown again next launch */ } });
   $('#finish-setup').addEventListener('click', () => { localStorage.setItem('tandem:setup-complete', '1'); $('#setup-dialog').close(); app.showNotice('Setup saved. You can reopen it anytime from Set up.'); });
   document.querySelectorAll('[data-setup]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.setup;

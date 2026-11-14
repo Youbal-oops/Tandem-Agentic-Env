@@ -47,6 +47,8 @@ export function createAntigravity(ctx) {
     const mode = ANTIGRAVITY_MODE[a.mode] || ANTIGRAVITY_MODE.plan;
     const args = [...spec.args, '--output-format', 'stream-json', '--mode', mode.mode, ...(mode.skip ? ['--dangerously-skip-permissions'] : [])];
     if (mode.allow) args.push('--settings', JSON.stringify({ permissions: { allow: mode.allow } })); // this session only; never saved
+    const shared = ctx.sharedDir?.();
+    if (shared) args.push('--add-dir', shared); // the team folder
     if (a.modelPref) args.push('--model', a.modelPref);
     if (a.effort) args.push('--effort', a.effort);
     if (a.sessionId) args.push('--conversation', a.sessionId);
@@ -57,6 +59,9 @@ export function createAntigravity(ctx) {
       fs.writeFileSync(taskFile, task);
       task = `Your task is written in the file ${taskFile}. Read that file first, then carry it out.`;
     }
+    // Outside Full access Antigravity cannot run shell commands from Tandem (it cannot ask, so they are refused). Without this
+    // note it tries to explore with a command, is refused, and ends with no answer.
+    if (!mode.skip) task += '\n\n[Tandem: shell commands are not available in this mode and will be refused. To look around the project, use your file tools (view_file, list_dir, find_by_name, grep_search). Then answer.]';
     args.push(`-p=${task}`);
     const proc = spawn(spec.file, args, { cwd, env: { ...cleanEnv(), ...environment, ...spec.environment }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     a.proc = proc;

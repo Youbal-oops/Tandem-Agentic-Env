@@ -49,7 +49,7 @@
       <button id="btn-rail-open" class="icon" title="Show the sidebar (Ctrl+\)" aria-label="Show the sidebar" hidden>☰</button>
       <div id="chats">
         <section id="team-view" hidden>
-          <header class="a-bar"><div class="a-title"><b>Team</b><span class="a-info">Tandem picks the agent and the model for each task</span></div><div class="chat-meta"><button id="team-clear" title="Clear this list. The agents' own chats are kept.">Clear</button></div></header>
+          <header class="a-bar"><div class="a-title"><b>Team</b><span class="a-info">Tandem picks the agent and the model for each task</span></div><div class="chat-meta"><button id="team-shared" title="Files every agent can read and write: plans, specs and notes you want them to share">Shared files</button><button id="team-clear" title="Clear this list. The agents' own chats are kept.">Clear</button></div></header>
           <div id="team-feed" class="c-feed" tabindex="-1">
             <div class="c-empty"><h1>What should the team do?</h1><p>Describe a task. Small jobs go to a small fast model, hard ones to the strongest, and you can overrule the choice below.</p></div>
           </div>
@@ -95,7 +95,7 @@
         <div class="code-main">
           <div id="code-tabs" role="tablist" aria-label="Open files"></div>
           <div id="code-editor"><p class="code-empty">Open a file from the list to read or edit it.</p></div>
-          <footer class="code-foot"><span id="code-msg" role="status"></span><button id="code-diff" title="The uncommitted changes in this folder, as one diff">Diff</button><button id="code-chat" title="Put this file, or the selected lines, in the selected agent's message box" disabled>Add to chat</button><button id="code-vscode" title="Open this file in VS Code" disabled>VS Code</button><button id="code-save" class="primary" title="Save (Ctrl+S)" disabled>Save</button></footer>
+          <footer class="code-foot"><span id="code-msg" role="status"></span><button id="code-diff" title="The uncommitted changes in this folder, as one diff">Diff</button><button id="code-share" title="Copy this file into the Shared folder so every agent can read it" disabled>Share with agents</button><button id="code-chat" title="Put this file, or the selected lines, in the selected agent's message box" disabled>Add to chat</button><button id="code-vscode" title="Open this file in VS Code" disabled>VS Code</button><button id="code-save" class="primary" title="Save (Ctrl+S)" disabled>Save</button></footer>
         </div>
       </section>
       <section id="vscode-view" data-side-page="vscode" hidden>
@@ -210,9 +210,13 @@
           </section>
           <section data-panel="team" hidden>
             <h3>Team</h3>
-            <label>Who assigns tasks in the Team chat<select id="set-team-dispatcher"><option value="auto">A dispatcher agent: the cheapest model that answers</option><option value="rules">Tandem's built-in rules: instant, no model</option></select></label>
-            <p>The dispatcher is a small model that reads the guide below and the live list of agents and models, then picks who does each task and on which model. It runs on its own, outside the agents' chats, sees only the guide, the team and your task, and cannot change anything. It adds a few seconds and a little quota to each task. If it cannot answer, or you pick both the agent and the size yourself, Tandem's rules decide instead.</p>
-            <label for="set-team-guide">The dispatcher's guide<textarea id="set-team-guide" rows="14" maxlength="12000" spellcheck="true"></textarea></label>
+            <label>How the Team chat handles a request<select id="set-team-mode"><option value="dispatcher">Assistant: sends each message to the right agent and model, with the context it needs (recommended)</option><option value="coordinator">Planner: also splits big requests into tasks and runs them in the background</option><option value="rules">Built-in rules only: instant, no model</option></select></label>
+            <p>The assistant does not plan your project. For each message it looks at what every agent is doing right now (its task, the files it changed, its latest answer) and picks the agent and model that fit: work on the same area goes back to the agent that has it, a new area goes to a free agent, and the model is the smallest that will do the job well. When the work builds on another agent's, that agent's task, files and answer are handed over with it. If it cannot tell what you mean, it asks one question and routes your answer. It runs outside the agents' chats and cannot change anything. If it cannot answer, Tandem's rules decide.</p>
+            <label>Who runs the assistant<select id="set-team-dispatcher"><option value="auto">Automatic: a standard model from the quickest signed-in agent</option><option value="rules">Tandem's built-in rules: instant, no model</option></select></label>
+            <label for="set-team-guide">The assistant's guide<textarea id="set-team-guide" rows="14" maxlength="12000" spellcheck="true"></textarea></label>
+            <label>Planner model (Planner mode only)<select id="set-team-coordinator"><option value="auto">Automatic: a standard model from the first agent that is signed in, a stronger one for big requests</option></select></label>
+            <p>In Planner mode a model splits a big request into tasks, picks an agent and a model for each, runs independent tasks at the same time and reports back. Quick requests and follow-ups still go straight to one agent.</p>
+            <label for="set-team-coordinator-guide">The planner's guide<textarea id="set-team-coordinator-guide" rows="12" maxlength="12000" spellcheck="true"></textarea></label>
             <p>Write it the way you would brief a person: what each kind of model is for, which agent you prefer for which work, anything about cost. The current team and every model's size are added for it automatically.</p>
             <div class="form-row"><button id="save-team" class="primary" type="button">Save</button><button id="reset-team" type="button">Use the built-in guide</button><span id="team-settings-status" role="status"></span></div>
           </section>

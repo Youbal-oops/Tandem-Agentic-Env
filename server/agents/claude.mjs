@@ -29,6 +29,8 @@ export function createClaude(ctx) {
       '--permission-prompt-tool', 'stdio',
       '--permission-mode', CLAUDE_MODE_FLAG[a.mode],
     ];
+    const shared = ctx.sharedDir?.();
+    if (shared) args.push('--add-dir', shared); // the team folder, outside this agent's own copy of the project
     if (a.modelPref) args.push('--model', a.modelPref);
     if (a.effort) args.push('--effort', a.effort);
     if (a.sessionId) args.push('--resume', a.sessionId);

@@ -23,7 +23,7 @@ import { quietKill } from './util.mjs';
 
 export { MODES, validModel };
 
-export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'codex', 'gemini', 'antigravity'], environment = {}, taskInstructions = '', mcp = () => null, getInstructions = () => '', denyTool = () => null }) {
+export function createAgents({ cwd, sharedDir = () => null, specs, broadcast, providers = ['claude', 'codex', 'gemini', 'antigravity'], environment = {}, taskInstructions = '', mcp = () => null, getInstructions = () => '', denyTool = () => null }) {
   const { rel, summarize } = createSummarizer(cwd);
   const agents = {};
   for (const id of providers) {
@@ -61,7 +61,7 @@ export function createAgents({ cwd, specs, broadcast, providers = ['claude', 'co
   const fx = (a, name) => broadcast({ t: 'fx', agent: a.id, name });
 
   // Shared by the two adapters.
-  const ctx = { cwd, specs, environment, mcp, denyTool, broadcast, agents, rel, summarize, fx, pushMeta };
+  const ctx = { cwd, sharedDir, specs, environment, mcp, denyTool, broadcast, agents, rel, summarize, fx, pushMeta };
   Object.assign(ctx, createEvents(ctx));
   const { put, note, fail, endTurnCleanup, reindex } = ctx;
   const claude = createClaude(ctx);

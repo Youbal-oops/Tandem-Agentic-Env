@@ -1,8 +1,10 @@
 // Things that belong to this computer: notes, the global prompt, learning mode and its journal, folders, files.
 
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import { listFolders } from '../../folders.mjs';
-import { listRepoFiles, readRepoDiff, readRepoFile, writeRepoFile } from '../../inspect.mjs';
+import { listRepoFiles, readRepoDiff, readRepoFile, repoPath, writeRepoFile } from '../../inspect.mjs';
 
 export function createLocalRoutes({ agents, hub, snapshot, workDir = () => ({ cwd: agents.cwd }) }) {
   const inspect = (kind) => async (m, conn) => {
@@ -64,6 +66,21 @@ export function createLocalRoutes({ agents, hub, snapshot, workDir = () => ({ cw
       file: inspect('file'),
       diff: inspect('diff'),
       savefile: inspect('save'),
+      /** Copy one file (from the repository or an agent's folder) into the shared team folder, so every agent can read it. */
+      sharefile: (m, conn) => {
+        try {
+          const from = m.source === 'shared' ? null : workDir(typeof m.source === 'string' && m.source ? m.source : 'repo');
+          if (!from) throw new Error('That file is already in the shared folder.');
+          const src = repoPath(from.cwd, String(m.path || ''));
+          if (!fs.statSync(src).isFile()) throw new Error('Choose a file.');
+          if (fs.statSync(src).size > 5 * 1024 * 1024) throw new Error('Only files up to 5 MB can be shared.');
+          const dir = agents.sharedDir();
+          const ext = path.extname(src); const base = path.basename(src, ext);
+          let name = base + ext; for (let n = 2; fs.existsSync(path.join(dir, name)); n++) name = `${base}-${n}${ext}`; // never overwrite what another agent left
+          fs.copyFileSync(src, path.join(dir, name), fs.constants.COPYFILE_EXCL);
+          conn.send({ t: 'shared', name, dir });
+        } catch (e) { conn.send({ t: 'shared', error: e.message }); }
+      },
     },
   };
 }

@@ -8,10 +8,11 @@ It is for people who build with AI and want to learn from it, and for developers
 
 ## What it does
 
-### One Team chat for all your agents
+### One Team chat that coordinates your agents
 
-- Tandem opens on **Team**: describe a task and it goes to the right agent on the right model. A dispatcher agent, running on your cheapest model, reads a guide you can edit (Settings → Team) and the live team, and picks who does it and how strong a model it needs: a typo gets Haiku, Flash or GPT-Reserve, a redesign gets Opus, Argon or Astra. If it can't answer, Tandem's built-in rules decide. You can also pick the agent or the task size yourself.
-- Each task runs in that agent's own chat and folder. Its card shows who got it, on which model and why, the result, and the files it changed; each file opens its diff in Review.
+- Tandem opens on **Team**. Write what you want, with no agent named, and the **assistant** sends it to the right agent and model. It does not plan your project: it reads what each agent is doing right now (its task, the files it changed, its latest answer) and routes by that. Say Astra is building the UI and you ask for the backend and the SQL migrations: the backend goes to a free agent on a model that fits (the strongest for a database migration, the smallest for a typo), without you naming either.
+- When the work builds on another agent's, that agent's task, changed files and latest answer are handed over with your message, so the new agent starts consistent with it. If only one busy agent has the context for a task (it did the earlier work), the assistant can hold the task and send it the moment that agent finishes. If the assistant can't tell what you mean, it asks one short question and routes your answer. You can always choose the agent or the size yourself. A **planner** mode that splits big requests into tasks and runs them in the background is available in Settings → Team, and so are plain built-in rules.
+- Agents work in separate copies of the project, so Tandem gives them a **shared folder** (`.tandem/shared`) for plans, specs and notes. Every agent is told to use it, the coordinator saves each plan there, and you can copy any file into it with **Share with agents**.
 
 ### Work with several agents at once
 

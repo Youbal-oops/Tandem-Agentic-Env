@@ -15,12 +15,15 @@ export function createConnectRoutes({ hub, snapshot, agents }) {
   });
 
   /** Look for connections that have no planet yet (a CLI signed in, an API key set, a local model server running) and add one for each. */
+  // Which CLIs are signed in, from the last check, so the Team chat never gives work to one that is signed out.
+  let signed = {};
   let scanning = null;
   async function scan({ quiet = true } = {}) {
     if (scanning) return scanning;
     scanning = (async () => {
       try {
         const { clis } = await connect.status();
+        signed = Object.fromEntries(clis.map((c) => [c.id, c.signedIn]));
         const added = agents.autoConnect(await findConnections({ cliStatus: clis }));
         if (added.length) { hub.broadcast(snapshot()); hub.broadcast({ t: 'notice', text: `New connection${added.length > 1 ? 's' : ''} found: added ${added.join(', ')}.` }); }
         else if (!quiet) hub.broadcast({ t: 'notice', text: 'No new connections found. Every connection that is ready already has a planet.' });
@@ -29,8 +32,10 @@ export function createConnectRoutes({ hub, snapshot, agents }) {
     })();
     return scanning;
   }
+  if (!process.env.TANDEM_NO_AUTOSCAN) setInterval(() => scan(), 5 * 60 * 1000).unref();
   return {
     scan,
+    signedIn: () => signed,
     handlers: {
       'scan-connections': () => scan({ quiet: false }),
       'connect-status': async (m, conn) => conn.send({ t: 'connect-status', ...await connect.status() }),

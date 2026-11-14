@@ -7,8 +7,9 @@ export function createPushRoutes({ agents, gitStatus, workDir }) {
     handlers: {
       pushinfo: async (m, conn) => {
         try {
-          const dir = workDir(m.source);
-          conn.send({ t: 'pushinfo', source: dir.id, dirs: agents.workDirs().map(({ id, name }) => ({ id, name })), ...await pushPreview(dir.cwd) });
+          // The shared folder is not a git folder: there is nothing to push from it.
+          const dir = m.source === 'shared' ? workDir('repo') : workDir(m.source);
+          conn.send({ t: 'pushinfo', source: dir.id, dirs: agents.workDirs().filter((d) => d.id !== 'shared').map(({ id, name }) => ({ id, name })), ...await pushPreview(dir.cwd) });
         } catch (e) { conn.send({ t: 'pushinfo', error: e.message }); }
       },
       push: async (m, conn) => {

@@ -18,7 +18,7 @@ function readBody(req, res, limit) {
   });
 }
 
-export function createHttpServer({ agents, images, delegationKeys, tools, gitStatus, getClone, modelChoices, modelLabels = () => ({}), services = [], vscode = null, teamGuide = '' }) {
+export function createHttpServer({ agents, images, delegationKeys, tools, gitStatus, getClone, modelChoices, modelLabels = () => ({}), services = [], vscode = null, teamGuide = '', coordinatorGuide = '' }) {
   function uploadImage(req, res) {
     if (!safeEqual(String(req.headers.authorization || '').replace(/^Bearer /, ''), TOKEN)) { res.writeHead(403).end('Forbidden'); return; }
     const chunks = []; let size = 0;
@@ -93,9 +93,11 @@ export function createHttpServer({ agents, images, delegationKeys, tools, gitSta
       models: modelChoices(),
       modelLabels: modelLabels(),
       teamGuide,
+      coordinatorGuide,
       services,
       learningMode: agents.localState().learningMode,
       agents: agents.configs(),
+      problems: agents.startupProblems?.() || [],
       clone: getClone(),
       cloneParent: path.dirname(ROOT),
       local: agents.localState(),

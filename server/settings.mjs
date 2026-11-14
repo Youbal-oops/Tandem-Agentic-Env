@@ -33,10 +33,13 @@ export const cleanAgents = (input, current = AGENT_DEFAULTS) => ({
 });
 
 /** Team chat: `dispatcher` is 'auto' (the cheapest agent that answers), 'rules' (no model, instant) or one agent's id. An empty guide means the built-in one. */
-export const TEAM_DEFAULTS = Object.freeze({ dispatcher: 'auto', guide: '' });
+export const TEAM_DEFAULTS = Object.freeze({ dispatcher: 'auto', guide: '', mode: 'dispatcher', coordinator: 'auto', coordinatorGuide: '' });
 export const cleanTeam = (input, current = TEAM_DEFAULTS) => ({
   dispatcher: typeof input?.dispatcher === 'string' && /^(auto|rules|[a-z][a-z0-9-]{0,50})$/.test(input.dispatcher) ? input.dispatcher : current.dispatcher,
   guide: typeof input?.guide === 'string' ? input.guide.slice(0, 12000) : current.guide,
+  mode: ['coordinator', 'dispatcher', 'rules'].includes(input?.mode) ? input.mode : current.mode,
+  coordinator: typeof input?.coordinator === 'string' && /^(auto|[a-z][a-z0-9-]{0,50})$/.test(input.coordinator) ? input.coordinator : current.coordinator,
+  coordinatorGuide: typeof input?.coordinatorGuide === 'string' ? input.coordinatorGuide.slice(0, 12000) : current.coordinatorGuide,
 });
 
 export function createSettings({ saved }) {

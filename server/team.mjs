@@ -58,17 +58,23 @@ const LIGHT_TASK = [
   [/\b(quick|tiny|small|simple|trivial|one[- ]line\w*|just (change|add|remove|fix))\b/i, 'you called it small'],
   [/^(what|where|which|who|when|is|are|does|do|can|list|show|tell me|summari[sz]e|explain)\b/i, 'it is a question, not a build'],
 ];
+const MULTI = /\b(and then|then|also|as well|after that|afterwards|in parallel|at the same time|both of|two (independent |separate )?things|three (independent |separate )?things|and tell me|and also)\b|;|\n\s*(\d+[.)]|[-*])\s/i;
 const CHANGE = /\b(add|fix|implement|build|create|write|refactor|rename|update|remove|delete|migrate|change|make|convert|install|set ?up|replace|move|rewrite|generate|scaffold|wire|hook up|run|test|deploy)\b/i;
 const QUESTION = /^(what|where|which|who|when|why|how|is|are|does|do|can|could|should|list|show|tell me|summari[sz]e|explain|review|describe)\b|\?\s*$/i;
+// Asking for ideas or advice is a question even when it names a change: "what else should I add", "any suggestions to improve it".
+const ADVICE = /\b(what (else|other|more|should|would|could)|which .{0,30}should|should i|would you|could you suggest|any (ideas|suggestions|thoughts)|ideas? (for|to|on)|suggest(ions)?|recommend\w*|advice|opinion|thoughts on|pros and cons|is it worth|how (do|can|should|would) (i|we))\b/i;
 
 /** Size up one task: { tier, kind: 'change' | 'question', why }. */
 export function classifyTask(text) {
   const t = String(text || '').trim();
-  const kind = QUESTION.test(t) && !/\b(and|then) (fix|change|implement|update|add)\b/i.test(t) ? 'question' : CHANGE.test(t) ? 'change' : 'question';
+  const asks = (QUESTION.test(t) || ADVICE.test(t)) && !/\b(and|then) (fix|change|implement|update|add)\b/i.test(t);
+  const kind = asks ? 'question' : CHANGE.test(t) ? 'change' : 'question';
   const steps = (t.match(/^\s*(\d+[.)]|[-*•])\s+/gm) || []).length;
   for (const [re, why] of HEAVY_TASK) if (re.test(t)) return { tier: 'heavy', kind, why };
   if (t.length > 900) return { tier: 'heavy', kind, why: 'it is a long, detailed brief' };
   if (steps >= 5) return { tier: 'heavy', kind, why: `it has ${steps} parts` };
+  // Asking for several things is not a small request, whatever small words it uses ("a one-line guess").
+  if (MULTI.test(t) || steps >= 2) return { tier: 'standard', kind, why: 'it has several parts' };
   if (t.length <= 400 && steps < 3) for (const [re, why] of LIGHT_TASK) if (re.test(t)) return { tier: 'light', kind, why };
   if (t.length < 60 && kind === 'question') return { tier: 'light', kind, why: 'it is a short question' };
   return { tier: 'standard', kind, why: steps >= 3 ? `it has ${steps} parts` : 'it is ordinary coding work' };
@@ -81,7 +87,17 @@ const READ_ONLY = new Set(['plan', 'read']);
  * `want`: { agent?, tier? } are the user's own choices and always win.
  * Returns { agent, name, model (null = keep the agent's default), modelLabel, tier, kind, reason, note } or { error }.
  */
-export function pickAssignment({ text, agents, want = {} }) {
+// A message that carries on from the last one: a correction, a clarification, "also…", "what about…".
+const FOLLOW_UP = /^(that'?s|thats|that|this|it|those|these|also|and|but|no\b|nope|yes\b|yeah|ok(ay)?\b|actually|instead|then|now|i mean|i meant|i ment|what about|how about|same|again|more|another|continue|go on|keep going)\b|\b(i meant|i mean|i ment|you (said|suggested|mentioned|wrote)|your (answer|list|plan|reply|suggestion)s?|the above|as well|like you said|from before|not that)\b/i;
+/** True when `text` reads as a follow-up to the last Team message (it is short, or it plainly refers back). */
+export function isFollowUp(text, recent = []) {
+  if (!recent.length) return false;
+  const t = String(text || '').trim();
+  return FOLLOW_UP.test(t) || (t.length < 40 && !/\b(new task|unrelated|different)\b/i.test(t) && /\b(it|that|this|them|those)\b/i.test(t));
+}
+
+/** `recent`: the last few Team messages, oldest first: [{ text, agent, result }]. */
+export function pickAssignment({ text, agents, want = {}, recent = [] }) {
   const task = classifyTask(text);
   const tier = TIERS.includes(want.tier) ? want.tier : task.tier;
   const sized = TIERS.includes(want.tier) ? `${TIER_NAME[tier]} task (your choice)` : `${TIER_NAME[tier]} task: ${task.why}`;
@@ -101,6 +117,11 @@ export function pickAssignment({ text, agents, want = {} }) {
     if (task.kind === 'change' && pool.some((a) => a.provider !== 'api')) pool = pool.filter((a) => a.provider !== 'api');
   }
 
+  // A follow-up goes back to the agent that handled the last message, if it is free, so it keeps the context of that conversation.
+  const last = !want.agent && isFollowUp(text, recent) ? recent.at(-1)?.agent : null;
+  const continuing = last && pool.some((a) => a.id === last) ? last : null;
+  if (continuing) pool = pool.filter((a) => a.id === continuing);
+
   const scored = pool.map((a, order) => {
     const model = a.fixedModel ? { id: a.fixedModel, label: a.fixedModel, tier: tierOfModel(a.fixedModel) || 'standard', exact: (tierOfModel(a.fixedModel) || 'standard') === tier, fixed: true } : modelFor(a.models, tier);
     let score = model ? (model.exact ? 6 : model.tier === 'light' && tier !== 'light' ? 1 : 3) : 2; // no list: its own default, size unknown
@@ -111,12 +132,12 @@ export function pickAssignment({ text, agents, want = {} }) {
   const { a, model } = scored[0];
   const using = model ? model.label : `${a.name}'s default model`;
   const fit = !model ? '' : model.exact ? '' : ` (its closest to ${tier}; it has no ${tier} model)`;
-  const who = want.agent ? `${a.name} (your choice)` : `${a.name} is free`;
+  const who = want.agent ? `${a.name} (your choice)` : continuing ? `It follows on from your last message, so ${a.name} keeps that conversation` : `${a.name} is free`;
   let note = '';
   if (task.kind === 'change' && a.provider === 'api') note = `${a.name} is a chat-only model: it can advise, but it cannot change files.`;
   else if (task.kind === 'change' && READ_ONLY.has(a.mode)) note = `${a.name} is in a read-only mode, so it will propose the change, not make it. Switch its mode to let it edit.`;
   return {
-    agent: a.id, name: a.name, model: model && !model.fixed ? model.id : null, modelLabel: using, tier, kind: task.kind,
+    agent: a.id, name: a.name, model: model && !model.fixed ? model.id : null, modelLabel: using, tier, kind: task.kind, followUp: !!continuing,
     reason: `${sized}. ${who} and will use ${using}${fit}.`, note,
   };
 }

@@ -70,7 +70,7 @@ app.pushDialog = createPushDialog({ send: (msg) => app.net.send(msg), connected,
 app.journal = createJournalDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice });
 app.folderPicker = createFolderPicker({ send: (msg) => app.net.send(msg), connected, getRepo: () => app.repoPath, notify: app.showNotice });
 app.settingsDialog = createSettingsDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, openReview: () => app.side('review'),
-  getAgents: () => app.AGENTS.map((id) => ({ id, name: app.NAMES[id] })), defaultGuide: () => app.teamGuide || '' });
+  getAgents: () => app.AGENTS.map((id) => ({ id, name: app.NAMES[id] })), defaultGuide: () => app.teamGuide || '', defaultCoordinatorGuide: () => app.coordinatorGuide || '' });
 app.connectDialog = createConnectDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice });
 app.structurePanel = createStructurePanel({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, getAgents: () => app.AGENTS.map((id) => ({ id, name: app.NAMES[id] })), setDraft });
 app.localTools = createLocalTools({

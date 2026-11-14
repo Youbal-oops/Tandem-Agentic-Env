@@ -20,10 +20,17 @@ import { conventionsPrompt, createStructure } from '../structure/index.mjs';
 import { PLANET_RINGS, PLANET_STYLES, serviceById } from '../app/services.mjs';
 import { createApiChat } from './api-chat.mjs';
 import { createHistory } from './history.mjs';
-import { createPrompt } from './prompt.mjs';
+import { createPrompt, sharedDirOf } from './prompt.mjs';
+import { cleanTeamChat } from '../team-chat.mjs';
+import { restoreRuns } from '../team-coordinator.mjs';
 import { createRepoSwitcher } from './repos.mjs';
 
 // One CLI adapter per planet, so two Codex/Claude planets never share a thread.
+/** Plans are saved with their answers cut short, so the workspace file stays small. */
+function trimRuns(byRepo) {
+  return Object.fromEntries(Object.entries(byRepo).map(([cwd, list]) => [cwd, list.map((r) => ({ ...r, tasks: r.tasks.map((t) => ({ ...t, result: typeof t.result === 'string' ? t.result.slice(0, 12000) : t.result })) }))]));
+}
+
 export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch, getAgentContext = () => ({}), pluginRoots, childPollMs, initialAgents = [] }) {
   const dir = path.join(root, '.tandem');
   const file = path.join(dir, 'workspace.json');
@@ -44,6 +51,11 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
     children: () => children,
   };
   const notes = saved.notes && typeof saved.notes === 'object' ? saved.notes : {};
+  // The Team chat of every repository, by its path. Kept here (not in the browser) so it survives restarts and reinstalls.
+  // The plans the coordinator ran, by repository. Whatever was still running when the app closed is marked interrupted.
+  const teamRuns = {};
+  for (const [cwd, list] of Object.entries(saved.teamRuns && typeof saved.teamRuns === 'object' && !Array.isArray(saved.teamRuns) ? saved.teamRuns : {})) teamRuns[cwd] = restoreRuns(list);
+  const teamChats = saved.teamChats && typeof saved.teamChats === 'object' && !Array.isArray(saved.teamChats) ? saved.teamChats : {};
   // How each project got here: 'cloned' or 'created' in Tandem, 'forked' when the user said so, otherwise it was opened.
   const origins = saved.origins && typeof saved.origins === 'object' && !Array.isArray(saved.origins) ? { ...saved.origins } : {};
   const originKey = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(String(p)); } };
@@ -53,8 +65,8 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
 
   function save() {
     fs.mkdirSync(dir, { recursive: true });
-    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), settings: settings.state(), origins, childModelDefaults, repoChats: repos.repoChats, seenConnections: [...seenConnections],
-      agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })) };
+    const data = { cwd: ctx.workingDir, notes, recent: repos.recent, globalPrompt: prompt.state, ...learning.state(), settings: settings.state(), origins, childModelDefaults, repoChats: repos.repoChats, teamChats, teamRuns: trimRuns(teamRuns), seenConnections: [...seenConnections],
+      agents: [...entries.values()].map((a) => ({ config: a.config, state: a.cli ? a.cli.save() : { events: a.events, effort: a.effort } })).concat(unrestored.map((u) => u.row)) };
     fs.writeFileSync(file + '.tmp', JSON.stringify(data));
     fs.renameSync(file + '.tmp', file);
     for (const a of entries.values()) history.saveConversation(a);
@@ -87,7 +99,7 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   /** One CLI wrapper per main agent. The app, not the model, enforces learning mode. */
   function makeCli(a) {
     const { config } = a;
-    return createAgents({ cwd: a.cwd, specs, providers: [config.provider], ...getAgentContext(config),
+    return createAgents({ cwd: a.cwd, sharedDir: () => sharedDirOf(ctx.workingDir), specs, providers: [config.provider], ...getAgentContext(config),
       getInstructions: () => prompt.render(config.name, { provider: config.provider }),
       denyTool: (name, input) => learning.denyTool(a, name) || review.denyTool(a, name, input),
       broadcast: (msg) => {
@@ -197,8 +209,11 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   }
 
   // A new workspace starts with no planets: the user picks a connection type for each one. `initialAgents` lets a caller seed some.
+  // An agent that cannot be restored is not thrown away: it stays in the saved data (so the next launch tries again) and the
+  // user is told why on screen. Before this, it simply disappeared.
+  const unrestored = [];
   for (const row of saved.agents || initialAgents.map((config) => ({ config }))) {
-    try { add(row.config, row.state); } catch (e) { console.error('Could not restore agent:', e.message); }
+    try { add(row.config, row.state); } catch (e) { console.error('Could not restore agent:', e.message); unrestored.push({ row, error: e.message }); }
   }
   // Planets that already exist count as seen, so only connections that appear later are added automatically.
   for (const a of entries.values()) { const k = connectionKey(a.config); if (k) seenConnections.add(k); }
@@ -219,7 +234,20 @@ export function createWorkspace({ root, cwd, specs, broadcast, fetchImpl = fetch
   return {
     get cwd() { return ctx.workingDir; },
     /** Folders the user can push from, or open in a terminal or editor: the repository, then each agent's own worktree. */
-    workDirs: () => [{ id: 'repo', name: 'Repository', cwd: ctx.workingDir }, ...(ctx.structureTree && fs.existsSync(ctx.structureTree) ? [{ id: 'structure', name: 'Structured tree', cwd: ctx.structureTree }] : []), ...[...entries.values()].filter((a) => a.cli).map((a) => ({ id: a.config.id, name: a.config.name, cwd: a.cwd }))],
+    /** Agents that were saved but could not be restored at launch: [{ name, provider, error }]. */
+    startupProblems: () => unrestored.map((u) => ({ name: String(u.row?.config?.name || u.row?.config?.id || 'An agent'), provider: u.row?.config?.provider, error: u.error })),
+    sharedDir: () => { const d = sharedDirOf(ctx.workingDir); fs.mkdirSync(d, { recursive: true }); return d; },
+    teamChat: () => ({ cwd: ctx.workingDir, entries: Array.isArray(teamChats[ctx.workingDir]) ? teamChats[ctx.workingDir] : [], runs: teamRuns[ctx.workingDir] || [] }),
+    /** The open repository's plans (the same objects the coordinator updates). */
+    teamRuns: () => (teamRuns[ctx.workingDir] ||= []),
+    saveTeamRuns: () => schedule(),
+    saveTeamChat(cwd, entries) {
+      if (cwd !== ctx.workingDir || !Array.isArray(entries)) return false; // an answer for a repository that is no longer open
+      teamChats[cwd] = cleanTeamChat(entries);
+      schedule();
+      return true;
+    },
+    workDirs: () => [{ id: 'repo', name: 'Repository', cwd: ctx.workingDir }, { id: 'shared', name: 'Shared folder', cwd: (() => { const d = sharedDirOf(ctx.workingDir); fs.mkdirSync(d, { recursive: true }); return d; })() }, ...(ctx.structureTree && fs.existsSync(ctx.structureTree) ? [{ id: 'structure', name: 'Structured tree', cwd: ctx.structureTree }] : []), ...[...entries.values()].filter((a) => a.cli).map((a) => ({ id: a.config.id, name: a.config.name, cwd: a.cwd }))],
     configs: () => [...entries.values()].map((a) => ({ ...a.config, available: !!snapshot()[a.config.id].meta.available })),
     snapshot, add, autoConnect,
     /** Set by the server: called with an agent id when that agent's folder is gone, so what it started (dev server, browser) is stopped. */

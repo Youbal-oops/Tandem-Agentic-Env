@@ -72,6 +72,8 @@ export function createCodex(ctx) {
     // Edit mode is a development sandbox: files only in this agent's own folder, but with the network on, so package installs
     // and downloads work. (Checked on Windows: Node reaches the internet; curl.exe's Windows TLS does not, inside the sandbox.)
     if (a.mode === 'edit') args.push('-c', 'sandbox_workspace_write.network_access=true');
+    const shared = ctx.sharedDir?.();
+    if (shared && a.mode !== 'read') args.push('--add-dir', shared); // writable team folder next to its own (read-only mode writes nothing)
     if (a.modelPref) args.push('-m', a.modelPref);
     if (a.effort) args.push('-c', `model_reasoning_effort="${a.effort}"`);
     args.push(...mcpArgs());

@@ -77,3 +77,32 @@ test('your own choices win, busy agents are skipped, and chat-only models do not
   assert.match(pickAssignment({ text: 'x', agents }).error, /Every agent is busy/);
   assert.match(pickAssignment({ text: 'x', agents: [] }).error, /no agents yet/);
 });
+
+test('asking for ideas is a question, even when it names a change', () => {
+  for (const t of ['thats just setup i ment as a software what else should i add to refine it', 'any ideas to improve the login page', 'should I add caching here', 'can you suggest features to add']) assert.equal(classifyTask(t).kind, 'question', t);
+  assert.equal(classifyTask('add caching to the login page').kind, 'change');
+  assert.equal(classifyTask('what is broken here, and then fix it').kind, 'change');
+});
+
+test('a follow-up goes back to the agent that answered the last message, if it is free', () => {
+  const agents = [agent('claude', 'claude', CLAUDE), agent('codex', 'codex', CODEX), agent('agy', 'antigravity', AGY)];
+  const recent = [{ text: 'how do I publish this to the Play Store?', agent: 'codex', result: '1. Build a production release…' }];
+  const follow = pickAssignment({ text: 'thats just setup i ment as a software what else should i add to refine it', agents, recent });
+  assert.equal(follow.agent, 'codex');
+  assert.equal(follow.followUp, true);
+  assert.match(follow.reason, /follows on from your last message, so Codex keeps that conversation/);
+  assert.equal(follow.note, '', 'a question gets no "it will only propose the change" warning');
+  assert.equal(pickAssignment({ text: 'Refactor the payment module to use the new API client', agents, recent }).followUp, false, 'a new task is not a follow-up');
+  assert.equal(pickAssignment({ text: 'also do the same for settings', agents, recent: [] }).followUp, false, 'nothing to follow');
+  agents[1].busy = true;
+  assert.notEqual(pickAssignment({ text: 'also do the same for settings', agents, recent }).agent, 'codex', 'a busy agent is not waited for');
+  agents[1].busy = false;
+  assert.equal(pickAssignment({ text: 'also do the same for settings', agents, recent, want: { agent: 'claude' } }).agent, 'claude', 'your own choice still wins');
+});
+
+test('a request with several parts is never "light", whatever small words it uses', () => {
+  assert.equal(classifyTask('Do two independent things: summarise the README, and list every file with a one-line guess. Then tell me which is more complete.').tier, 'standard');
+  assert.equal(classifyTask('fix the typo in the README title, then bump the version').tier, 'standard');
+  assert.equal(classifyTask('fix the typo in the README title').tier, 'light', 'a single small thing still is');
+  assert.equal(classifyTask('rename foo and bar to baz').tier, 'light', '"and" alone does not make it two requests');
+});

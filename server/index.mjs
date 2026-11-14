@@ -26,6 +26,9 @@ import { createRepoRoutes } from './app/routes/repos.mjs';
 import { createLaunchRoutes } from './app/routes/launch.mjs';
 import { createVscode, defaultDataDir } from './vscode.mjs';
 import { DEFAULT_GUIDE, createDispatcher } from './team-dispatch.mjs';
+import { COORDINATOR_GUIDE, createCoordinator } from './team-coordinator.mjs';
+import { createHolds } from './team-holds.mjs';
+import { buildRoster } from './team-roster.mjs';
 import { createImageStore } from './images.mjs';
 import { createRepoService } from './repos.mjs';
 import { createWorkspace } from './workspace.mjs';
@@ -34,7 +37,13 @@ import { createTools } from './tools/index.mjs';
 const hub = createHub();
 const delegation = createDelegation();
 const images = createImageStore(ROOT);
-const agents = createWorkspace({ root: ROOT, cwd: path.resolve(process.env.TANDEM_CWD || ROOT), specs, broadcast: hub.broadcast, getAgentContext: delegation.getAgentContext });
+let signedIn = () => ({}); // from the connect routes, once they exist
+let holds = null;
+let coordinator = null; // created below, once the workspace exists; every message the workspace broadcasts also goes to it
+const agents = createWorkspace({ root: ROOT, cwd: path.resolve(process.env.TANDEM_CWD || ROOT), specs, broadcast: (msg) => { hub.broadcast(msg); coordinator?.observe(msg); holds?.observe(msg); }, getAgentContext: delegation.getAgentContext });
+const dispatcher = createDispatcher({ specs });
+coordinator = createCoordinator({ workspace: agents, ask: (candidate, prompt) => dispatcher.ask(candidate, prompt), getTeam: () => agents.settings().team, catalog: modelCatalog, signedIn: () => signedIn(), emit: hub.broadcast });
+holds = createHolds({ workspace: agents, getRoster: () => buildRoster(agents, modelCatalog(), () => signedIn()), emit: hub.broadcast });
 const repoService = createRepoService();
 const gitStatus = createGitStatus({ getCwd: () => agents.cwd, broadcast: hub.broadcast });
 
@@ -51,8 +60,9 @@ const tools = createTools({ cwdFor: (id) => workDir(id).cwd, guard: (id, name) =
 agents.onRemoved = (id) => tools.release(id);
 
 const vscode = createVscode({ dataDir: defaultDataDir(ROOT) });
-const server = createHttpServer({ vscode, teamGuide: DEFAULT_GUIDE, agents, images, delegationKeys: delegation.keys, tools, gitStatus, getClone: clone.get, modelChoices, modelLabels, services: API_SERVICES });
+const server = createHttpServer({ vscode, teamGuide: DEFAULT_GUIDE, coordinatorGuide: COORDINATOR_GUIDE, agents, images, delegationKeys: delegation.keys, tools, gitStatus, getClone: clone.get, modelChoices, modelLabels, services: API_SERVICES });
 const connectRoutes = createConnectRoutes({ hub, snapshot, agents });
+signedIn = connectRoutes.signedIn;
 attachWebSocket(server, {
   vscode,
   hub,
@@ -63,12 +73,14 @@ attachWebSocket(server, {
     createRepoRoutes({ agents, hub, gitStatus, repoService, clone, snapshot }),
     createPushRoutes({ agents, gitStatus, workDir }),
     createLaunchRoutes({ workDir, tools, vscode }),
-    createAgentRoutes({ agents, hub, snapshot, modelCatalog, dispatcher: createDispatcher({ specs }) }),
+    createAgentRoutes({ agents, hub, snapshot, modelCatalog, dispatcher, coordinator, holds, signedIn: () => signedIn() }),
   ),
 });
 gitStatus.start();
 
 function shutdown() {
+  coordinator.close();
+  holds.close();
   tools.closeAll();
   agents.closeAll();
   vscode.stop();

@@ -23,6 +23,8 @@ export function createGemini(ctx) {
 
   function send(a, text, images = []) {
     const args = [...specs.gemini.args, '-p', STUB, '-o', 'stream-json', '--approval-mode', GEMINI_APPROVAL[a.mode] || 'plan', '--skip-trust'];
+    const shared = ctx.sharedDir?.();
+    if (shared) args.push('--include-directories', shared); // the team folder
     if (a.modelPref) args.push('-m', a.modelPref);
     // Each agent has its own folder, and Gemini keeps sessions per folder, so "latest" is this agent's last chat.
     if (a.sessionId) args.push('--resume', 'latest');

@@ -3,7 +3,7 @@
 
 const $ = (s) => document.querySelector(s);
 
-export function createSettingsDialog({ send, connected, notify, openReview = () => {}, getAgents = () => [], defaultGuide = () => '' }) {
+export function createSettingsDialog({ send, connected, notify, openReview = () => {}, getAgents = () => [], defaultGuide = () => '', defaultCoordinatorGuide = () => '' }) {
   let saved = { enabled: true, maxLines: 300, maxFiles: 10, hardStop: true, margin: 25 };
   let savedAgents = { pingMain: true, allowFull: false, tools: true };
   let touched = false; // true once the user has changed a control; until then the server's values fill the form
@@ -43,27 +43,32 @@ export function createSettingsDialog({ send, connected, notify, openReview = () 
   }
 
   // ---- Team: who assigns tasks, and the dispatcher's guide. An empty saved guide means the built-in one.
-  let savedTeam = { dispatcher: 'auto', guide: '' };
+  let savedTeam = { dispatcher: 'auto', guide: '', mode: 'dispatcher', coordinator: 'auto', coordinatorGuide: '' };
   let teamTouched = false;
   function teamOptions() {
     const select = $('#set-team-dispatcher'); const value = teamTouched ? select.value : savedTeam.dispatcher;
     select.querySelectorAll('option[data-agent]').forEach((o) => o.remove());
     for (const a of getAgents()) { const o = Object.assign(document.createElement('option'), { value: a.id, textContent: `Always ${a.name}, on its cheapest model` }); o.dataset.agent = a.id; select.append(o); }
     select.value = [...select.options].some((o) => o.value === value) ? value : 'auto';
+    const coord = $('#set-team-coordinator'); const chosen = teamTouched ? coord.value : savedTeam.coordinator;
+    coord.querySelectorAll('option[data-agent]').forEach((o) => o.remove());
+    for (const a of getAgents()) { const o = Object.assign(document.createElement('option'), { value: a.id, textContent: `Always ${a.name}` }); o.dataset.agent = a.id; coord.append(o); }
+    coord.value = [...coord.options].some((o) => o.value === chosen) ? chosen : 'auto';
   }
   function showTeam(team, force) {
     if (!team) return;
-    savedTeam = { dispatcher: team.dispatcher || 'auto', guide: team.guide || '' };
-    if (force || !teamTouched) { teamTouched = false; teamOptions(); $('#set-team-guide').value = savedTeam.guide || defaultGuide(); $('#team-settings-status').textContent = savedTeam.guide ? 'Using your guide' : 'Using the built-in guide'; }
+    savedTeam = { dispatcher: team.dispatcher || 'auto', guide: team.guide || '', mode: team.mode || 'dispatcher', coordinator: team.coordinator || 'auto', coordinatorGuide: team.coordinatorGuide || '' };
+    if (force || !teamTouched) { teamTouched = false; teamOptions(); $('#set-team-mode').value = savedTeam.mode; $('#set-team-guide').value = savedTeam.guide || defaultGuide(); $('#set-team-coordinator-guide').value = savedTeam.coordinatorGuide || defaultCoordinatorGuide(); $('#team-settings-status').textContent = savedTeam.guide ? 'Using your guide' : 'Using the built-in guide'; }
   }
-  for (const id of ['#set-team-dispatcher', '#set-team-guide']) $(id).addEventListener('input', () => { teamTouched = true; $('#team-settings-status').textContent = 'Unsaved changes'; });
+  for (const id of ['#set-team-mode', '#set-team-coordinator', '#set-team-coordinator-guide', '#set-team-dispatcher', '#set-team-guide']) $(id).addEventListener('input', () => { teamTouched = true; $('#team-settings-status').textContent = 'Unsaved changes'; });
   $('#save-team').addEventListener('click', () => {
     if (!connected()) return notify('Connect to the local server first.');
     const text = $('#set-team-guide').value.trim();
-    send({ t: 'savesettings', settings: { team: { dispatcher: $('#set-team-dispatcher').value, guide: text === defaultGuide().trim() ? '' : text } } });
+    const coordText = $('#set-team-coordinator-guide').value.trim();
+    send({ t: 'savesettings', settings: { team: { dispatcher: $('#set-team-dispatcher').value, guide: text === defaultGuide().trim() ? '' : text, mode: $('#set-team-mode').value, coordinator: $('#set-team-coordinator').value, coordinatorGuide: coordText === defaultCoordinatorGuide().trim() ? '' : coordText } } });
     $('#team-settings-status').textContent = 'Saving…';
   });
-  $('#reset-team').addEventListener('click', () => { $('#set-team-guide').value = defaultGuide(); teamTouched = true; $('#team-settings-status').textContent = 'Built-in guide restored. Press Save to keep it.'; });
+  $('#reset-team').addEventListener('click', () => { $('#set-team-guide').value = defaultGuide(); $('#set-team-coordinator-guide').value = defaultCoordinatorGuide(); teamTouched = true; $('#team-settings-status').textContent = 'Built-in guide restored. Press Save to keep it.'; });
 
   function labels() {
     teamOptions();

@@ -1,7 +1,11 @@
 // The standing instructions every agent receives: the user's global prompt, the project context, and
 // (for main agents in learning mode) the learner profile, working method and journal.
 
+import fs from 'node:fs';
 import path from 'node:path';
+
+/** The folder every agent of a project can read and write, outside each agent's own copy of the project. */
+export const sharedDirOf = (repo) => path.join(repo, '.tandem', 'shared');
 
 const MAX_PROMPT = 8000;
 
@@ -14,7 +18,10 @@ export function createPrompt(ctx, learning, extraBlocks = () => []) {
   function render(name, { provider = 'codex', child = false } = {}) {
     const prompt = !globalPrompt.on ? '' : globalPrompt.text.trim().replaceAll('{{repo}}', path.basename(ctx.workingDir)).replaceAll('{{path}}', ctx.workingDir).replaceAll('{{agent}}', name);
     const context = ctx.projectContext.text && `[Shared project context: ${ctx.projectContext.file}]\n${ctx.projectContext.text}`;
-    return [prompt, context, ...(child ? [] : [...extraBlocks(provider), ...learning.promptBlocks(provider)])].filter(Boolean).join('\n\n');
+    const shared = sharedDirOf(ctx.workingDir);
+    try { fs.mkdirSync(shared, { recursive: true }); } catch { /* the note below is still true if it can be made later */ }
+    const team = `[Shared team folder: ${shared}]\nEach agent works in its own copy of the project, so it cannot see the files you create in yours, and you cannot see theirs. This folder is shared by every agent and by the user. When something is meant for other agents or the user to see (a plan, spec, notes, a task list, a decision, a hand-off), write it as a document in this folder, and look here for what others have left. Keep it to documents: code changes belong in your own folder and go through review.`;
+    return [prompt, context, team, ...(child ? [] : [...extraBlocks(provider), ...learning.promptBlocks(provider)])].filter(Boolean).join('\n\n');
   }
 
   return {

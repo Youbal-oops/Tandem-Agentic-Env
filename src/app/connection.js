@@ -44,7 +44,12 @@ export function initConnection(app) {
     onStatus(kind, data) {
       const { info } = app;
       if (kind === 'session') {
-        if (!localStorage.getItem('tandem:setup-complete')) setTimeout(() => { if (!document.querySelector('dialog[open]')) $('#setup-dialog').showModal(); }, 250);
+        if (!localStorage.getItem('tandem:setup-complete') && !(data.agents || []).length) setTimeout(() => {
+          if (document.querySelector('dialog[open]')) return;
+          $('#setup-dialog').showModal();
+          // Shown once is enough: it is marked as seen now, so it cannot come back at every launch however it gets closed.
+          try { localStorage.setItem('tandem:setup-complete', '1'); } catch { /* shown again next launch */ }
+        }, 250);
         app.setGit(data.git);
         if (data.local) app.localTools?.receive({ t: 'localstate', ...data.local });
         if (data.local?.childModelDefaults) { Object.assign(CHILD_MODEL_DEFAULTS, data.local.childModelDefaults); app.childChats?.setDefaults(); }
@@ -52,6 +57,8 @@ export function initConnection(app) {
         if (data.clone) app.setCloneStatus(data.clone);
         app.setServices?.(data.services || []);
         app.teamGuide = data.teamGuide || '';
+        app.coordinatorGuide = data.coordinatorGuide || '';
+        if ((data.problems || []).length && !app.shownProblems) { app.shownProblems = true; app.showNotice(`Could not restore ${data.problems.map((p) => p.name).join(', ')}: ${data.problems[0].error} It is kept and will be tried again next launch.`); }
         app.reconcile(data.agents);
         for (const [provider, models] of Object.entries(data.models || {})) {
           MODEL_PRESETS[provider] = models;
@@ -64,6 +71,7 @@ export function initConnection(app) {
         if (ui.todoMode) app.setTodoMode(true); // look for the checklist again now that the server is reachable
         app.childChats?.setOffline(false);
         app.vscode?.online();
+        app.team?.online();
         app.review?.online();
         app.code?.online();
         info.log({ agent: 'tandem', kind: 'info', text: 'connected to the Tandem server' });

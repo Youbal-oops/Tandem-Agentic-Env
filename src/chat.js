@@ -1,14 +1,4 @@
-import { marked } from 'marked';
-import DOMPurify from 'dompurify';
-
-marked.setOptions({ gfm: true, breaks: true });
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-  if (node.tagName === 'A') {
-    node.setAttribute('target', '_blank');
-    node.setAttribute('rel', 'noopener noreferrer');
-  }
-});
-const md = (src) => DOMPurify.sanitize(marked.parse(src || ''));
+import { md } from './markdown.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const fmtMs = (ms) => (ms == null ? '' : ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`);
 

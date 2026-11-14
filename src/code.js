@@ -36,7 +36,7 @@ export function createCodeView({ send, connected, notify, getRepo, getSelected, 
   // ------------------------------------------------------------ the folder being browsed
   function renderSources() {
     const select = $('#code-source');
-    select.replaceChildren(Object.assign(document.createElement('option'), { value: 'repo', textContent: 'Repository' }));
+    select.replaceChildren(Object.assign(document.createElement('option'), { value: 'repo', textContent: 'Repository' }), Object.assign(document.createElement('option'), { value: 'shared', textContent: 'Shared folder (all agents)' }));
     for (const a of agents) select.append(Object.assign(document.createElement('option'), { value: a.id, textContent: `${a.name}'s worktree` }));
     if (![...select.options].some((o) => o.value === source)) source = 'repo';
     select.value = source;
@@ -153,6 +153,7 @@ export function createCodeView({ send, connected, notify, getRepo, getSelected, 
     $('#code-save').disabled = !tab || tab.kind !== 'file' || !tab.dirty;
     $('#code-chat').disabled = !tab;
     $('#code-vscode').disabled = !tab || tab.kind !== 'file';
+    $('#code-share').disabled = !tab || tab.kind !== 'file' || tab.source === 'shared';
     if (editor) $('#code-editor .code-empty').hidden = !!tab;
   }
   function activate(key, reload = true) {
@@ -226,6 +227,13 @@ export function createCodeView({ send, connected, notify, getRepo, getSelected, 
   $('#code-refresh').addEventListener('click', () => { say(''); refresh(); });
   document.querySelectorAll('[data-code-tab]').forEach((b) => b.addEventListener('click', () => { listTab = b.dataset.codeTab; renderList(); }));
   $('#code-save').addEventListener('click', save);
+  $('#code-share').addEventListener('click', () => {
+    const tab = current();
+    if (!tab || tab.kind !== 'file') return;
+    if (tab.source === 'shared') return say('This file is already shared with every agent.');
+    if (tab.dirty) return say('Save the file first, then share it.');
+    if (connected()) send({ t: 'sharefile', source: tab.source, path: tab.path });
+  });
   $('#code-chat').addEventListener('click', addToChat);
   $('#code-diff').addEventListener('click', () => { say('Reading changes…'); readDiff(source); });
   $('#code-vscode').addEventListener('click', () => {
@@ -236,7 +244,7 @@ export function createCodeView({ send, connected, notify, getRepo, getSelected, 
 
   return {
     /** Open one file from the repository (`repo`) or an agent's worktree. */
-    open(src, path) { if (src !== source && (src === 'repo' || agents.some((a) => a.id === src))) setSource(src); openFile(src, path); },
+    open(src, path) { if (src !== source && (src === 'repo' || src === 'shared' || agents.some((a) => a.id === src))) setSource(src); openFile(src, path); },
     /** The side panel started (or stopped) showing the code view. */
     shown() { renderSources(); refresh(); },
     setAgents(list) {
@@ -247,7 +255,9 @@ export function createCodeView({ send, connected, notify, getRepo, getSelected, 
     /** The server became reachable: load the tree. */
     online() { renderSources(); refresh(); },
     /** Show another folder (the repository or an agent's worktree) in the tree. */
-    setSource(src) { if (src !== source && (src === 'repo' || agents.some((a) => a.id === src))) setSource(src); },
+    setSource(src) { if (src !== source && (src === 'repo' || src === 'shared' || agents.some((a) => a.id === src))) setSource(src); },
+    /** Read the open folders again (something was added to one). */
+    refreshTree() { lastTreeLoad = 0; reloadTree(); },
     /** Another project was opened: nothing here belongs to it. */
     repoChanged() {
       for (const tab of tabs.splice(0)) editor?.drop(tab.key);
