@@ -14,8 +14,8 @@
         <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">File</button><div class="menu-list" role="menu"><button data-click="#btn-workspace">Open project…</button><button id="btn-push" title="Review changes and push to a tandem/&lt;repo&gt; branch on origin">Push changes…</button><hr /><button id="btn-notes">Notes…</button><button id="btn-export">Export conversations</button><hr /><button data-click="#btn-settings">Settings…</button><button data-cmd="close">Close window</button></div></div>
         <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Edit</button><div class="menu-list" role="menu"><button data-cmd="undo">Undo<kbd>Ctrl+Z</kbd></button><button data-cmd="redo">Redo<kbd>Ctrl+Y</kbd></button><hr /><button data-cmd="cut">Cut<kbd>Ctrl+X</kbd></button><button data-cmd="copy">Copy<kbd>Ctrl+C</kbd></button><button data-cmd="paste">Paste<kbd>Ctrl+V</kbd></button><button data-cmd="selectAll">Select all<kbd>Ctrl+A</kbd></button><hr /><button id="btn-prompt" title="Instructions every agent receives at the start of each session">Global prompt…</button></div></div>
         <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">View</button><div class="menu-list" role="menu"><button data-click="#btn-team">Team<kbd>Alt+0</kbd></button><hr /><button data-click="#btn-review">Review<kbd>Ctrl+R</kbd></button><button data-click="#btn-code">Code<kbd>Ctrl+B</kbd></button><button data-click="#btn-editor">VS Code<kbd>Ctrl+E</kbd></button><button data-click="#btn-terminal">Terminal<kbd>Ctrl+`</kbd></button><button data-click="#btn-activity">Activity</button><button id="btn-planets" class="switch" type="button" aria-pressed="false" title="A live 3D view of the agents as planets. Off by default: nothing 3D is loaded until you turn it on.">Planets <b>off</b></button><hr /><button data-click="#btn-rail">Sidebar<kbd>Ctrl+\</kbd></button><button data-cmd="reload">Reload</button></div></div>
-        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Agents</button><div class="menu-list" role="menu"><button data-click="#btn-add-agent">Add an agent…</button><button id="btn-connect" title="Install and sign in to Claude Code, Codex, Gemini or Antigravity without a terminal">Connect agents…</button><button id="btn-browser" title="Bring the selected agent's browser window forward. Agents open it themselves when they test the app.">Agent browser</button><button id="btn-stop-all" title="Stop all running agent sessions">Stop all agents</button><hr /><button id="btn-learning" class="switch" type="button" aria-pressed="false" title="Learning mode: main agents stay read-only until you approve each step">Learning <b>off</b></button><button id="btn-profile" title="What you know and what you want to learn">Learn profile…</button><button id="btn-journal" title="Steps finished in learning mode, kept for the next session">Learning journal…</button><hr /><button id="btn-demo" title="Replay a scripted session without using any quota (Alt+D)">Demo<kbd>Alt+D</kbd></button></div></div>
-        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Help</button><div class="menu-list" role="menu"><button id="btn-setup" title="Set up projects, Git and agents">Set up…</button><button data-cmd="shortcuts">Keyboard shortcuts</button></div></div>
+        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Agents</button><div class="menu-list" role="menu"><button id="btn-connect" title="Sign in to Claude, ChatGPT or Google">Connect an AI…</button><button id="btn-other-models" title="API keys, local models and custom agents">Other models…</button><button id="btn-browser" title="Bring the selected agent's browser window forward. Agents open it themselves when they test the app.">Agent browser</button><button id="btn-stop-all" title="Stop all running agent sessions">Stop all agents</button><hr /><button id="btn-learning" class="switch" type="button" aria-pressed="false" title="Learning mode: main agents stay read-only until you approve each step">Learning <b>off</b></button><button id="btn-profile" title="What you know and what you want to learn">Learn profile…</button><button id="btn-journal" title="Steps finished in learning mode, kept for the next session">Learning journal…</button><hr /><button id="btn-demo" title="Replay a scripted session without using any quota (Alt+D)">Demo<kbd>Alt+D</kbd></button></div></div>
+        <div class="menu"><button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Help</button><div class="menu-list" role="menu"><button id="btn-setup" title="Sign in to Claude, ChatGPT or Google">Connect an AI…</button><button data-cmd="shortcuts">Keyboard shortcuts</button></div></div>
       </nav>
       <div class="top-drag"></div>
       <nav class="top-views" aria-label="Side panel">
@@ -31,7 +31,7 @@
       <button id="btn-team" class="rail-item rail-team" title="One chat for the whole team: describe a task and Tandem gives it to the right agent on the right model">Team</button>
 
       <section class="rail-sec" data-sec="agents">
-        <div class="rail-label"><button class="sec-toggle" type="button" aria-expanded="true">Agents</button><button id="btn-add-agent" class="icon" title="Add an agent" aria-label="Add an agent">+</button></div>
+        <div class="rail-label"><button class="sec-toggle" type="button" aria-expanded="true">Agents</button><button id="btn-add-agent" class="icon" title="Connect an AI" aria-label="Connect an AI">+</button></div>
         <div id="agent-rows" class="sec-body"></div>
       </section>
 
@@ -69,14 +69,10 @@
           </div>
         </section>
         <section id="empty-agents" class="hero">
-          <h1>Where should we start?</h1>
-          <p>Add an agent to work on this project. Any mix works: CLI agents that edit code, or chat models over an API.</p>
-          <form id="quick-agent" class="hero-form">
-            <select name="provider" id="quick-provider" aria-label="Connection"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option><option value="api">Other compatible API (custom endpoint)</option></select>
-            <input name="name" maxlength="32" placeholder="Name (optional)" autocomplete="off" aria-label="Name (optional)" />
-            <button type="submit" class="primary">Add agent</button>
-          </form>
-          <div class="chips"><button id="quick-find" type="button">Find connections on this computer</button><button id="quick-install" type="button">Install or sign in…</button></div>
+          <h1>Connect an AI to start</h1>
+          <p>Press Connect, sign in in your browser, and it is ready. Tandem installs what it needs.</p>
+          <div class="acct-list hero-accts"></div>
+          <p class="setup-more"><button type="button" class="linkish other-models">Use an API key or a local model instead</button></p>
         </section>
       </div>
     </main>
@@ -149,7 +145,7 @@
       </section><section data-workspace-page="agents" hidden>
       <div class="settings-heading"><h3>Agents</h3><span>Up to eight independent agents</span></div>
       <div id="agent-list"></div>
-      <div class="form-row"><button id="open-connect" type="button">Install or sign in to agents…</button><button id="scan-connections" type="button">Find connections</button><span>Every connection that is ready is added as an agent automatically.</span></div>
+      <div class="form-row"><button id="open-connect" type="button">Connect Claude, ChatGPT or Google…</button><button id="scan-connections" type="button">Find connections</button><span>Every connection that is ready is added as an agent automatically.</span></div>
       <form id="agent-form">
         <h3>Add an agent</h3>
         <div class="form-row"><label>Name <small>(optional)</small><input name="name" maxlength="32" placeholder="Defaults to the connection" /></label><label>Connection<select name="provider" id="agent-provider"><option value="claude">Claude Code CLI</option><option value="codex">Codex CLI</option><option value="gemini">Gemini CLI</option><option value="antigravity">Antigravity CLI</option><option value="api">Other compatible API (custom endpoint)</option></select></label></div>
@@ -173,15 +169,6 @@
       <p id="folder-status" role="status" aria-live="polite"></p>
       <nav id="folder-list" aria-label="Folders"></nav>
       <footer class="folder-footer"><span id="folder-selection"></span><button id="choose-folder" class="primary" disabled>Use this folder</button></footer>
-    </dialog>
-    <dialog id="connect-dialog" class="connect-dialog">
-      <header><div><span class="eyebrow">No terminal needed</span><h2>Connect agents</h2></div><button id="close-connect">Close ×</button></header>
-      <p>Install an agent CLI with one click, then sign in. Sign-in opens a normal terminal window already running the right command; finish it there and press Refresh. Installing runs <b>npm install -g</b> for the official package, which can take a minute.</p>
-      <p id="connect-npm" class="connect-warn" hidden>npm was not found, so Tandem cannot install anything. Install Node.js from nodejs.org, restart Tandem, and come back.</p>
-      <div id="connect-list"></div>
-      <pre id="connect-log" hidden></pre>
-      <div class="form-row"><button id="connect-refresh" type="button">Refresh</button><span id="connect-status" role="status"></span></div>
-      <p>Gemini can also be added without its CLI as a chat-only agent (Add an agent → Gemini API) using Google's OpenAI-compatible endpoint and a GEMINI_API_KEY in the server environment.</p>
     </dialog>
     <dialog id="settings-dialog" class="settings-dialog">
       <header><div><span class="eyebrow">Saved on this computer</span><h2>Settings</h2></div><button id="close-settings">Close ×</button></header>
@@ -310,12 +297,10 @@
       <div class="form-row"><button id="journal-clear">Clear journal</button></div>
     </dialog>
     <dialog id="setup-dialog" class="setup-dialog">
-      <header><div><span class="eyebrow">Welcome to Tandem</span><h2>Sign in and start building</h2></div><button id="close-setup">Close ×</button></header>
-      <p class="setup-lede">Sign in with the AI accounts you already have. Tandem installs whatever it needs, opens the sign-in in your browser and connects it for you. Nothing to install by hand.</p>
-      <section class="setup-section"><span class="kicker">1 · YOUR AI ACCOUNTS</span><div id="setup-accounts" class="setup-accounts"></div>
-        <p class="setup-more"><button type="button" data-setup="agents" class="linkish">Use an API key or a local model instead</button></p></section>
-      <section class="setup-section"><span class="kicker">2 · YOUR PROJECT</span><div class="setup-grid"><button data-setup="folder"><b>Open a folder</b><small>A project already on this computer</small></button><button data-setup="clone"><b>Clone from GitHub</b><small>Sign in to GitHub or paste a link</small></button><button data-setup="new"><b>New project</b><small>Start with an empty folder</small></button></div></section>
-      <section class="setup-section setup-done"><button id="finish-setup" class="primary">Start working →</button><span id="setup-hint" class="setup-hint"></span></section>
+      <header><div><h2>Connect an AI</h2></div><button id="close-setup">Close ×</button></header>
+      <p class="setup-lede">Press Connect, sign in in your browser, and it is ready. Tandem installs what it needs.</p>
+      <div class="acct-list"></div>
+      <p class="setup-more"><button type="button" class="linkish other-models">Use an API key or a local model instead</button></p>
     </dialog>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -1,7 +1,7 @@
 // Connecting agents: which CLIs are installed and signed in, installing one, and opening its sign-in.
 
 import { createConnect } from '../../connect.mjs';
-import { CLIS, refreshSpecs, specs } from '../binaries.mjs';
+import { CLIS, refreshSpecs, specs, toolsDir } from '../binaries.mjs';
 import { findConnections } from '../connections.mjs';
 import { createAccountSetup } from '../../account-setup.mjs';
 
@@ -15,7 +15,9 @@ export function createConnectRoutes({ hub, snapshot, agents }) {
     },
   });
 
-  const setup = createAccountSetup({ connect, specs, clis: CLIS, refresh: refreshSpecs, emit: (msg) => { if (msg.t === 'connect-changed') { hub.broadcast(snapshot()); scan(); } hub.broadcast(msg); } });
+  const setup = createAccountSetup({ connect, specs, clis: CLIS, refresh: refreshSpecs, tools: toolsDir(),
+    // Connecting an account always ends with an agent for it, even one the user removed earlier.
+    onConnected: (id) => { if (!agents.configs().some((c) => c.provider === id)) agents.add({ id: agents.configs().some((c) => c.id === id) ? undefined : id, provider: id, name: { claude: 'Claude', codex: 'Codex', antigravity: 'Antigravity' }[id] || id }); }, emit: (msg) => { if (msg.t === 'connect-changed') { hub.broadcast(snapshot()); scan(); } hub.broadcast(msg); } });
 
   /** Look for connections that have no planet yet (a CLI signed in, an API key set, a local model server running) and add one for each. */
   // Which CLIs are signed in, from the last check, so the Team chat never gives work to one that is signed out.
@@ -41,7 +43,12 @@ export function createConnectRoutes({ hub, snapshot, agents }) {
     signedIn: () => signed,
     handlers: {
       'scan-connections': () => scan({ quiet: false }),
-      'setup-state': async (m, conn) => conn.send({ t: 'setup-state', providers: await setup.state() }),
+      // Answered twice: at once with what is known, then again when each sign-in has been checked (that takes some seconds).
+      'setup-state': async (m, conn) => {
+        const withAgents = (list) => list.map((p) => ({ ...p, hasAgent: agents.configs().some((c) => c.provider === p.id) }));
+        conn.send({ t: 'setup-state', providers: withAgents(await setup.state({ quick: true })) });
+        conn.send({ t: 'setup-state', providers: withAgents(await setup.state()) });
+      },
       'setup-begin': (m, conn) => { setup.begin(String(m.cli)).catch((e) => conn.send({ t: 'notice', text: e.message })); },
       'setup-cancel': (m) => { setup.cancel(String(m.cli)); },
       'connect-status': async (m, conn) => conn.send({ t: 'connect-status', ...await connect.status() }),

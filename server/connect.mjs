@@ -33,17 +33,18 @@ export function createConnect({ specs, clis, refresh, emit, home = os.homedir(),
 
   const npm = platform === 'win32' ? { file: 'npm.cmd', shell: true } : { file: 'npm', shell: false };
   // On Windows a .cmd file only runs through a shell (Node refuses to spawn it directly).
-  const run = (file, args, timeout = 10000) => new Promise((resolve) => {
+  // `environment` is what the program needs to start (a Node script run by the desktop app needs its run-as-Node flag).
+  const run = (file, args, timeout = 10000, environment = undefined) => new Promise((resolve) => {
     const viaShell = file === npm.file && npm.shell;
     // Fixed words only, joined into one command line so Node has no argument list to warn about.
     const [f, a] = viaShell ? [[file, ...args].join(' '), []] : [file, args];
-    execImpl(f, a, { timeout, windowsHide: true, encoding: 'utf8', shell: viaShell }, (err, stdout, stderr) => resolve({ ok: !err, code: err?.code ?? 0, out: String(stdout || '') + String(stderr || '') }));
+    execImpl(f, a, { timeout, windowsHide: true, encoding: 'utf8', shell: viaShell, ...(environment ? { env: { ...process.env, ...environment } } : {}) }, (err, stdout, stderr) => resolve({ ok: !err, code: err?.code ?? 0, out: String(stdout || '') + String(stderr || '') }));
   });
 
   async function signedIn(id) {
     const cli = clis[id];
     if (!specs[id]) return null;
-    if (cli.status) return (await run(specs[id].file, [...specs[id].args, ...cli.status])).ok;
+    if (cli.status) return (await run(specs[id].file, [...specs[id].args, ...cli.status], 10000, specs[id].environment)).ok;
     // Gemini has no status command: an API key in the environment, or the file its Google sign-in leaves behind.
     return !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || fs.existsSync(path.join(home, '.gemini', 'oauth_creds.json')));
   }
@@ -53,8 +54,8 @@ export function createConnect({ specs, clis, refresh, emit, home = os.homedir(),
     const list = await Promise.all(Object.entries(clis).map(async ([id, cli]) => {
       const spec = specs[id];
       let version = '';
-      if (spec) version = (await run(spec.file, [...spec.args, '--version'], 8000)).out.trim().split('\n').pop().slice(0, 40);
-      return { id, name: cli.name, pkg: cli.pkg, installed: !!spec, version, signedIn: await signedIn(id), installing: installing === id };
+      if (spec) version = (await run(spec.file, [...spec.args, '--version'], 8000, spec.environment)).out.trim().split('\n').pop().slice(0, 40);
+      return { id, name: cli.name, pkg: cli.pkg, installed: !!spec, version, working: !!spec && /\d+\.\d+/.test(version), signedIn: await signedIn(id), installing: installing === id };
     }));
     return { clis: list, npm: npmCheck, installing };
   }

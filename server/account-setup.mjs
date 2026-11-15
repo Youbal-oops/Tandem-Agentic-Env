@@ -15,7 +15,7 @@ export const PROVIDERS = {
   },
   codex: {
     name: 'ChatGPT', account: 'ChatGPT account', about: 'OpenAI’s Codex. Sign in with your ChatGPT plan.', login: 'browser',
-    install: { from: 'github.com/openai/codex', download: true },
+    install: { from: 'npmjs.org (OpenAI’s official package)', download: true },
   },
   antigravity: {
     name: 'Google', account: 'Google account', about: 'Google’s Antigravity and Gemini models. Sign in with your Google account.', login: 'terminal',
@@ -23,24 +23,19 @@ export const PROVIDERS = {
   },
 };
 
-/** The release file of the Codex program for this computer, or null when it has to come another way. Pure. */
-export function codexAsset(platform, arch) {
-  if (platform !== 'win32') return null;
-  const a = arch === 'arm64' ? 'aarch64' : arch === 'x64' ? 'x86_64' : null;
-  return a ? `codex-${a}-pc-windows-msvc.exe.zip` : null;
+/** The npm name for this kind of computer in Codex's per-platform packages, or null. Pure. */
+export function codexPlatform(platform, arch) {
+  if (!['win32', 'darwin', 'linux'].includes(platform) || !['x64', 'arm64'].includes(arch)) return null;
+  return `${platform}-${arch}`;
 }
-
-/** Which unpacked file is the Codex program itself: the release file's own name, else `codex.exe`. Helper programs shipped beside it are not it. Pure. */
-export function pickCodexExe(files, asset) {
-  const own = String(asset).replace(/\.zip$/, '');
-  return files.find((f) => f === own) || files.find((f) => f.toLowerCase() === 'codex.exe') || null;
-}
+/** Where the official Codex package for this computer is downloaded from. Pure. */
+export const codexTarball = (version, platform, arch) => `https://registry.npmjs.org/@openai/codex/-/codex-${version}-${codexPlatform(platform, arch)}.tgz`;
 
 const URL_RE = /https?:\/\/[^\s"'<>)\]]+/;
 const tail = (text, n = 400) => String(text).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim().slice(-n);
 
 export function createAccountSetup({
-  connect, specs, clis, refresh, emit = () => {}, platform = process.platform, arch = process.arch, home = os.homedir(),
+  connect, specs, clis, refresh, emit = () => {}, onConnected = () => {}, platform = process.platform, arch = process.arch, home = os.homedir(), tools = path.join(os.homedir(), '.tandem', 'tools'),
   spawnImpl = spawn, execImpl = execFile, fetchImpl = globalThis.fetch, pollMs = 2500, giveUpMs = 6 * 60 * 1000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now,
 }) {
   const work = new Map(); // id -> { phase, step, percent, url, error, child, cancelled }
@@ -49,18 +44,19 @@ export function createAccountSetup({
   const set = (id, patch) => { work.set(id, { ...(work.get(id) || {}), ...patch }); publish(id); };
 
   /** Every provider with what is installed and signed in right now, plus what Tandem is doing for it. */
-  async function state() {
-    const { clis: found } = await connect.status();
+  /** `quick` answers at once from what is already known (is the program there), marking the sign-in as still being checked. */
+  async function state({ quick = false } = {}) {
+    const found = quick ? Object.keys(PROVIDERS).map((id) => ({ id, installed: !!specs[id], signedIn: null })) : (await connect.status()).clis;
     return Object.entries(PROVIDERS).map(([id, p]) => {
       const c = found.find((x) => x.id === id) || {};
-      return { id, name: p.name, account: p.account, about: p.about, from: p.install.from, installed: !!c.installed, signedIn: c.signedIn === true, canInstall: canInstall(id), ...view(id) };
+      return { id, name: p.name, account: p.account, about: p.about, from: p.install.from, installed: !!c.installed && c.working !== false, signedIn: c.signedIn === true && c.working !== false, checking: quick, canInstall: canInstall(id), ...view(id) };
     });
   }
 
   function canInstall(id) {
     const i = PROVIDERS[id]?.install;
     if (!i) return false;
-    if (i.download) return !!codexAsset(platform, arch) || !!clis[id]?.pkg;
+    if (i.download) return !!codexPlatform(platform, arch);
     return !!(platform === 'win32' ? i.win32 : i.unix);
   }
 
@@ -78,50 +74,62 @@ export function createAccountSetup({
     });
   }
 
-  /** Download the Codex program from its releases page and put it where Tandem looks for programs. */
+  const runFile = (file, args, timeout = 120000, cwd = undefined, environment = {}) => new Promise((r) => execImpl(file, args, { timeout, windowsHide: true, encoding: 'utf8', cwd, env: { ...process.env, ...environment } }, (err, out) => r({ ok: !err, out: String(out || '') })));
+  // Windows' own tar, by its full path: another tar earlier on the PATH (Git's) reads `C:` as a network host and fails.
+  const tarProgram = platform === 'win32' ? path.join(process.env.SystemRoot || 'C:/Windows', 'System32', 'tar.exe') : 'tar';
+
+  /**
+   * Codex without npm: download the official package file for this computer from the npm registry (the same file `npm install` would
+   * fetch), unpack it into Tandem's own tools folder, and check that it really runs `codex exec` before using it.
+   */
   async function downloadCodex(id) {
-    const asset = codexAsset(platform, arch);
-    if (!asset) throw new Error('No download for this computer.');
-    const url = `https://github.com/openai/codex/releases/latest/download/${asset}`;
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-codex-'));
-    const zip = path.join(dir, asset);
+    if (!codexPlatform(platform, arch)) throw new Error('There is no Codex download for this kind of computer.');
+    const meta = await fetchImpl('https://registry.npmjs.org/@openai/codex/latest');
+    if (!meta.ok) throw new Error(`Could not reach the download server (HTTP ${meta.status}). Check your internet connection.`);
+    const version = String((await meta.json()).version || '');
+    if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('The download server gave an unexpected answer.');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-codex-'));
+    const tgz = path.join(tmp, 'codex.tgz');
     try {
-      const res = await fetchImpl(url);
+      const res = await fetchImpl(codexTarball(version, platform, arch));
       if (!res.ok) throw new Error(`The download failed (HTTP ${res.status}).`);
       const total = Number(res.headers.get('content-length')) || 0;
       let got = 0;
-      const out = fs.createWriteStream(zip);
+      const out = fs.createWriteStream(tgz);
       for await (const chunk of res.body) {
-        if (work.get(id)?.cancelled) throw new Error('Cancelled.');
-        got += chunk.length; out.write(chunk);
+        if (work.get(id)?.cancelled) { out.destroy(); throw new Error('Cancelled.'); }
+        got += chunk.length; if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
         if (total) set(id, { percent: Math.round((got / total) * 100), step: `Downloading ${Math.round(got / 1e6)} of ${Math.round(total / 1e6)} MB` });
       }
       await new Promise((r, j) => out.end((e) => (e ? j(e) : r())));
       set(id, { percent: null, step: 'Unpacking…' });
-      await runScript(id, `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${dir}' -Force`);
-      const files = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.exe'));
-      const exe = pickCodexExe(files, asset);
-      if (!exe) throw new Error(`The download did not contain the Codex program (it had: ${files.join(', ') || 'no programs'}).`);
-      const bin = path.join(home, '.local', 'bin');
-      fs.mkdirSync(bin, { recursive: true });
-      const target = path.join(bin, 'codex.exe');
-      fs.copyFileSync(path.join(dir, exe), target);
-      // Codex's helper programs belong beside it (its Windows sandbox uses them).
-      for (const f of files) if (f !== exe) fs.copyFileSync(path.join(dir, f), path.join(bin, f));
-      // It must be the real command-line program: the agents run `codex exec`.
-      const ok = await new Promise((r) => execImpl(target, ['exec', '--help'], { timeout: 20000, windowsHide: true }, (err) => r(!err)));
-      if (!ok) { fs.rmSync(target, { force: true }); throw new Error('The downloaded program does not run `codex exec`, so it was not kept. Install Codex with npm instead (npm install -g @openai/codex).'); }
-    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+      const un = await runFile(tarProgram, ['-xzf', 'codex.tgz'], 300000, tmp); // tar comes with Windows 10 and later, macOS and Linux
+      const vendor = path.join(tmp, 'package', 'vendor');
+      if (!un.ok || !fs.existsSync(vendor)) throw new Error('The download could not be unpacked.');
+      const dest = path.join(tools, 'codex');
+      fs.rmSync(dest, { recursive: true, force: true });
+      fs.mkdirSync(dest, { recursive: true });
+      fs.cpSync(vendor, path.join(dest, 'vendor'), { recursive: true });
+      refresh();
+      const spec = specs[id];
+      const works = spec && (await runFile(spec.file, [...(spec.args || []), 'exec', '--help'], 20000, undefined, spec.environment)).ok;
+      if (!works) { fs.rmSync(dest, { recursive: true, force: true }); refresh(); throw new Error('The downloaded Codex did not start on this computer, so it was removed.'); }
+    } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  }
+
+  /** A program Tandem put in place earlier that does not work (an old setup kept the wrong Codex file) is taken away so the good one is found. */
+  async function removeBroken(id) {
+    const old = path.join(home, '.local', 'bin', platform === 'win32' ? 'codex.exe' : 'codex');
+    if (id !== 'codex' || !fs.existsSync(old)) return;
+    if (!/\d+\.\d+/.test((await runFile(old, ['--version'], 8000)).out)) fs.rmSync(old, { force: true });
   }
 
   async function installIt(id) {
     const i = PROVIDERS[id].install;
     set(id, { phase: 'installing', step: `Getting it from ${i.from}…`, percent: null, error: '', url: '' });
-    if (i.download && codexAsset(platform, arch)) await downloadCodex(id);
-    else if (i.download) { // no direct download here: npm, when this computer has it
-      connect.install(id);
-      throw new Error('Installing with npm. Reopen this when it has finished.');
-    } else await runScript(id, platform === 'win32' ? i.win32 : i.unix);
+    await removeBroken(id);
+    if (i.download) await downloadCodex(id);
+    else await runScript(id, platform === 'win32' ? i.win32 : i.unix);
     refresh();
     if (!specs[id]) throw new Error('The installer finished but the program was not found afterwards. Restart Tandem and try again.');
   }
@@ -146,7 +154,10 @@ export function createAccountSetup({
     if (['installing', 'signing-in'].includes(view(id).phase)) return;
     work.set(id, { phase: 'installing', cancelled: false });
     try {
-      if (!specs[id]) await installIt(id);
+      set(id, { phase: 'installing', step: 'Checking…', percent: null, error: '', url: '' });
+      // Missing, or there but not the real program (it cannot even say its version): install it.
+      const works = !!specs[id] && /\d+\.\d+/.test((await runFile(specs[id].file, [...(specs[id].args || []), '--version'], 10000, undefined, specs[id].environment)).out);
+      if (!works) await installIt(id);
       if (work.get(id).cancelled) throw new Error('Cancelled.');
       if (await connect.signedIn(id)) return finish(id);
       set(id, { phase: 'signing-in', step: 'Starting the sign-in…', percent: null });
@@ -171,6 +182,7 @@ export function createAccountSetup({
     work.get(id)?.child?.kill?.();
     refresh();
     set(id, { phase: 'done', step: '', percent: null, url: '', error: '', child: null });
+    try { onConnected(id); } catch { /* the scan below still adds it */ }
     emit({ t: 'connect-changed' }); // adds the agent and updates every screen
   }
 

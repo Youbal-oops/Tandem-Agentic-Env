@@ -2,7 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { createAccountSetup, codexAsset, PROVIDERS } from '../server/account-setup.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFile, execFileSync } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { createAccountSetup, codexPlatform, codexTarball, PROVIDERS } from '../server/account-setup.mjs';
+import { codexTriple } from '../server/app/binaries.mjs';
 
 const CLIS = { claude: { login: ['auth', 'login'], pkg: '@x/claude' }, codex: { login: ['login'], pkg: '@x/codex' }, antigravity: { login: [], pkg: '' } };
 
@@ -16,14 +22,16 @@ function harness({ installed = {}, signed = {}, platform = 'win32' } = {}) {
     signedIn: async (id) => !!signedIn[id], login: (id) => spawned.push(['terminal', id]), install: () => {},
   };
   const spawnImpl = (cmd, args) => { const c = fakeChild(); spawned.push([cmd, args, c]); return c; };
-  const setup = createAccountSetup({ connect, specs, clis: CLIS, refresh: () => {}, emit: (m) => events.push(m), platform, spawnImpl, pollMs: 1, giveUpMs: 400, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) });
+  const execImpl = (file, args, opts, cb) => cb(null, 'tool 1.2.3'); // every installed program answers --version
+  const setup = createAccountSetup({ connect, specs, clis: CLIS, refresh: () => {}, emit: (m) => events.push(m), platform, spawnImpl, execImpl, pollMs: 1, giveUpMs: 400, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) });
   return { setup, specs, spawned, events, signedIn };
 }
 
 test('the assets and installers are fixed, known ones', () => {
-  assert.equal(codexAsset('win32', 'x64'), 'codex-x86_64-pc-windows-msvc.exe.zip');
-  assert.equal(codexAsset('win32', 'arm64'), 'codex-aarch64-pc-windows-msvc.exe.zip');
-  assert.equal(codexAsset('linux', 'x64'), null);
+  assert.equal(codexTarball('0.169.0', 'win32', 'x64'), 'https://registry.npmjs.org/@openai/codex/-/codex-0.169.0-win32-x64.tgz');
+  assert.equal(codexPlatform('darwin', 'arm64'), 'darwin-arm64');
+  assert.equal(codexPlatform('freebsd', 'x64'), null);
+  assert.equal(codexTriple('win32', 'x64'), 'x86_64-pc-windows-msvc');
   assert.match(PROVIDERS.claude.install.win32, /^irm https:\/\/claude\.ai\/install\.ps1/);
   assert.match(PROVIDERS.antigravity.install.win32, /^irm https:\/\/antigravity\.google\//);
 });
@@ -97,10 +105,65 @@ test('where there is no installer for this system the card says so', async () =>
   assert.equal(st.find((p) => p.id === 'claude').canInstall, true);
 });
 
-import { pickCodexExe } from '../server/account-setup.mjs';
-test('the Codex program is picked by its own name, never a helper that happens to sort first', () => {
-  const asset = 'codex-x86_64-pc-windows-msvc.exe.zip';
-  assert.equal(pickCodexExe(['codex-command-runner.exe', 'codex-x86_64-pc-windows-msvc.exe'], asset), 'codex-x86_64-pc-windows-msvc.exe');
-  assert.equal(pickCodexExe(['codex.exe', 'helper.exe'], asset), 'codex.exe');
-  assert.equal(pickCodexExe(['codex-command-runner.exe'], asset), null);
+// A stand-in for the npm registry: the real package layout (package/vendor/<triple>/bin/codex) in a real .tgz, unpacked by the real tar.
+function fakeRegistry(dir, { withProgram = true } = {}) {
+  const bin = path.join(dir, 'package', 'vendor', codexTriple(), 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  if (withProgram) fs.writeFileSync(path.join(bin, process.platform === 'win32' ? 'codex.exe' : 'codex'), 'program');
+  fs.mkdirSync(path.join(dir, 'package', 'vendor', codexTriple(), 'codex-resources'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'package', 'vendor', codexTriple(), 'codex-resources', 'helper.txt'), 'helper');
+  execFileSync(process.platform === 'win32' ? path.join(process.env.SystemRoot, 'System32', 'tar.exe') : 'tar', ['-czf', 'codex.tgz', 'package'], { cwd: dir });
+  const bytes = fs.readFileSync(path.join(dir, 'codex.tgz'));
+  const asked = [];
+  const fetchImpl = async (url) => {
+    asked.push(url);
+    if (url.endsWith('/latest')) return { ok: true, json: async () => ({ version: '9.9.9' }) };
+    return { ok: true, headers: { get: () => String(bytes.length) }, body: Readable.from([bytes.subarray(0, 100), bytes.subarray(100)]) };
+  };
+  return { fetchImpl, asked };
+}
+
+function codexHarness({ runs = true, withProgram = true } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-setup-test-'));
+  const tools = path.join(root, 'tools'); const home = path.join(root, 'home');
+  fs.mkdirSync(path.join(home, '.local', 'bin'), { recursive: true });
+  const exe = path.join(tools, 'codex', 'vendor', codexTriple(), 'bin', process.platform === 'win32' ? 'codex.exe' : 'codex');
+  const specs = { codex: null };
+  const refresh = () => { specs.codex = fs.existsSync(exe) ? { file: exe, args: [] } : null; };
+  const reg = fakeRegistry(fs.mkdtempSync(path.join(root, 'reg-')), { withProgram });
+  const ran = [];
+  const execImpl = (file, args, opts, cb) => { if (/tar(\.exe)?$/.test(file)) return execFile(file, args, opts, cb); ran.push([path.basename(file), ...args]); cb(runs ? null : new Error('exit 2'), runs ? 'codex-cli 9.9.9' : "error: unexpected argument 'exec'"); };
+  const connect = { status: async () => ({ clis: [{ id: 'codex', installed: !!specs.codex, working: !!specs.codex, signedIn: !!specs.codex }] }), signedIn: async () => !!specs.codex };
+  const setup = createAccountSetup({ connect, specs, clis: { codex: { login: ['login'] } }, refresh, tools, home, fetchImpl: reg.fetchImpl, execImpl, emit: () => {}, pollMs: 1, giveUpMs: 50 });
+  return { setup, exe, home, tools, ran, asked: reg.asked, done: () => fs.rmSync(root, { recursive: true, force: true }) };
+}
+
+test('Codex is installed without npm: the official package file is downloaded, unpacked with its helpers, and checked before use', async () => {
+  const h = codexHarness();
+  await h.setup.begin('codex');
+  assert.deepEqual(h.asked, ['https://registry.npmjs.org/@openai/codex/latest', codexTarball('9.9.9', process.platform, process.arch)]);
+  assert.ok(fs.existsSync(h.exe)); assert.ok(fs.existsSync(path.join(h.tools, 'codex', 'vendor', codexTriple(), 'codex-resources', 'helper.txt')));
+  assert.ok(h.ran.some((r) => r.includes('exec') && r.includes('--help')), 'it is run once to prove it is the real program');
+  assert.equal((await h.setup.state()).find((p) => p.id === 'codex').phase, 'done');
+  h.done();
+});
+
+test('a Codex download that does not run is removed and reported, and a wrong program left by an older setup is taken away', async () => {
+  const h = codexHarness({ runs: false });
+  const old = path.join(h.home, '.local', 'bin', process.platform === 'win32' ? 'codex.exe' : 'codex');
+  fs.writeFileSync(old, 'wrong program');
+  await h.setup.begin('codex');
+  const st = (await h.setup.state()).find((p) => p.id === 'codex');
+  assert.equal(st.phase, 'error'); assert.match(st.error, /did not start/);
+  assert.equal(fs.existsSync(h.exe), false); assert.equal(fs.existsSync(old), false);
+  h.done();
+  const empty = codexHarness({ withProgram: false }); await empty.setup.begin('codex');
+  assert.equal((await empty.setup.state()).find((p) => p.id === 'codex').phase, 'error');
+  empty.done();
+});
+
+test('a program that is there but is not the real CLI counts as not installed, so Connect repairs it', async () => {
+  const h = harness({ installed: { claude: true } });
+  const st = await createAccountSetup({ connect: { status: async () => ({ clis: [{ id: 'claude', installed: true, working: false, signedIn: true }] }) }, specs: h.specs, clis: CLIS, refresh: () => {} }).state();
+  assert.equal(st.find((p) => p.id === 'claude').installed, false); assert.equal(st.find((p) => p.id === 'claude').signedIn, false);
 });

@@ -82,6 +82,7 @@ export function initAgents(app) {
     app.code?.online();
     app.review?.setAgents(next);
     app.team?.setAgents(next);
+    app.setup?.agentsChanged(next);
     app.vscode?.setAgents(next);
     $('#empty-agents').hidden = AGENTS.length > 0;
     document.body.classList.toggle('no-agents', !AGENTS.length);

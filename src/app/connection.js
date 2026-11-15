@@ -44,12 +44,7 @@ export function initConnection(app) {
     onStatus(kind, data) {
       const { info } = app;
       if (kind === 'session') {
-        if (!localStorage.getItem('tandem:setup-complete') && !(data.agents || []).length) setTimeout(() => {
-          if (document.querySelector('dialog[open]')) return;
-          $('#setup-dialog').showModal(); app.setup?.open();
-          // Shown once is enough: it is marked as seen now, so it cannot come back at every launch however it gets closed.
-          try { localStorage.setItem('tandem:setup-complete', '1'); } catch { /* shown again next launch */ }
-        }, 250);
+        app.setup?.open(); // the empty state shows the accounts to connect
         app.setGit(data.git);
         if (data.local) app.localTools?.receive({ t: 'localstate', ...data.local });
         if (data.local?.childModelDefaults) { Object.assign(CHILD_MODEL_DEFAULTS, data.local.childModelDefaults); app.childChats?.setDefaults(); }
@@ -96,7 +91,6 @@ export function initConnection(app) {
       if (app.localTools?.receive(msg)) return;
       if (app.settingsDialog?.receive(msg)) return;
       if (app.setup?.receive(msg)) return;
-      if (app.connectDialog?.receive(msg)) return;
       if (app.structurePanel?.receive(msg)) return;
       if (app.pushDialog?.receive(msg)) return;
       if (app.journal?.receive(msg)) return;

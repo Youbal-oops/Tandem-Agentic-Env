@@ -119,26 +119,14 @@ export function initWorkspace(app) {
     app.net.send({ t: 'clone', source: $('#clone-source').value, url: $('#clone-url').value.trim(), destination: $('#clone-destination').value.trim() });
   });
   $('#btn-workspace').addEventListener('click', openWorkspace);
-  $('#btn-setup').addEventListener('click', () => { $('#setup-dialog').showModal(); app.setup?.open(); });
+  // One screen connects an AI: every way in opens it.
+  const openConnect = () => { $('#workspace-dialog').close(); if (!$('#setup-dialog').open) $('#setup-dialog').showModal(); app.setup?.open(); };
+  for (const id of ['#btn-setup', '#btn-connect', '#btn-add-agent', '#open-connect']) $(id).addEventListener('click', openConnect);
   $('#close-setup').addEventListener('click', () => $('#setup-dialog').close());
-  // Closing the walkthrough any way at all (Close, Esc, "I'm ready") means it has been seen: it must not come back at every launch.
-  $('#setup-dialog').addEventListener('close', () => { try { localStorage.setItem('tandem:setup-complete', '1'); } catch { /* shown again next launch */ } });
-  $('#finish-setup').addEventListener('click', () => { localStorage.setItem('tandem:setup-complete', '1'); $('#setup-dialog').close(); app.showNotice('You can reopen setup anytime from Set up.'); });
-  document.querySelectorAll('[data-setup]').forEach((button) => button.addEventListener('click', () => {
-    const action = button.dataset.setup;
-    $('#setup-dialog').close();
-    if (action === 'folder') return openWorkspaceTab('local');
-    if (action === 'clone' || action === 'github') {
-      openWorkspaceTab('clone');
-      if (action === 'github') { $('#clone-source').value = 'account'; $('#clone-source').dispatchEvent(new Event('change')); }
-      return;
-    }
-    if (action === 'agents') return openWorkspaceTab('agents');
-    if (action === 'profile') return $('#btn-profile').click();
-    app.showNotice('New project setup is the next Tandem step. For now, choose a new empty folder with Open a folder.');
-  }));
+  const otherModels = () => { $('#setup-dialog').close(); openWorkspaceTab('agents'); };
+  $('#btn-other-models').addEventListener('click', otherModels);
+  document.querySelectorAll('.other-models').forEach((b) => b.addEventListener('click', otherModels));
   $('#close-workspace').addEventListener('click', () => $('#workspace-dialog').close());
-  $('#btn-add-agent').addEventListener('click', () => openWorkspaceTab('agents'));
   $('#repo-form').addEventListener('submit', (e) => {
     e.preventDefault();
     if (!app.net.open) return app.showNotice('Connect to the server first.');
@@ -148,7 +136,7 @@ export function initWorkspace(app) {
   let services = [];
   app.setServices = (list) => {
     services = Array.isArray(list) ? list : [];
-    for (const select of [$('#agent-provider'), $('#quick-provider')]) {
+    for (const select of [$('#agent-provider')]) {
       select.querySelectorAll('option[data-service]').forEach((o) => o.remove());
       const custom = select.querySelector('option[value="api"]');
       for (const s of services) {
@@ -157,24 +145,6 @@ export function initWorkspace(app) {
       }
     }
   };
-  // The empty state: pick a connection type and (optionally) a name. A CLI is added straight away; an API needs an endpoint and
-  // model, so it carries the choice over to the full form in the Workspace dialog.
-  $('#quick-agent').addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!app.net.open) return app.showNotice('Connect to the server first.');
-    const { provider, name } = Object.fromEntries(new FormData(e.target));
-    if (provider === 'api' || provider.startsWith('api:')) {
-      openWorkspaceTab('agents');
-      $('#agent-provider').value = provider;
-      $('#agent-provider').dispatchEvent(new Event('change'));
-      if (name) $('#agent-form [name="name"]').value = name;
-      return;
-    }
-    app.net.send({ t: 'addagent', config: { provider, name } });
-    e.target.reset();
-  });
-  $('#quick-find').addEventListener('click', () => $('#scan-connections').click());
-  $('#quick-install').addEventListener('click', () => $('#btn-connect').click());
   $('#agent-provider').addEventListener('change', () => {
     const value = $('#agent-provider').value;
     const service = services.find((s) => `api:${s.id}` === value);

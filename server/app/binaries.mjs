@@ -43,13 +43,28 @@ function antigravityBinary() {
   return nativeBinary('agy');
 }
 
+/** Codex's name for this kind of computer, as its packages use it. Pure. */
+export function codexTriple(platform = process.platform, arch = process.arch) {
+  const a = arch === 'arm64' ? 'aarch64' : arch === 'x64' ? 'x86_64' : null;
+  const os_ = platform === 'win32' ? 'pc-windows-msvc' : platform === 'darwin' ? 'apple-darwin' : platform === 'linux' ? 'unknown-linux-musl' : null;
+  return a && os_ ? `${a}-${os_}` : null;
+}
+/** Where Tandem keeps programs it installed itself (the account setup puts Codex here). */
+export const toolsDir = () => process.env.TANDEM_TOOLS || path.join(os.homedir(), '.tandem', 'tools');
+function tandemCodex() {
+  const triple = codexTriple();
+  if (!triple) return null;
+  const p = path.join(toolsDir(), 'codex', 'vendor', triple, 'bin', process.platform === 'win32' ? 'codex.exe' : 'codex');
+  return fs.existsSync(p) ? p : null;
+}
+
 /** Where each CLI lives right now. Called again after an install so a new CLI works without restarting Tandem. */
 function detect() {
   const roots = npmRoots();
   const nativeClaude = nativeBinary('claude');
   const claudeExe = nativeClaude && fs.existsSync(nativeClaude) ? nativeClaude : firstExisting(roots, ['@anthropic-ai', 'claude-code', 'bin', 'claude.exe']);
   const codexJs = firstExisting(roots, ['@openai', 'codex', 'bin', 'codex.js']);
-  const nativeCodex = nativeBinary('codex');
+  const nativeCodex = tandemCodex() || nativeBinary('codex');
   const geminiJs = firstExisting(roots, ['@google', 'gemini-cli', 'bundle', 'gemini.js']);
   const nativeGemini = nativeBinary('gemini');
   const agy = antigravityBinary();

@@ -15,7 +15,6 @@ import { InfoPanel } from './info.js';
 import { createLocalTools } from './local.js';
 import { createJournalDialog } from './journal.js';
 import { createSettingsDialog } from './settings.js';
-import { createConnectDialog } from './connect.js';
 import { createSetup } from './setup.js';
 import { createStructurePanel } from './structure.js';
 import { createPushDialog } from './push.js';
@@ -73,7 +72,6 @@ app.folderPicker = createFolderPicker({ send: (msg) => app.net.send(msg), connec
 app.settingsDialog = createSettingsDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, openReview: () => app.side('review'),
   getAgents: () => app.AGENTS.map((id) => ({ id, name: app.NAMES[id] })), defaultGuide: () => app.teamGuide || '', defaultCoordinatorGuide: () => app.coordinatorGuide || '' });
 app.setup = createSetup({ send: (msg) => app.net.send(msg), connected });
-app.connectDialog = createConnectDialog({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice });
 app.structurePanel = createStructurePanel({ send: (msg) => app.net.send(msg), connected, notify: app.showNotice, getAgents: () => app.AGENTS.map((id) => ({ id, name: app.NAMES[id] })), setDraft });
 app.localTools = createLocalTools({
   onSettings: (settings) => app.settingsDialog.local(settings),
