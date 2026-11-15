@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 
 /** The accounts offered, in the order shown. `login` is how the sign-in runs: 'browser' (Tandem starts it and the CLI opens the browser) or 'terminal' (the CLI needs a real terminal window). */
 export const PROVIDERS = {
@@ -30,12 +30,18 @@ export function codexAsset(platform, arch) {
   return a ? `codex-${a}-pc-windows-msvc.exe.zip` : null;
 }
 
+/** Which unpacked file is the Codex program itself: the release file's own name, else `codex.exe`. Helper programs shipped beside it are not it. Pure. */
+export function pickCodexExe(files, asset) {
+  const own = String(asset).replace(/\.zip$/, '');
+  return files.find((f) => f === own) || files.find((f) => f.toLowerCase() === 'codex.exe') || null;
+}
+
 const URL_RE = /https?:\/\/[^\s"'<>)\]]+/;
 const tail = (text, n = 400) => String(text).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim().slice(-n);
 
 export function createAccountSetup({
   connect, specs, clis, refresh, emit = () => {}, platform = process.platform, arch = process.arch, home = os.homedir(),
-  spawnImpl = spawn, fetchImpl = globalThis.fetch, pollMs = 2500, giveUpMs = 6 * 60 * 1000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now,
+  spawnImpl = spawn, execImpl = execFile, fetchImpl = globalThis.fetch, pollMs = 2500, giveUpMs = 6 * 60 * 1000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now,
 }) {
   const work = new Map(); // id -> { phase, step, percent, url, error, child, cancelled }
   const view = (id) => { const w = work.get(id) || {}; return { phase: w.phase || 'idle', step: w.step || '', percent: w.percent ?? null, url: w.url || '', error: w.error || '' }; };
@@ -93,11 +99,18 @@ export function createAccountSetup({
       await new Promise((r, j) => out.end((e) => (e ? j(e) : r())));
       set(id, { percent: null, step: 'Unpacking…' });
       await runScript(id, `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${dir}' -Force`);
-      const exe = fs.readdirSync(dir).find((f) => /^codex-.*\.exe$/.test(f));
-      if (!exe) throw new Error('The download did not contain the program.');
+      const files = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.exe'));
+      const exe = pickCodexExe(files, asset);
+      if (!exe) throw new Error(`The download did not contain the Codex program (it had: ${files.join(', ') || 'no programs'}).`);
       const bin = path.join(home, '.local', 'bin');
       fs.mkdirSync(bin, { recursive: true });
-      fs.copyFileSync(path.join(dir, exe), path.join(bin, 'codex.exe'));
+      const target = path.join(bin, 'codex.exe');
+      fs.copyFileSync(path.join(dir, exe), target);
+      // Codex's helper programs belong beside it (its Windows sandbox uses them).
+      for (const f of files) if (f !== exe) fs.copyFileSync(path.join(dir, f), path.join(bin, f));
+      // It must be the real command-line program: the agents run `codex exec`.
+      const ok = await new Promise((r) => execImpl(target, ['exec', '--help'], { timeout: 20000, windowsHide: true }, (err) => r(!err)));
+      if (!ok) { fs.rmSync(target, { force: true }); throw new Error('The downloaded program does not run `codex exec`, so it was not kept. Install Codex with npm instead (npm install -g @openai/codex).'); }
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
 
@@ -116,7 +129,7 @@ export function createAccountSetup({
   /** Start the sign-in. For a browser sign-in the CLI opens the browser itself; its printed address is kept in case it did not. */
   function startLogin(id) {
     const p = PROVIDERS[id];
-    if (p.login === 'terminal') { connect.login(id); set(id, { step: 'A window opened. Sign in there, and Tandem will notice.' }); return; }
+    if (p.login === 'terminal') { connect.login(id); set(id, { step: 'A window opened. Sign in there; if it shows a code, paste it into that window. Tandem notices when you are done.' }); return; }
     const spec = specs[id];
     const child = spawnImpl(spec.file, [...(spec.args || []), ...clis[id].login], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...(spec.environment || {}) } });
     let output = '';

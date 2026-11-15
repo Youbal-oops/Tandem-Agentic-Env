@@ -96,3 +96,11 @@ test('where there is no installer for this system the card says so', async () =>
   assert.equal(st.find((p) => p.id === 'antigravity').canInstall, false);
   assert.equal(st.find((p) => p.id === 'claude').canInstall, true);
 });
+
+import { pickCodexExe } from '../server/account-setup.mjs';
+test('the Codex program is picked by its own name, never a helper that happens to sort first', () => {
+  const asset = 'codex-x86_64-pc-windows-msvc.exe.zip';
+  assert.equal(pickCodexExe(['codex-command-runner.exe', 'codex-x86_64-pc-windows-msvc.exe'], asset), 'codex-x86_64-pc-windows-msvc.exe');
+  assert.equal(pickCodexExe(['codex.exe', 'helper.exe'], asset), 'codex.exe');
+  assert.equal(pickCodexExe(['codex-command-runner.exe'], asset), null);
+});
