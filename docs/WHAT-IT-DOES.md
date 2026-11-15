@@ -159,8 +159,9 @@ The UI is text first and uses system fonts only. Nothing 3D and no editor code i
 ## 13. Setup and connecting (`server/connect.mjs`, `repos.mjs`, `folders.mjs`)
 
 - The **Workspace** dialog opens a folder, lists recent repositories, clones from a URL, or lists your GitHub repositories through the `gh` login.
-- **Connect agents** checks what is installed, installs a CLI with npm, and opens a real terminal window at its sign-in. Package names and commands come from a fixed list.
-- A first-run **Set up** walkthrough covers all of this.
+- **The first-run setup** (`server/account-setup.mjs`, `src/setup.js`) signs you in with accounts, all in the window: a card each for a Claude account, a ChatGPT account (Codex) and a Google account (Antigravity). One button does the rest. If the program is missing Tandem installs it (Claude and Antigravity with their vendors' own PowerShell installers from claude.ai and antigravity.google, which need no Node or npm; Codex by downloading its release from GitHub, about 200 MB, and unpacking it); then it starts the browser sign-in without a terminal window (the CLI opens your browser, and the address it prints is kept behind an "Open sign-in page" button in case it did not), and it notices when you have finished, connects the agent and shows "Connected". Cancel stops it; a failure shows what went wrong with Try again. Google's sign-in is the exception: Antigravity only signs in inside a terminal, so one window opens for that and Tandem still notices when it is done. Every command and address comes from a fixed list. API keys and local models stay available under "Use an API key or a local model instead". It opens once on first launch (when no agent exists) and any time from Set up.
+- **Connect agents** (the older dialog) still lists every CLI, including Gemini, and can install one with npm or open its sign-in in a terminal.
+- Not covered yet: Gemini CLI in the new setup (it needs an interactive sign-in), and installing Antigravity or Codex on macOS and Linux (Claude's installer works there).
 
 ## 14. Structure standardizer (`server/structure/`)
 

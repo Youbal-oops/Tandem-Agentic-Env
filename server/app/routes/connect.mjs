@@ -3,6 +3,7 @@
 import { createConnect } from '../../connect.mjs';
 import { CLIS, refreshSpecs, specs } from '../binaries.mjs';
 import { findConnections } from '../connections.mjs';
+import { createAccountSetup } from '../../account-setup.mjs';
 
 export function createConnectRoutes({ hub, snapshot, agents }) {
   const connect = createConnect({
@@ -13,6 +14,8 @@ export function createConnectRoutes({ hub, snapshot, agents }) {
       if (msg.t === 'connect-changed') { hub.broadcast(snapshot()); scan(); }
     },
   });
+
+  const setup = createAccountSetup({ connect, specs, clis: CLIS, refresh: refreshSpecs, emit: (msg) => { if (msg.t === 'connect-changed') { hub.broadcast(snapshot()); scan(); } hub.broadcast(msg); } });
 
   /** Look for connections that have no planet yet (a CLI signed in, an API key set, a local model server running) and add one for each. */
   // Which CLIs are signed in, from the last check, so the Team chat never gives work to one that is signed out.
@@ -38,6 +41,9 @@ export function createConnectRoutes({ hub, snapshot, agents }) {
     signedIn: () => signed,
     handlers: {
       'scan-connections': () => scan({ quiet: false }),
+      'setup-state': async (m, conn) => conn.send({ t: 'setup-state', providers: await setup.state() }),
+      'setup-begin': (m, conn) => { setup.begin(String(m.cli)).catch((e) => conn.send({ t: 'notice', text: e.message })); },
+      'setup-cancel': (m) => { setup.cancel(String(m.cli)); },
       'connect-status': async (m, conn) => conn.send({ t: 'connect-status', ...await connect.status() }),
       'connect-install': (m, conn) => { connect.install(String(m.cli)); conn.send({ t: 'connect-install', cli: m.cli, kind: 'started' }); },
       'connect-login': (m, conn) => { connect.login(String(m.cli)); conn.send({ t: 'notice', text: 'A sign-in window opened. Finish signing in there, then press Refresh here.' }); },

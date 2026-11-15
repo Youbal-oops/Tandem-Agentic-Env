@@ -101,7 +101,7 @@ export function pickAssignment({ text, agents, want = {}, recent = [] }) {
   const task = classifyTask(text);
   const tier = TIERS.includes(want.tier) ? want.tier : task.tier;
   const sized = TIERS.includes(want.tier) ? `${TIER_NAME[tier]} task (your choice)` : `${TIER_NAME[tier]} task: ${task.why}`;
-  if (!agents.length) return { error: 'There are no agents yet. Add one first.' };
+  if (!agents.length) return { error: 'No AI account is connected yet. Open Set up and sign in to one.' };
 
   let pool = agents;
   if (want.agent) {

@@ -75,7 +75,7 @@ test('your own choices win, busy agents are skipped, and chat-only models do not
   assert.match(pickAssignment({ text: 'x', agents, want: { agent: 'codex' } }).error, /still working/);
   agents[0].busy = true;
   assert.match(pickAssignment({ text: 'x', agents }).error, /Every agent is busy/);
-  assert.match(pickAssignment({ text: 'x', agents: [] }).error, /no agents yet/);
+  assert.match(pickAssignment({ text: 'x', agents: [] }).error, /No AI account is connected/);
 });
 
 test('asking for ideas is a question, even when it names a change', () => {

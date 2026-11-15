@@ -119,11 +119,11 @@ export function initWorkspace(app) {
     app.net.send({ t: 'clone', source: $('#clone-source').value, url: $('#clone-url').value.trim(), destination: $('#clone-destination').value.trim() });
   });
   $('#btn-workspace').addEventListener('click', openWorkspace);
-  $('#btn-setup').addEventListener('click', () => $('#setup-dialog').showModal());
+  $('#btn-setup').addEventListener('click', () => { $('#setup-dialog').showModal(); app.setup?.open(); });
   $('#close-setup').addEventListener('click', () => $('#setup-dialog').close());
   // Closing the walkthrough any way at all (Close, Esc, "I'm ready") means it has been seen: it must not come back at every launch.
   $('#setup-dialog').addEventListener('close', () => { try { localStorage.setItem('tandem:setup-complete', '1'); } catch { /* shown again next launch */ } });
-  $('#finish-setup').addEventListener('click', () => { localStorage.setItem('tandem:setup-complete', '1'); $('#setup-dialog').close(); app.showNotice('Setup saved. You can reopen it anytime from Set up.'); });
+  $('#finish-setup').addEventListener('click', () => { localStorage.setItem('tandem:setup-complete', '1'); $('#setup-dialog').close(); app.showNotice('You can reopen setup anytime from Set up.'); });
   document.querySelectorAll('[data-setup]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.setup;
     $('#setup-dialog').close();

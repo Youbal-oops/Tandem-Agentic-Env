@@ -100,5 +100,5 @@ export function createConnect({ specs, clis, refresh, emit, home = os.homedir(),
     return { opened: true };
   }
 
-  return { status, install, login };
+  return { status, install, login, signedIn };
 }
