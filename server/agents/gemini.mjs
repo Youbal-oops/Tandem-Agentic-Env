@@ -64,7 +64,7 @@ export function createGemini(ctx) {
         endTurnCleanup(a, 'Gemini exited');
         if (!sawResult) {
           const hint = a.stderr.trim().split('\n').slice(-6).join('\n');
-          const auth = AUTH.test(hint) ? ' It may not be signed in: open Connect agents and press Sign in for Gemini CLI.' : '';
+          const auth = AUTH.test(hint) ? ' It may not be signed in: open Agents → Connect an AI for Gemini CLI.' : '';
           fail(a, `Gemini stopped${code ? ` (exit ${code})` : ''} before finishing.${auth}${hint ? '\n' + trunc(hint, 700) : ''}`);
         }
       }

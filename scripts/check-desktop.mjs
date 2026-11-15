@@ -103,17 +103,21 @@ try {
   await command('Runtime.enable');
   // Reload after enabling exception capture so startup errors cannot slip past.
   await command('Page.enable'); await command('Page.reload');
-  await eventually(() => evaluate(`document.querySelector('#setup-dialog')?.open && !document.querySelector('#empty-agents').hidden && document.querySelectorAll('.agent[data-agent]').length === 0`), 'renderer initialization', 30000);
+  // With no agents the first screen is the accounts to connect: three rows, no dialog in the way.
+  await eventually(() => evaluate(`!document.querySelector('#empty-agents').hidden && document.querySelectorAll('#empty-agents .acct').length === 3 && !document.querySelector('dialog[open]') && document.querySelectorAll('.agent[data-agent]').length === 0`), 'renderer initialization', 30000);
   const safety = await evaluate(`({ require: typeof require, process: typeof process })`);
   assert.deepEqual(safety, { require: 'undefined', process: 'undefined' });
-  await evaluate(`document.querySelector('#finish-setup').click(); true`);
+  // Every way in opens the same Connect screen, and it closes again.
+  await evaluate(`document.querySelector('#btn-add-agent').click(); true`);
+  assert.equal(await evaluate(`document.querySelector('#setup-dialog').open && document.querySelectorAll('#setup-dialog .acct').length === 3`), true);
+  await evaluate(`document.querySelector('#close-setup').click(); true`);
   assert.equal(await evaluate(`document.querySelector('#setup-dialog').open`), false);
-  assert.equal(await evaluate(`localStorage.getItem('tandem:setup-complete')`), '1');
   assert.deepEqual(errors, [], `Renderer errors: ${errors.join('\n')}`);
-  console.log('PASS real renderer startup, onboarding and browser isolation');
-  // Add the first agent the way a user does: pick a connection type in the empty-state card (no name, so it takes the connection's).
-  await evaluate(`{ const form = document.querySelector('#quick-agent'); form.provider.value = 'claude'; form.requestSubmit(); }`);
-  await eventually(() => evaluate(`document.querySelector('#empty-agents').hidden && document.querySelectorAll('.agent[data-agent]').length === 1`), 'first agent added from the empty state');
+  console.log('PASS real renderer startup, the Connect screen and browser isolation');
+  // Add the first agent through "other models" (the full form): no CLI is installed on a build machine, so no account can be connected.
+  await evaluate(`{ document.querySelector('#empty-agents .other-models').click(); const form = document.querySelector('#agent-form'); form.provider.value = 'claude'; form.provider.dispatchEvent(new Event('change')); form.requestSubmit(); }`);
+  await eventually(() => evaluate(`document.querySelector('#empty-agents').hidden && document.querySelectorAll('.agent[data-agent]').length === 1`), 'first agent added from the form');
+  await evaluate(`document.querySelector('#workspace-dialog').open && document.querySelector('#workspace-dialog').close(); true`);
   const agent = (await (await fetch(`${origin}/api/session`)).json()).agents[0];
   assert.equal(agent.name, 'Claude');
   const panel = `document.querySelector(${JSON.stringify(`#chat-${agent.id}`)})`;

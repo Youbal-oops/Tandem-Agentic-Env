@@ -102,7 +102,7 @@ export function createAntigravity(ctx) {
         endTurnCleanup(a, 'Antigravity exited');
         if (!sawResult) {
           const hint = a.stderr.trim().split('\n').slice(-6).join('\n');
-          const auth = AUTH.test(hint) ? ' It may not be signed in: open Connect agents and press Sign in for Antigravity CLI.' : '';
+          const auth = AUTH.test(hint) ? ' It may not be signed in: open Agents → Connect an AI for Antigravity CLI.' : '';
           fail(a, `Antigravity stopped${code ? ` (exit ${code})` : ''} before finishing.${auth}${hint ? '\n' + trunc(hint, 700) : ''}`);
         }
       }

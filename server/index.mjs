@@ -95,7 +95,7 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) {
 
 server.listen(PORT, HOST, () => {
   console.log(`Tandem API  http://${HOST}:${PORT}   (agents work in: ${agents.cwd})`);
-  for (const id of ['claude', 'codex', 'gemini', 'antigravity']) console.log(`  ${id.padEnd(11)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: More → Connect agents)'}`);
+  for (const id of ['claude', 'codex', 'gemini', 'antigravity']) console.log(`  ${id.padEnd(11)} ${specs[id] ? 'found' : 'not installed (Tandem can install it: Agents → Connect an AI)'}`);
   console.log('Dev UI      http://localhost:5173  (npm run dev)');
   // Once the server is up, give any connection that is already set up (and has no planet yet) its own planet.
   if (!process.env.TANDEM_NO_AUTOSCAN) connectRoutes.scan();
