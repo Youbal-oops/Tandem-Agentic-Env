@@ -25,6 +25,17 @@ export function terminalLaunch(platform, file, args = []) {
 }
 
 /**
+ * Windows: the sign-in runs from a small script file in its own Command Prompt window. (Starting PowerShell from PowerShell with an
+ * encoded command, as this did before, could finish without any window appearing.) Returns the script's text and how to start it. Pure.
+ */
+export function windowsSignIn(scriptPath, file, args = [], { title = 'Tandem sign-in', notes = [] } = {}) {
+  const arg = (v) => `"${String(v).replace(/"/g, '').replace(/%/g, '%%')}"`; // batch quoting: no quotes inside, percent signs doubled
+  const text = ['@echo off', `title ${title.replace(/[&|<>^%"]/g, '')}`, ...notes.map((n) => `echo ${n.replace(/[&|<>^%"]/g, '')}`), 'echo.', [file, ...args].map(arg).join(' '), 'echo.', 'echo You can close this window when the sign-in has finished.', ''].join('\r\n');
+  // /s keeps the inner quotes as written; `start` needs the title first, and `cmd /k` leaves the window open afterwards.
+  return { text, cmd: 'cmd.exe', args: ['/d', '/s', '/c', `"start "${title.replace(/[&|<>^%"]/g, '')}" cmd.exe /k "${scriptPath}""`], verbatim: true };
+}
+
+/**
  * `specs` and `clis` come from app/binaries.mjs, `refresh()` re-detects after an install, and `emit(msg)` reaches
  * every browser. The process helpers are injectable for tests.
  */
@@ -94,9 +105,17 @@ export function createConnect({ specs, clis, refresh, emit, home = os.homedir(),
     if (!cli) throw new Error('Unknown agent.');
     const spec = specs[id];
     if (!spec) throw new Error(`${cli.name} is not installed yet. Install it first.`);
-    const { cmd, args } = terminalLaunch(platform, spec.file, [...spec.args, ...cli.login]);
-    const child = spawnImpl(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false });
-    child.on?.('error', () => emit({ t: 'notice', text: 'Could not open a terminal window. Run the sign-in command yourself in any terminal.' }));
+    const words = [...spec.args, ...cli.login];
+    let cmd; let args; let verbatim = false;
+    if (platform === 'win32') {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tandem-signin-'));
+      const script = path.join(dir, 'sign-in.cmd');
+      const launch = windowsSignIn(script, spec.file, words, { title: `Sign in to ${cli.name}`, notes: [`Signing in to ${cli.name}.`, 'If your browser shows a code, paste it here and press Enter.'] });
+      fs.writeFileSync(script, launch.text);
+      ({ cmd, args, verbatim } = launch);
+    } else ({ cmd, args } = terminalLaunch(platform, spec.file, words));
+    const child = spawnImpl(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false, windowsVerbatimArguments: verbatim, env: { ...process.env, ...(spec.environment || {}) } });
+    child.on?.('error', () => emit({ t: 'notice', text: 'Could not open a sign-in window. Open a terminal yourself and run the sign-in there.' }));
     child.unref?.();
     return { opened: true };
   }

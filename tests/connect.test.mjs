@@ -7,7 +7,7 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { createWorkspace } from '../server/workspace.mjs';
 import { STARTERS } from './fixtures/starters.mjs';
-import { createConnect, terminalLaunch } from '../server/connect.mjs';
+import { createConnect, terminalLaunch, windowsSignIn } from '../server/connect.mjs';
 import { cleanAgents } from '../server/settings.mjs';
 
 const fixture = fileURLToPath(new URL('./fixtures/cli.mjs', import.meta.url));
@@ -81,10 +81,12 @@ test('settings clean the agent options', () => {
 });
 
 test('sign-in opens a terminal window running the CLI login, quoted for each platform', () => {
-  const win = terminalLaunch('win32', 'C:\\Program Files\\nodejs\\node.exe', ["C:\\a b\\codex's.js", 'login']);
-  assert.equal(win.cmd, 'powershell.exe');
-  const encoded = /'-EncodedCommand','([^']+)'/.exec(win.args.at(-1))[1];
-  assert.equal(Buffer.from(encoded, 'base64').toString('utf16le'), "& 'C:\\Program Files\\nodejs\\node.exe' 'C:\\a b\\codex''s.js' 'login'");
+  // Windows: a script file in its own Command Prompt window (PowerShell starting PowerShell could finish with no window at all).
+  const win = windowsSignIn('C:\Temp\a b\sign-in.cmd', 'C:\Program Files\agy\agy.exe', ['login', '50%'], { title: 'Sign in to Antigravity CLI', notes: ['Paste the code & press Enter'] });
+  assert.equal(win.cmd, 'cmd.exe'); assert.equal(win.verbatim, true);
+  assert.equal(win.args.at(-1), '"start "Sign in to Antigravity CLI" cmd.exe /k "C:\Temp\a b\sign-in.cmd""');
+  assert.match(win.text, /^"C:\Program Files\agy\agy\.exe" "login" "50%%"\r$/m);
+  assert.match(win.text, /^echo Paste the code  press Enter\r$/m, 'nothing in a note can run as a command');
   const mac = terminalLaunch('darwin', '/usr/local/bin/codex', ['login']);
   assert.equal(mac.cmd, 'osascript');
   assert.match(mac.args.at(-1), /do script "'\/usr\/local\/bin\/codex' 'login'"/);
